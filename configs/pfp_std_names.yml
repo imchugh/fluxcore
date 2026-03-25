@@ -1,0 +1,726 @@
+AGC_IRGA:
+  long_name: IRGA automatic gain control value
+  plausible_max: 100.0
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: percent
+AH:
+  long_name: Absolute humidity
+  plausible_max: 50.0
+  plausible_min: 0.0
+  standard_name: mass_concentration_of_water_vapor_in_air
+  standard_units: g/m^3
+AH_IRGA:
+  long_name: Absolute humidity
+  plausible_max: 50.0
+  plausible_min: 0.0
+  standard_name: mass_concentration_of_water_vapor_in_air
+  standard_units: g/m^3
+AH_IRGA_Av:
+  long_name: Absolute humidity
+  plausible_max: 50.0
+  plausible_min: 0.0
+  standard_name: mass_concentration_of_water_vapor_in_air
+  standard_units: g/m^3
+AH_IRGA_Sd:
+  long_name: Absolute humidity
+  plausible_max: null
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: g/m^3
+# AH_IRGA_Ct:
+#   long_name: Absolute humidity sample count
+#   plausible_max: null
+#   plausible_min: 0.0
+#   standard_name: null
+#   standard_units: '1'
+# AH_IRGA_Vr:
+#   long_name: Absolute humidity
+#   plausible_max: null
+#   plausible_min: 0.0
+#   standard_name: null
+#   standard_units: g^2/m^6
+APAR:
+  long_name: Incident photosynthetically active radiation absorbed
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: umol/m^2/s
+AC:
+  long_name: Covariance of H2O and CO2
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: mg.g/m^6
+AT:
+  long_name: Covariance of H2O and T
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: K.g/m^3
+CO2:
+  long_name: CO2 mole fraction
+  plausible_max: 1500.0
+  plausible_min: 350.0
+  standard_name: mole_fraction_of_carbon_dioxide_in_air
+  standard_units: umol/mol
+CO2Sig_IRGA:
+  long_name: CO2 signal strength
+  plausible_max: 102.5
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: percent
+CO2_IRGA:
+  long_name: CO2 mole fraction
+  plausible_max: 1500.0
+  plausible_min: 350.0
+  standard_name: mole_fraction_of_carbon_dioxide_in_air
+  standard_units: umol/mol
+CO2_IRGA_Av:
+  long_name: CO2 mole fraction
+  plausible_max: 1500.0
+  plausible_min: 350.0
+  standard_name: mole_fraction_of_carbon_dioxide_in_air
+  standard_units: umol/mol
+CO2_IRGA_Sd:
+  long_name: CO2 mole fraction
+  plausible_max: 1500.0
+  plausible_min: 350.0
+  standard_name: mole_fraction_of_carbon_dioxide_in_air
+  standard_units: umol/mol
+# CO2_IRGA_Ct:
+#   long_name: CO2 mole fraction sample count
+#   plausible_max: null
+#   plausible_min: 0.0
+#   standard_name: null
+#   standard_units: '1'
+# CO2_IRGA_Vr:
+#   long_name: CO2 mole fraction
+#   plausible_max: 1500.0
+#   plausible_min: 350.0
+#   standard_name: mole_fraction_of_carbon_dioxide_in_air
+#   standard_units: umol/mol
+CO2c_IRGA:
+  long_name: CO2 concentration
+  plausible_max: 1600.0
+  plausible_min: 400.0
+  standard_name: mass_concentration_of_carbon_dioxide_in_air
+  standard_units: mg/m^3
+CT:
+  long_name: Covariance of H2O and T
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: K.mg/m^3
+Diag_IRGA:
+  long_name: IRGA diagnostic value
+  plausible_max: 36000.0
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: '1'
+Diag_SONIC:
+  long_name: Sonic diagnostic value
+  plausible_max: 36000.0
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: '1'
+EC:
+  long_name: Electrical conductivity (soil)
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: dS/m
+ER:
+  long_name: Ecosystem respiration
+  plausible_max: 30.0
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: umol/m^2/s
+ET:
+  long_name: Evapotranspiration
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: mm
+FAPAR:
+  long_name: Fraction of incident photosynthetically active radiation absorbed
+  plausible_max: 1
+  plausible_min: 0
+  standard_name: null
+  standard_units: frac
+Fa:
+  long_name: Available energy
+  plausible_max: 1000.0
+  plausible_min: -300.0
+  standard_name: null
+  standard_units: W/m^2
+Fco2:
+  long_name: CO2 flux
+  plausible_max: 30.0
+  plausible_min: -50.0
+  standard_name: surface_upward_mole_flux_of_carbon_dioxide
+  standard_units: umol/m^2/s
+Fe:
+  long_name: Latent heat flux
+  plausible_max: 1000.0
+  plausible_min: -200.0
+  standard_name: surface_upward_latent_heat_flux
+  standard_units: W/m^2
+Fg:
+  long_name: Ground heat flux
+  plausible_max: 200.0
+  plausible_min: -200.0
+  standard_name: downward_heat_flux_at_ground_level_in_soil
+  standard_units: W/m^2
+Fh:
+  long_name: Sensible heat flux
+  plausible_max: 1000.0
+  plausible_min: -200.0
+  standard_name: surface_upward_sensible_heat_flux
+  standard_units: W/m^2
+Fld:
+  long_name: Down-welling longwave
+  plausible_max: 600.0
+  plausible_min: 100.0
+  standard_name: surface_downwelling_longwave_flux_in_air
+  standard_units: W/m^2
+Flu:
+  long_name: Up-welling longwave
+  plausible_max: 700.0
+  plausible_min: 100.0
+  standard_name: surface_upwelling_longwave_flux_in_air
+  standard_units: W/m^2
+Fm:
+  long_name: Momentum flux
+  plausible_max: null
+  plausible_min: null
+  standard_name: magnitude_of_surface_downward_stress
+  standard_units: kg/m/s^2
+Fn:
+  long_name: Net radiation
+  plausible_max: 1000.0
+  plausible_min: -300.0
+  standard_name: surface_net_downward_radiative_flux
+  standard_units: W/m^2
+Fn_RAD:
+  long_name: Net radiation
+  plausible_max: 1000.0
+  plausible_min: -300.0
+  standard_name: surface_net_downward_radiative_flux
+  standard_units: W/m^2
+Fpard:
+  long_name: Downwelling photosynthetically active radiation
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: umol/m^2/s
+Fparu:
+  long_name: Upwelling photosynthetically active radiation
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: umol/m^2/s
+Fsd:
+  long_name: Down-welling shortwave
+  plausible_max: 1412.0
+  plausible_min: -20.0
+  standard_name: surface_downwelling_shortwave_flux_in_air
+  standard_units: W/m^2
+FsdDiff:
+  long_name: Down-welling shortwave diffuse component
+  plausible_max: 1412.0
+  plausible_min: -20.0
+  standard_name:
+  standard_units: W/m^2
+FsdDir:
+  long_name: Down-welling shortwave direct component
+  plausible_max: 1412.0
+  plausible_min: -20.0
+  standard_name:
+  standard_units: W/m^2
+Fsu:
+  long_name: Up-welling shortwave
+  plausible_max: 1412.0
+  plausible_min: -20.0
+  standard_name: surface_upwelling_shortwave_flux_in_air
+  standard_units: W/m^2
+GPP:
+  long_name: Gross primary productivity
+  plausible_max: 0.0
+  plausible_min: -60.0
+  standard_name: null
+  standard_units: umol/m^2/s
+H2O:
+  long_name: H2O concentration
+  plausible_max: 0.0
+  plausible_min: 80.0
+  standard_name: mole_fraction_of_water_vapor_in_air
+  standard_units: mmol/mol
+H2O_IRGA:
+  long_name: H2O concentration
+  plausible_max: 0.0
+  plausible_min: 80.0
+  standard_name: mole_fraction_of_water_vapor_in_air
+  standard_units: mmol/mol
+H2OSig_IRGA:
+  long_name: H2O signal strength
+  plausible_max: 102.5
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: percent
+L:
+  long_name: Monin-Obukhov length
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m
+NEE:
+  long_name: Net ecosystem exchange
+  plausible_max: 30.0
+  plausible_min: -50.0
+  standard_name: null
+  standard_units: umol/m^2/s
+NEP:
+  long_name: Net ecosystem productivity
+  plausible_max: 30.0
+  plausible_min: -50.0
+  standard_name: null
+  standard_units: umol/m^2/s
+PAR:
+  long_name: Photosynthetically active radiation
+  plausible_max: null
+  plausible_min: null
+  standard_name: surface_downwelling_photosynthetic_photon_flux_in_air
+  standard_units: umol/m^2/s
+pitch_SONIC:
+  long_name: sonic anemometer pitch angle
+  plausible_max: 90.0
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: deg
+Precip:
+  long_name: Rainfall
+  plausible_max: 100.0
+  plausible_min: 0.0
+  standard_name: thickness_of_rainfall_amount
+  standard_units: mm
+RH:
+  long_name: Relative humidity
+  plausible_max: 100.0
+  plausible_min: 0.0
+  standard_name: relative_humidity
+  standard_units: percent
+Rhoa:
+  long_name: Density of moist air
+  plausible_max: 1.4
+  plausible_min: 0.4
+  standard_name: null
+  standard_units: kg/m^3
+Rhod:
+  long_name: Density of dry air
+  plausible_max: 1.6
+  plausible_min: 0.6
+  standard_name: null
+  standard_units: kg/m^3
+RH_IRGA:
+  long_name: Relative humidity
+  plausible_max: 100.0
+  plausible_min: 0.0
+  standard_name: relative_humidity
+  standard_units: percent
+RHint_SONIC:
+  long_name: Sonic anemometer internal relative humidity
+  plausible_max: 100.0
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: percent
+roll_SONIC:
+  long_name: sonic anemometer roll angle
+  plausible_max: 90.0
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: deg
+SH:
+  long_name: Specific humidity
+  plausible_max: null
+  plausible_min: null
+  standard_name: specific_humidity
+  standard_units: kg/kg
+SHD:
+  long_name: Specific humidity deficit
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: kg/kg
+Sco2:
+  long_name: CO2 flux (storage)
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: umol/m^2/s
+Sig_IRGA:
+  long_name: Signal strength
+  plausible_max: 102.5
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: percent
+SigCO2_IRGA:
+  long_name: CO2 signal strength
+  plausible_max: 102.5
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: percent
+SigH2O_IRGA:
+  long_name: CO2 signal strength
+  plausible_max: 102.5
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: percent
+SVP:
+  long_name: Saturation vapour pressure
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: kPa
+Swp:
+  long_name: Soil water potential
+  plausible_max: 0
+  plausible_min: -10000
+  standard_name: null
+  standard_units: kPa
+Sws:
+  long_name: Soil water content
+  plausible_max: 100.0
+  plausible_min: 0.0
+  standard_name: volume_fraction_of_condensed_water_in_soil
+  standard_units: m^3/m^3
+Ta:
+  long_name: Air temperature
+  plausible_max: 60.0
+  plausible_min: -40.0
+  standard_name: air_temperature
+  standard_units: degC
+Ta_SONIC:
+  long_name: Air temperature derived from sonic temperature and humidity
+  plausible_max: 60.0
+  plausible_min: -40.0
+  standard_name: null
+  standard_units: degC
+tau:
+  long_name: Momentum flux
+  plausible_max: 5.0
+  plausible_min: 0.0
+  standard_name: surface_downward_momentum_flux
+  standard_units: kg/m/s^2
+Tbody_RAD:
+  long_name: Radiometer body temperature
+  plausible_max: 60.0
+  plausible_min: -40.0
+  standard_name: null
+  standard_units: degC
+Tcanopy:
+  long_name: Canopy temperature
+  plausible_max: 60.0
+  plausible_min: -40.0
+  standard_name: null
+  standard_units: degC
+Td:
+  long_name: Dew point temperature
+  plausible_max: 40.0
+  plausible_min: -65.0
+  standard_name: dew_point_temperature
+  standard_units: degC
+Td_IRGA:
+  long_name: Dew point temperature
+  plausible_max: 40.0
+  plausible_min: -65.0
+  standard_name: dew_point_temperature
+  standard_units: degC
+Tint_SONIC:
+  long_name: Sonic anemometer internal temperature
+  plausible_max: 60.0
+  plausible_min: -40.0
+  standard_name: null
+  standard_units: degC
+Tpanel:
+  long_name: Logger panel temperature
+  plausible_max: 60.0
+  plausible_min: -40.0
+  standard_name: null
+  standard_units: degC
+Ts:
+  long_name: Soil temperature
+  plausible_max: 80.0
+  plausible_min: -40.0
+  standard_name: soil_temperature
+  standard_units: degC
+Tstar:
+  long_name: Surface layer scaling temperature
+  plausible_max: 50
+  plausible_min: -50
+  standard_name: nan
+  standard_units: degC
+Tv_SONIC:
+  long_name: Virtual temperature
+  plausible_max: 60.0
+  plausible_min: -40.0
+  standard_name: virtual_temperature
+  standard_units: degC
+Tv_SONIC_Av:
+  long_name: Virtual temperature
+  plausible_max: 60.0
+  plausible_min: -40.0
+  standard_name: virtual_temperature
+  standard_units: degC
+Tv_SONIC_Sd:
+  long_name: Virtual temperature
+  plausible_max: null
+  plausible_min: null
+  standard_name: virtual_temperature
+  standard_units: degC
+# Tv_SONIC_Vr:
+#   long_name: Virtual temperature
+#   plausible_max: null
+#   plausible_min: null
+#   standard_name: virtual_temperature
+#   standard_units: degC^2
+U:
+  long_name: Wind speed, east component
+  plausible_max: null
+  plausible_min: null
+  standard_name: eastward_wind
+  standard_units: m/s
+U_SONIC:
+  long_name: Wind speed, east component
+  plausible_max: null
+  plausible_min: null
+  standard_name: eastward_wind
+  standard_units: m/s
+UxA:
+  long_name: Covariance of Ux and H2O
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: g/m^2/s
+UxC:
+  long_name: Covariance of Ux and CO2
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: mg/m^2/s
+UxT:
+  long_name: Covariance of Ux and T
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m.degC/s
+UxUy:
+  long_name: Covariance of Ux and Uy
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m^2/s^2
+UxUz:
+  long_name: Covariance of Ux and Uz
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m^2/s^2
+Ux_SONIC:
+  long_name: Longitudinal wind velocity component, sonic coordinates
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+Ux_SONIC_Av:
+  long_name: Longitudinal wind velocity component, sonic coordinates
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+Ux_SONIC_Sd:
+  long_name: Longitudinal wind velocity component, sonic coordinates
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+# Ux_SONIC_Vr:
+#   long_name: Longitudinal wind velocity component, sonic coordinates
+#   plausible_max: null
+#   plausible_min: null
+#   standard_name: null
+#   standard_units: m^2/s^2
+UyA:
+  long_name: Covariance of Uy and H2O
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: g/m^2/s
+UyC:
+  long_name: Covariance of Uy and CO2
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: mg/m^2/s
+UyT:
+  long_name: Covariance of Uy and T
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m.degC/s
+UyUz:
+  long_name: Covariance of Uy and Uz
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m^2/s^2
+Uy_SONIC:
+  long_name: Lateral wind velocity component, sonic coordinates
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+Uy_SONIC_Av:
+  long_name: Lateral wind velocity component, sonic coordinates
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+Uy_SONIC_Sd:
+  long_name: Lateral wind velocity component, sonic coordinates
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+# Uy_SONIC_Vr:
+#   long_name: Lateral wind velocity component, sonic coordinates
+#   plausible_max: null
+#   plausible_min: null
+#   standard_name: null
+#   standard_units: m^2/s^2
+UzA:
+  long_name: Covariance of Uz and H2O
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: g/m^2/s
+UzC:
+  long_name: Covariance of Uz and CO2
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: mg/m^2/s
+UzT:
+  long_name: Covariance of Uz and T
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m.degC/s
+Uz_SONIC:
+  long_name: Vertical wind velocity component, sonic coordinates
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+Uz_SONIC_Av:
+  long_name: Vertical wind velocity component, sonic coordinates
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+Uz_SONIC_Sd:
+  long_name: Vertical wind velocity component, sonic coordinates
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+# Uz_SONIC_Vr:
+#   long_name: Vertical wind velocity component, sonic coordinates
+#   plausible_max: null
+#   plausible_min: null
+#   standard_name: null
+#   standard_units: m/s
+V:
+  long_name: Wind speed, north component
+  plausible_max: null
+  plausible_min: null
+  standard_name: northward_wind
+  standard_units: m/s
+V_SONIC:
+  long_name: Wind speed, north component
+  plausible_max: null
+  plausible_min: null
+  standard_name: northward_wind
+  standard_units: m/s
+VP:
+  long_name: Vapour pressure
+  plausible_max: null
+  plausible_min: null
+  standard_name: water_vapor_partial_pressure_in_air
+  standard_units: kPa
+VPD:
+  long_name: Vapour pressure deficit
+  plausible_max: null
+  plausible_min: null
+  standard_name: water_vapor_saturation_deficit_in_air
+  standard_units: kPa
+Vbat:
+  long_name: Battery voltage
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: V
+W:
+  long_name: Wind speed, vertical component
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+W_SONIC:
+  long_name: Wind speed, vertical component
+  plausible_max: null
+  plausible_min: null
+  standard_name: null
+  standard_units: m/s
+Wd:
+  long_name: Wind direction
+  plausible_max: 360.0
+  plausible_min: 0.0
+  standard_name: wind_from_direction
+  standard_units: degrees
+Wd_SONIC:
+  long_name: Wind direction
+  plausible_max: 360.0
+  plausible_min: 0.0
+  standard_name: wind_from_direction
+  standard_units: degrees
+Ws:
+  long_name: Wind speed
+  plausible_max: 60.0
+  plausible_min: 0.0
+  standard_name: wind_speed
+  standard_units: m/s
+Ws_SONIC:
+  long_name: Wind speed
+  plausible_max: 60.0
+  plausible_min: 0.0
+  standard_name: wind_speed
+  standard_units: m/s
+ps:
+  long_name: Surface air pressure
+  plausible_max: 110.0
+  plausible_min: 50.0
+  standard_name: surface_air_pressure
+  standard_units: kPa
+time:
+  long_name: time
+  plausible_max: null
+  plausible_min: null
+  standard_name: time
+  standard_units: days since 1800-01-01 00:00:00.0
+ustar:
+  long_name: Friction velocity
+  plausible_max: 5.0
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: m/s

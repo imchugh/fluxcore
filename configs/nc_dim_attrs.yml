@@ -1,0 +1,17 @@
+time:
+  long_name: time
+  standard_name: time
+latitude:
+  long_name: latitude
+  standard_name: latitude
+  units: degree_north
+longitude:
+  long_name: longitude
+  standard_name: longitude
+  units: degree_east
+coordinate_reference_system:
+  grid_mapping_name: latitude_longitude
+  long_name: WGS 1984 Datum
+  longitude_of_prime_meridian: 0.0
+  semi_major_axis: 6378137.0
+  inverse_flattening: 298.257223563
