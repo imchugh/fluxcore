@@ -197,8 +197,10 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
 
     """
 
-    # Initialise parser and load canonical metadata
+    # Initialise parser
     name_parser = NameParser()
+    
+    # Load canonical metadata
     canonical_metadata = load_config_file_from_name('pfp_std_names')
     
     # Validate site-level configuration

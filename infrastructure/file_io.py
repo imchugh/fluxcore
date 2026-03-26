@@ -43,6 +43,13 @@ def get_most_recent_file(
     return max(files, key=lambda p: p.stat().st_mtime)
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+def get_backup_files(file_path):
+    
+    file_path = Path(file_path)
+    return sorted(file_path.parent.glob(f'{file_path.stem}*backup'))
+# -----------------------------------------------------------------------------    
+
 # -----------------------------------------------------------------------------    
 
 def read_yml(file_path: Path) -> dict:

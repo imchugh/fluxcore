@@ -11,23 +11,15 @@ from typing import Dict, Optional, ClassVar
 from pydantic import BaseModel, field_validator, model_validator
 from infrastructure.file_io import read_yml
 
-
 # --------------------------------------------------------------------------
-# Per-variable configuration
+# Input-level configuration (raw variables)
 # --------------------------------------------------------------------------
-class VariableConfig(BaseModel):
+class InputVariableConfig(BaseModel):
     instrument: str
-    statistic_type: str
+    file: str
     units: str
-    height: str
-    name: str
-
-    logger: Optional[str] = None
-    table: Optional[str] = None
-    file: Optional[str] = None
 
     diag_type: Optional[str] = None
-    standard_name: Optional[str] = None
 
     class Config:
         extra = "allow"
@@ -37,18 +29,25 @@ class VariableConfig(BaseModel):
         if v is None:
             return v
         if v not in {"valid_count", "invalid_count"}:
-            raise ValueError("diag_type must be one of: valid_count, invalid_count")
+            raise ValueError(
+                "diag_type must be one of: valid_count, invalid_count"
+            )
         return v
 
-    @model_validator(mode="after")
-    def validate_schema_choice(self):
-        if self.file is not None:
-            if self.logger is not None or self.table is not None:
-                raise ValueError("Use either file OR logger+table, not both.")
-        else:
-            if self.logger is None or self.table is None:
-                raise ValueError("Must define either file OR (logger AND table).")
-        return self
+
+# --------------------------------------------------------------------------
+# Output variable configuration
+# --------------------------------------------------------------------------
+class VariableConfig(BaseModel):
+    statistic_type: str
+    height: str
+
+    input_variables: Dict[str, InputVariableConfig]
+
+    standard_name: Optional[str] = None
+
+    class Config:
+        extra = "allow"
 
 
 # --------------------------------------------------------------------------
@@ -65,7 +64,6 @@ class Config(BaseModel):
     irga_suffix: ClassVar[str] = "_IRGA"
     flux_prefixes: ClassVar[list[str]] = ["Fco2", "Fe", "Fh", "Fm", "ustar"]
 
-
     # ----------------------------------------------------------------------
     # Top-level field validators
     # ----------------------------------------------------------------------
@@ -77,42 +75,58 @@ class Config(BaseModel):
         return v
 
     # ----------------------------------------------------------------------
-    # Deterministic validation rules only
+    # Diagnostic consistency (now based on input variables)
     # ----------------------------------------------------------------------
     @model_validator(mode="after")
     def enforce_diag_rules(self):
-        diag_types = {
-            cfg.diag_type
-            for name, cfg in self.variables.items()
-            if any(name.startswith(prefix) for prefix in self.diag_prefixes)
-            }
+        diag_types = set()
+
+        for var_name, var_cfg in self.variables.items():
+            if any(var_name.startswith(prefix) for prefix in self.diag_prefixes):
+                for input_cfg in var_cfg.input_variables.values():
+                    if input_cfg.diag_type is not None:
+                        diag_types.add(input_cfg.diag_type)
+
         if diag_types and len(diag_types) > 1:
             raise ValueError(
                 f"Diagnostic variables have inconsistent diag_type values: {diag_types}. Must all be same."
-                )
+            )
+
         return self
 
+    # ----------------------------------------------------------------------
+    # Instrument consistency (updated for nested structure)
+    # ----------------------------------------------------------------------
     @model_validator(mode="after")
     def enforce_instrument_consistency(self):
-        sonic_instruments = {
-            cfg.instrument
-            for name, cfg in self.variables.items()
-            if name.endswith(self.sonic_suffix)
-        }
-        irga_instruments = {
-            cfg.instrument
-            for name, cfg in self.variables.items()
-            if name.endswith(self.irga_suffix)
-        }
+        sonic_instruments = set()
+        irga_instruments = set()
+
+        for var_name, var_cfg in self.variables.items():
+            for input_cfg in var_cfg.input_variables.values():
+                if var_name.endswith(self.sonic_suffix):
+                    sonic_instruments.add(input_cfg.instrument)
+                if var_name.endswith(self.irga_suffix):
+                    irga_instruments.add(input_cfg.instrument)
+
         if len(sonic_instruments) > 1:
-            raise ValueError(f"SONIC variables must use the same instrument; found {sonic_instruments}")
+            raise ValueError(
+                f"SONIC variables must use the same instrument; found {sonic_instruments}"
+            )
         if len(irga_instruments) > 1:
-            raise ValueError(f"IRGA variables must use the same instrument; found {irga_instruments}")
+            raise ValueError(
+                f"IRGA variables must use the same instrument; found {irga_instruments}"
+            )
+
         return self
 
+    # ----------------------------------------------------------------------
+    # Flux suffix consistency (unchanged)
+    # ----------------------------------------------------------------------
     @model_validator(mode="after")
     def enforce_flux_suffix(self):
         suffixes_found = set()
+
         for var_name in self.variables:
             for prefix in self.flux_prefixes:
                 if var_name.startswith(prefix):
@@ -122,8 +136,12 @@ class Config(BaseModel):
                             f"Flux variable '{var_name}' must have suffix EP, EF, or DL."
                         )
                     suffixes_found.add(parts[1])
+
         if len(suffixes_found) > 1:
-            raise ValueError(f"Flux variables must share the same suffix. Found: {suffixes_found}")
+            raise ValueError(
+                f"Flux variables must share the same suffix. Found: {suffixes_found}"
+            )
+
         return self
 
 
