@@ -2,8 +2,20 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Mar  3 06:59:42 2026
-
 @author: imchugh
+
+This module creates a runtime variable metadata configuration class containing
+information required to build a generic dataset from site data.
+
+It combines validation functionality from the following modules:
+    - variable_metadata_validator: structural validation of the input yml
+    - variable_syntax_parser: syntax validation of the top-level yml variable 
+    names
+It creates (static) class-based variable object based on definitions in 
+variable_definition_builder.
+It combines variable metadata with canonical metadata accessed from 
+configs/pfp_std_names.yml
+
 """
 
 ###############################################################################
@@ -31,26 +43,6 @@ from services.domain.config_loader import load_config_file_from_name
 ###############################################################################
 ### BEGIN CLASSES ###
 ###############################################################################
-
-# -----------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class InputConfig:
-    name: str
-    units: str
-    file: str
-    instrument: str
-    diag_type: Optional[str]
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class VariableConfigFlat:
-    height: str
-    statistic_type: str
-    inputs: tuple[InputConfig, ...]
-# -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 
@@ -223,7 +215,7 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     # Load canonical metadata
     canonical_metadata = load_config_file_from_name('pfp_std_names')
     
-    # Validate site-level configuration
+    # Validate site-level configuration file
     validated_config = validate_L1_config_structure(file=file_path)
 
     # Build VariableDefinitions
@@ -231,10 +223,10 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     for variable, raw_cfg in validated_config.variables.items():
         
         # Parse the variable name (syntax validation)
-        parsed_name = name_parser.parse_variable_name(variable_name=variable)
+        parsed_name_elems = name_parser.parse_variable_name(variable_name=variable)
 
         # Ensure the quantity exists in canonical metadata
-        quantity = parsed_name["quantity"]
+        quantity = parsed_name_elems["quantity"]
         if quantity not in canonical_metadata:
             raise ValueError(
                 f"Variable '{variable}': canonical quantity '{quantity}' not found"
@@ -244,9 +236,9 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
         # metadata structure
         var_def = build_variable_definition(
             site_var_name=variable,
-            raw_cfg=flatten_variable_config(var_cfg=raw_cfg),
-            parsed_name=parsed_name,
-            canonical=canonical_metadata[quantity]
+            raw_cfg=raw_cfg,
+            parsed_name_elems=parsed_name_elems,
+            canonical_metadata=canonical_metadata[quantity]
             )
         site_variables[variable] = var_def
 
@@ -256,39 +248,6 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
         system_type=validated_config.system_type,
         variables=site_variables
         )
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-def flatten_variable_config(var_cfg) -> VariableConfigFlat:
-    """
-    Convert pydantic variable validation object into a simple flat dataclass.
-
-    Args:
-        var_cfg: DESCRIPTION.
-
-    Returns:
-        VariableConfigFlat: DESCRIPTION.
-
-    """
-    
-    inputs = []
-
-    for raw_name, input_cfg in var_cfg.input_variables.items():
-        inputs.append(
-            InputConfig(
-                name=raw_name,
-                units=input_cfg.units,
-                file=input_cfg.file,
-                instrument=input_cfg.instrument,
-                diag_type=input_cfg.diag_type,
-            )
-        )
-
-    return VariableConfigFlat(
-        height=var_cfg.height,
-        statistic_type=var_cfg.statistic_type,
-        inputs=tuple(inputs),
-    )
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------

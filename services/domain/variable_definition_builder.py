@@ -40,6 +40,8 @@ class RawVariableMetadata:
     vertical_location: Optional[str] = None
     horizontal_location: Optional[str] = None
     replicate: Optional[str] = None
+    begin: Optional[str] = None
+    end: Optional[str] = None
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -87,7 +89,9 @@ def build_variable_definition(
         vertical_location = parsed_name.get("vertical_location"),
         horizontal_location = parsed_name.get("horizontal_location"),
         replicate = parsed_name.get("replicate"),
-    )
+        begin = parsed_name.get("begin"),
+        end = parsed_name.get("end")
+        )
 
     # 2 Build canonical metadata object
     canonical_meta = CanonicalVariableMetadata(**canonical)
@@ -97,7 +101,7 @@ def build_variable_definition(
         site_variable_name = site_var_name,
         raw = raw_meta,
         canonical = canonical_meta
-    )
+        )
 # -----------------------------------------------------------------------------
 
 ###############################################################################

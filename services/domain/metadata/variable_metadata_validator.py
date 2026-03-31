@@ -7,19 +7,25 @@ Created on Mon Mar  2 13:52:01 2026
 """
 
 from __future__ import annotations
-from typing import Dict, Optional, ClassVar
+
+from datetime import datetime
+from typing import Dict, Optional, ClassVar, Union
 from pydantic import BaseModel, field_validator, model_validator
+
 from infrastructure.file_io import read_yml
 
 # --------------------------------------------------------------------------
 # Input-level configuration (raw variables)
 # --------------------------------------------------------------------------
 class InputVariableConfig(BaseModel):
+    
     instrument: str
     file: str
     units: str
 
     diag_type: Optional[str] = None
+    begin: Optional[Union[datetime, str]] = None
+    end: Optional[Union[datetime, str]] = None
 
     class Config:
         extra = "allow"
@@ -34,6 +40,18 @@ class InputVariableConfig(BaseModel):
             )
         return v
 
+    @field_validator("begin", "end", mode="before")
+    def parse_datetime(cls, v):
+        
+        if v is None:
+            return v
+        if isinstance(v, datetime):
+            return v
+        if isinstance(v, str):
+            if v.lower() in {"none", "null", ""}:
+                return None
+            return datetime.fromisoformat(v)
+        raise TypeError(f"Invalid type for datetime field: {type(v)}")
 
 # --------------------------------------------------------------------------
 # Output variable configuration

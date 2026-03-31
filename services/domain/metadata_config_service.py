@@ -210,6 +210,11 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     site_variables = {}
     for variable, raw_cfg in validated_config.variables.items():
         
+        print(variable)
+        if variable == 'Ta_23m':
+            
+            breakpoint()
+        
         # Parse the variable name (syntax validation)
         parsed_name = name_parser.parse_variable_name(variable_name=variable)
 

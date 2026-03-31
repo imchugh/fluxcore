@@ -90,7 +90,17 @@ def build_file_list(runtime_cfg: SiteRuntimeConfig) -> dict[Path, list[str]]:
 
 # -----------------------------------------------------------------------------
 
-def build_file_groups(runtime_cfg: SiteRuntimeConfig):
+def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str: list[Path]]:
+    """
+    Build the group of files from the file stem (*.dat + *.dat.backup)
+
+    Args:
+        runtime_cfg (SiteRuntimeConfig): DESCRIPTION.
+
+    Returns:
+        file_groups (TYPE): DESCRIPTION.
+
+    """
     
     # Get the list of files
     file_list = build_file_list(runtime_cfg=runtime_cfg)
@@ -115,7 +125,8 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig):
 
 # -----------------------------------------------------------------------------
 
-def get_base_path(site_name) -> Path:
+def get_base_path(site_name: str) -> Path:
+    """Get file path to raw data for given site"""
     
     return paths.get_local_stream_path(
         resource="raw_data",
