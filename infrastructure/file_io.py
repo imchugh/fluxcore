@@ -44,10 +44,13 @@ def get_most_recent_file(
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-def get_backup_files(file_path):
+def get_backup_files(file_path, abs_path=True):
     
     file_path = Path(file_path)
-    return sorted(file_path.parent.glob(f'{file_path.stem}*backup'))
+    paths = sorted(file_path.parent.glob(f'{file_path.stem}*backup'))
+    if abs_path:
+        return paths
+    return [path.name for path in paths]
 # -----------------------------------------------------------------------------    
 
 # -----------------------------------------------------------------------------    

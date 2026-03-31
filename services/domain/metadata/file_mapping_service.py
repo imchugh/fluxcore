@@ -10,9 +10,13 @@ Created on Thu Mar  5 11:09:44 2026
 ### BEGIN IMPORTS ###
 ###############################################################################
 
-from infrastructure import paths, file_io
 from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Set, Dict, List
+
 from services.domain.metadata_config_service import SiteRuntimeConfig
+from services.domain.data import raw_data_loader
+from infrastructure import paths, file_io
 
 ###############################################################################
 ### END IMPORTS ###
@@ -31,110 +35,118 @@ FLUX_VAR = 'UzT'
 
 
 ###############################################################################
+### BEGIN CLASSES ###
+###############################################################################
+
+# -----------------------------------------------------------------------------
+
+@dataclass
+class FileGroup:
+    """
+    Represents a group of files (master + backups) and the variables 
+    expected and actually found in them. Header discovery is lazy.
+    """
+    group: str
+    master: Path
+    backups: List[Path]
+    system_type: str
+    expected_variables: Set[str] = field(default_factory=set)
+    _variables_by_file_cache: Dict[Path, Set[str]] = field(default_factory=dict, init=False, repr=False)
+
+    # -------------------------------------------------------------------------
+    
+    @property
+    def all_files(self) -> List[Path]:
+        return [self.master, *self.backups]
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    
+    @property
+    def variables_by_file(self) -> Dict[Path, Set[str]]:
+        """
+        Lazy evaluation: read headers only on first access and cache results.
+        """
+        if not self._variables_by_file_cache:
+            for file in self.all_files:
+                header_adapter = raw_data_loader.get_header_adapter(
+                    system_type=self.system_type
+                    )
+                header_vars = set(header_adapter.load(file_path=file)['variable'])
+                self._variables_by_file_cache[file] = set(header_vars)
+        return self._variables_by_file_cache
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    
+    def validate(self) -> Dict[str, Set[str]]:
+        """
+        Compare expected variables vs discovered variables.
+        Returns a dict with 'found' and 'missing' sets.
+        """
+        found = set().union(*self.variables_by_file.values())
+        missing = self.expected_variables - found
+        return {"found": found & self.expected_variables, "missing": missing}
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+
+    def files_for_variable(self, variable: str) -> List[Path]:
+        """
+        Return the list of files in which the variable was found.
+        """
+        return [f for f, vars in self.variables_by_file.items() if variable in vars]
+    # -------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
+###############################################################################
+### END CLASSES ###
+###############################################################################
+
+
+###############################################################################
 ### BEGIN FUNCTIONS ###
 ###############################################################################
 
 # -----------------------------------------------------------------------------
 
-def build_file_map(runtime_cfg: SiteRuntimeConfig) -> dict[Path, list[str]]:
+def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
     """
-    Map absolute file path to list of raw variable names expected in that file.
-
-    Args:
-        runtime_cfg: site-specific runtime configuration class.
-
-    Returns:
-        mapping dictionary.
-
+    Build FileGroup objects for all variable groups in the runtime config.
     """
-
-    files: dict[Path, list[str]] = {}
-
-    base_path = get_base_path(site_name=runtime_cfg.site_name)
-
-    for var_def in runtime_cfg.variables.values():
-
-        for raw_var in var_def.raw:
-            path = base_path / raw_var.file
-
-            files.setdefault(path, []).append(raw_var.raw_name)
-
-    return files
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-def build_file_list(runtime_cfg: SiteRuntimeConfig) -> dict[Path, list[str]]:
-    """
-    Map absolute file path to list of raw variable names expected in that file.
-
-    Args:
-        runtime_cfg: site-specific runtime configuration class.
-
-    Returns:
-        mapping dictionary.
-
-    """
-
-    files = []
-
-    base_path = get_base_path(site_name=runtime_cfg.site_name)
-
-    for var_def in runtime_cfg.variables.values():
-
-        for raw_var in var_def.raw:
-            files.append(base_path / raw_var.file)
-
-    return list(set(files))
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str: list[Path]]:
-    """
-    Build the group of files from the file stem (*.dat + *.dat.backup)
-
-    Args:
-        runtime_cfg (SiteRuntimeConfig): DESCRIPTION.
-
-    Returns:
-        file_groups (TYPE): DESCRIPTION.
-
-    """
-    
-    # Get the list of files
-    file_list = build_file_list(runtime_cfg=runtime_cfg)
-    
-    # Get their file groups (i.e. include all backups)
-    file_groups = {}
-    for file in file_list:
-        
-        group_name = file.name
-        group_dict = {}
-        
-        master = file.parent / f'{file.name}.dat'
-        slaves = file_io.get_backup_files(file_path=master)
-        
-        group_dict['master'] = master
-        group_dict['slaves'] = slaves
-        
-        file_groups[group_name] = group_dict
-        
-    return file_groups
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-def get_base_path(site_name: str) -> Path:
-    """Get file path to raw data for given site"""
-    
-    return paths.get_local_stream_path(
+    base_path = paths.get_local_stream_path(
         resource="raw_data",
         stream="flux_slow",
-        site=site_name
+        site=runtime_cfg.site_name
         )
+    groups: Dict[str, FileGroup] = {}
+
+    for var_def in runtime_cfg.variables.values():
+        for raw_var in var_def.raw:
+            group_name = raw_var.file
+
+            group = groups.get(group_name)
+            if group is None:
+                master = base_path / f"{group_name}.dat"
+                backups = file_io.get_backup_files(
+                    file_path=master,
+                    abs_path=True,
+                    )
+                group = FileGroup(
+                    group=group_name,
+                    master=master,
+                    backups=backups,
+                    system_type=runtime_cfg.system_type,
+                    )
+                groups[group_name] = group
+
+            group.expected_variables.add(raw_var.raw_name)
+
+    return groups
+
 # -----------------------------------------------------------------------------
 
 ###############################################################################
-### END FUNCTIONS ###
+### BEGIN FUNCTIONS ###
 ###############################################################################
