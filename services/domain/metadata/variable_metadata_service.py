@@ -235,7 +235,7 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
         # Merge raw config + parsed name + canonical metadata into a simple 
         # metadata structure
         var_def = build_variable_definition(
-            site_var_name=variable,
+            var_name=variable,
             raw_cfg=raw_cfg,
             parsed_name_elems=parsed_name_elems,
             canonical_metadata=canonical_metadata[quantity]

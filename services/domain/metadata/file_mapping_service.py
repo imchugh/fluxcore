@@ -123,7 +123,7 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
     groups: Dict[str, FileGroup] = {}
 
     for var_def in runtime_cfg.variables.values():
-        for raw_var in var_def.raw:
+        for raw_var in var_def.raw_inputs:
             group_name = raw_var.file
 
             group = groups.get(group_name)
@@ -144,7 +144,6 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
             group.expected_variables.add(raw_var.raw_name)
 
     return groups
-
 # -----------------------------------------------------------------------------
 
 ###############################################################################
