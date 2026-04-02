@@ -90,9 +90,7 @@ def compute_sonic_instrument(
         variables: dict[str, VariableDefinition]
         ) -> Optional[str]:
     """
-    Get the sonic instrument from the dict of variable definitions (note that
-    validation function has already enforced only a single instrument can be
-    defined for any _SONIC variable - therefore no error raising).
+    Get the sonic instrument.
                                                                     
     Args:
         variables: dict collection of variable definitions.
@@ -102,23 +100,45 @@ def compute_sonic_instrument(
 
     """
     
-    instruments = {
-        var.raw.instrument
-        for name, var in variables.items()
-        if name.endswith("_SONIC")
-        }
-    return next(iter(instruments), None) if instruments else None
+    return _compute_instrument(
+        variables=variables, 
+        instrument_substring='_SONIC'
+        )
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 
 def compute_irga_instrument(
-        variables: dict[str, VariableDefinition]
+        variables: dict[str, VariableDefinition],
+        ) -> Optional[str]:
+
+    """
+    Get the irga instrument.
+                                                                    
+    Args:
+        variables: dict collection of variable definitions.
+
+    Returns:
+        name of instrument.
+
+    """
+    
+    return _compute_instrument(
+        variables=variables, 
+        instrument_substring='_IRGA'
+        )
+# -----------------------------------------------------------------------------
+    
+# -----------------------------------------------------------------------------
+
+def _compute_instrument(
+        variables: dict[str, VariableDefinition],
+        instrument_substring: str,
         ) -> Optional[str]:
     """
-    Get the irga instrument from the dict of variable definitions (note that
+    Get the instrument from the dict of variable definitions (note that
     validation function has already enforced only a single instrument can be
-    defined for any _IRGA variable - therefore no error raising).
+    defined for SONIC or IRGA variables - therefore no error raising).
 
     Args:
         variables: dict collection of variable definitions.
@@ -128,11 +148,12 @@ def compute_irga_instrument(
 
     """
     
-    instruments = {
-        var.raw.instrument
-        for name, var in variables.items()
-        if name.endswith("_IRGA")
-        }
+    instruments = []
+    for name, var in variables.items():
+        for raw_input in var.raw_inputs:
+            if instrument_substring in name:
+                instruments.append(raw_input.instrument)
+    instruments = set(instruments)
     return next(iter(instruments), None) if instruments else None
 # -----------------------------------------------------------------------------
 
