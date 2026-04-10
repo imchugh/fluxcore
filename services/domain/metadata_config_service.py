@@ -21,7 +21,7 @@ from infrastructure.paths import get_local_stream_path
 from services.domain.variable_definition_builder import build_variable_definition, VariableDefinition
 from services.domain.variable_metadata_validator import validate_L1_config_structure
 from services.domain.variable_syntax_parser import NameParser
-from services.domain.config_loader import load_config_file_from_name
+from services.domain.utils.config_loader import load_config_file_from_name
 
 ###############################################################################
 ### END IMPORTS ###

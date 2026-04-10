@@ -28,18 +28,6 @@ AH_IRGA_Sd:
   plausible_min: 0.0
   standard_name: null
   standard_units: g/m^3
-# AH_IRGA_Ct:
-#   long_name: Absolute humidity sample count
-#   plausible_max: null
-#   plausible_min: 0.0
-#   standard_name: null
-#   standard_units: '1'
-# AH_IRGA_Vr:
-#   long_name: Absolute humidity
-#   plausible_max: null
-#   plausible_min: 0.0
-#   standard_name: null
-#   standard_units: g^2/m^6
 APAR:
   long_name: Incident photosynthetically active radiation absorbed
   plausible_max: null
@@ -88,18 +76,6 @@ CO2_IRGA_Sd:
   plausible_min: 350.0
   standard_name: mole_fraction_of_carbon_dioxide_in_air
   standard_units: umol/mol
-# CO2_IRGA_Ct:
-#   long_name: CO2 mole fraction sample count
-#   plausible_max: null
-#   plausible_min: 0.0
-#   standard_name: null
-#   standard_units: '1'
-# CO2_IRGA_Vr:
-#   long_name: CO2 mole fraction
-#   plausible_max: 1500.0
-#   plausible_min: 350.0
-#   standard_name: mole_fraction_of_carbon_dioxide_in_air
-#   standard_units: umol/mol
 CO2c_IRGA:
   long_name: CO2 concentration
   plausible_max: 1600.0
@@ -478,12 +454,6 @@ Tv_SONIC_Sd:
   plausible_min: null
   standard_name: virtual_temperature
   standard_units: degC
-# Tv_SONIC_Vr:
-#   long_name: Virtual temperature
-#   plausible_max: null
-#   plausible_min: null
-#   standard_name: virtual_temperature
-#   standard_units: degC^2
 U:
   long_name: Wind speed, east component
   plausible_max: null
@@ -544,12 +514,6 @@ Ux_SONIC_Sd:
   plausible_min: null
   standard_name: null
   standard_units: m/s
-# Ux_SONIC_Vr:
-#   long_name: Longitudinal wind velocity component, sonic coordinates
-#   plausible_max: null
-#   plausible_min: null
-#   standard_name: null
-#   standard_units: m^2/s^2
 UyA:
   long_name: Covariance of Uy and H2O
   plausible_max: null
@@ -592,12 +556,6 @@ Uy_SONIC_Sd:
   plausible_min: null
   standard_name: null
   standard_units: m/s
-# Uy_SONIC_Vr:
-#   long_name: Lateral wind velocity component, sonic coordinates
-#   plausible_max: null
-#   plausible_min: null
-#   standard_name: null
-#   standard_units: m^2/s^2
 UzA:
   long_name: Covariance of Uz and H2O
   plausible_max: null
@@ -634,12 +592,6 @@ Uz_SONIC_Sd:
   plausible_min: null
   standard_name: null
   standard_units: m/s
-# Uz_SONIC_Vr:
-#   long_name: Vertical wind velocity component, sonic coordinates
-#   plausible_max: null
-#   plausible_min: null
-#   standard_name: null
-#   standard_units: m/s
 V:
   long_name: Wind speed, north component
   plausible_max: null
