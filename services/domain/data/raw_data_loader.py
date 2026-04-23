@@ -53,7 +53,8 @@ def load_raw_data(
     # Get data
     df = file_io.read_csv_data(
         file_path=file_path, 
-        file_format=FILE_FORMATS[file_format]
+        file_format=FILE_FORMATS[file_format],
+        on_bad_lines='skip'
         )
     
     # Apply formatting
@@ -101,7 +102,7 @@ def get_data_adapter(system_type):
 
     adapters = {
         "CSI": CSIDataAdapter(),
-        "Licor": LicorDataAdapter()
+        "LICOR": LicorDataAdapter()
         }
 
     return adapters[system_type]
@@ -132,7 +133,7 @@ def get_header_adapter(system_type):
 
     adapters = {
         "CSI": CSIHeaderAdapter(),
-        "Licor": LicorHeaderAdapter()
+        "LICOR": LicorHeaderAdapter()
         }
 
     return adapters[system_type]

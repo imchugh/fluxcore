@@ -15,6 +15,25 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    pass
+
+def construct_mapping(loader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise ValueError(f"Duplicate key detected in YAML: {key}")
+        value = loader.construct_object(value_node, deep=deep)
+        mapping[key] = value
+    return mapping
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    construct_mapping
+)
+
+
 # -----------------------------------------------------------------------------
 
 def get_most_recent_file(
@@ -55,9 +74,12 @@ def get_backup_files(file_path, abs_path=True):
 
 # -----------------------------------------------------------------------------    
 
-def read_yml(file_path: Path) -> dict:
+def read_yml(file_path: Path, enforce_unique_keys=False) -> dict:
     
     with open(file_path, "r", encoding="utf-8") as f:
+        
+        if enforce_unique_keys:
+            return yaml.load(f, Loader=UniqueKeyLoader)
         return yaml.safe_load(f)
 # -----------------------------------------------------------------------------
 

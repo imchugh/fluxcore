@@ -54,7 +54,7 @@ class NameParser:
 
     # Private module-level constants
     _VALID_INSTRUMENTS = ['SONIC', 'IRGA', 'RAD']
-    _VALID_FLUX_SYSTEMS = {'EF': 'EasyFlux', 'EP': 'EddyPro', 'DL': 'TERNflux'}
+    # _VALID_FLUX_SYSTEMS = {'EF': 'EasyFlux', 'EP': 'EddyPro', 'DL': 'TERNflux'}
     _VALID_LOC_UNITS = ['cm', 'm']
     _VALID_SUFFIXES = {
         'Av': 'average', 'Sd': 'standard_deviation', 'Vr': 'variance',
@@ -91,8 +91,8 @@ class NameParser:
         # Exhaust the components of the name string
         process, elems = self._parse_process(elems)
         
-        # Get system type
-        sys_type, elems = self._parse_system_type(elems)
+        # # Get system type
+        # sys_type, elems = self._parse_system_type(elems)
         
         # Check there is only one element remaining 
         # (there should be only one remaining component)
@@ -205,30 +205,30 @@ class NameParser:
         return process, elems       
     # -------------------------------------------------------------------------
 
-    # -------------------------------------------------------------------------
+    # # -------------------------------------------------------------------------
     
-    def _parse_system_type(
-            self, elems: List[str]
-            ) -> Tuple[str | None, List[str]]:
-        """
-        Extract system type.
+    # def _parse_system_type(
+    #         self, elems: List[str]
+    #         ) -> Tuple[str | None, List[str]]:
+    #     """
+    #     Extract system type.
 
-        Args:
-            elems: list of name elements (substrings).
+    #     Args:
+    #         elems: list of name elements (substrings).
 
-        Returns:
-            system type and remaining elements.
+    #     Returns:
+    #         system type and remaining elements.
 
-        """
+    #     """
         
-        system_type = None
-        if len(elems) > 0:
-            candidate = elems[0]
-            if candidate in self._VALID_FLUX_SYSTEMS:
-                system_type = self._VALID_FLUX_SYSTEMS[candidate]
-                elems = elems[1:]
-        return system_type, elems
-    # -------------------------------------------------------------------------
+    #     system_type = None
+    #     if len(elems) > 0:
+    #         candidate = elems[0]
+    #         if candidate in self._VALID_FLUX_SYSTEMS:
+    #             system_type = self._VALID_FLUX_SYSTEMS[candidate]
+    #             elems = elems[1:]
+    #     return system_type, elems
+    # # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     

@@ -28,6 +28,7 @@ from infrastructure import paths, file_io
 ###############################################################################
 
 FLUX_VAR = 'UzT'
+FILE_EXT_LOOKUP = {'CSI': 'dat', 'LICOR': 'txt'}
 
 ###############################################################################
 ### END INITS ###
@@ -49,7 +50,7 @@ class FileGroup:
     group: str
     master: Path
     backups: List[Path]
-    system_type: str
+    file_format: str
     expected_variables: Set[str] = field(default_factory=set)
     _variables_by_file_cache: Dict[Path, Set[str]] = field(default_factory=dict, init=False, repr=False)
 
@@ -70,7 +71,7 @@ class FileGroup:
         if not self._variables_by_file_cache:
             for file in self.all_files:
                 header_adapter = raw_data_loader.get_header_adapter(
-                    system_type=self.system_type
+                    system_type=self.file_format
                     )
                 header_vars = set(header_adapter.load(file_path=file)['variable'])
                 self._variables_by_file_cache[file] = set(header_vars)
@@ -125,10 +126,11 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
     for var_def in runtime_cfg.variables.values():
         for raw_var in var_def.raw_inputs:
             group_name = raw_var.file
-
+            file_format = runtime_cfg.file_formats.resolve(group_name)
+            file_ext = FILE_EXT_LOOKUP[file_format]
             group = groups.get(group_name)
             if group is None:
-                master = base_path / f"{group_name}.dat"
+                master = base_path / f"{group_name}.{file_ext}"
                 backups = file_io.get_backup_files(
                     file_path=master,
                     abs_path=True,
@@ -137,7 +139,7 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
                     group=group_name,
                     master=master,
                     backups=backups,
-                    system_type=runtime_cfg.system_type,
+                    file_format=file_format,
                     )
                 groups[group_name] = group
 

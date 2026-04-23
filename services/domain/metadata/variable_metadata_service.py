@@ -32,7 +32,7 @@ from infrastructure.paths import get_local_stream_path
 
 from services.domain.metadata.variable_definition_builder import build_variable_definition, VariableDefinition
 from services.domain.metadata.variable_metadata_validator import validate_L1_config_structure
-from services.domain.variable_syntax_parser import NameParser
+from services.domain.metadata.variable_syntax_parser import NameParser
 from services.domain.utils.config_loader import load_config_file_from_name
 
 ###############################################################################
@@ -45,6 +45,23 @@ from services.domain.utils.config_loader import load_config_file_from_name
 ###############################################################################
 
 # -----------------------------------------------------------------------------
+@dataclass(frozen=True)
+class FileFormatResolver:
+    """Simple class to store file format defaults and overrides, """
+    
+    default: str
+    overrides: Dict[str, str]
+
+    def resolve(self, file_group: str) -> str:
+        """
+        Return override format if file group name is in overrides, 
+        otherwise default
+        """
+        
+        return self.overrides.get(file_group, self.default)
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class SiteRuntimeConfig:
@@ -55,7 +72,8 @@ class SiteRuntimeConfig:
     """
     
     site_name: str
-    system_type: str
+    file_formats: FileFormatResolver
+    custom_metadata: Dict[str, Dict[str, Dict[str, str]]]
     variables: Dict[str, 'VariableDefinition']
     
     @property
@@ -67,13 +85,11 @@ class SiteRuntimeConfig:
         return compute_irga_instrument(self.variables)
     
     @property
-    def flux_suffix(self) -> Optional[str]:
-        return compute_flux_suffix(self.variables)
-    
-    @property
     def diag_type(self) -> Optional[str]:
         return compute_diag_type(self.variables)
 # -----------------------------------------------------------------------------
+
+
 
 ###############################################################################
 ### END CLASSES ###
@@ -157,34 +173,7 @@ def _compute_instrument(
     return next(iter(instruments), None) if instruments else None
 # -----------------------------------------------------------------------------
 
-# -----------------------------------------------------------------------------
 
-def compute_flux_suffix(
-        variables: dict[str, VariableDefinition]
-        ) -> Optional[str]:
-    """
-    Get the flux suffix from the dict of variable definitions (note that
-    validation function has already enforced only a single suffix can be
-    defined for any flux variable - therefore no error raising).
-
-    Args:
-        variables: dict collection of variable definitions.
-
-    Returns:
-        suffix.
-
-    """
-    
-    flux_prefixes = ["Fco2", "Fe", "Fh", "Fm", "ustar"]
-    suffixes = set()
-    for name in variables:
-        for prefix in flux_prefixes:
-            if name.startswith(prefix):
-                parts = name.split("_", 1)
-                if len(parts) == 2:
-                    suffixes.add(parts[1])
-    return next(iter(suffixes), None) if suffixes else None
-# -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 
@@ -208,7 +197,7 @@ def compute_diag_type(variables: dict[str, VariableDefinition]) -> Optional[str]
         var.raw.diag_type
         for name, var in variables.items()
         if any(name.startswith(prefix) for prefix in diag_prefixes)
-    }
+        }
     return next(iter(diag_types), None) if diag_types else None
 # -----------------------------------------------------------------------------
 
@@ -239,6 +228,13 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     # Validate site-level configuration file
     validated_config = validate_L1_config_structure(file=file_path)
 
+    # Load custom metadata
+    custom_metadata = (
+        validated_config.custom_metadata.model_dump()
+        if validated_config.custom_metadata
+        else None
+        )
+
     # Build VariableDefinitions
     site_variables = {}
     for variable, raw_cfg in validated_config.variables.items():
@@ -266,9 +262,27 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     # Return immutable SiteRuntimeConfig object
     return SiteRuntimeConfig(
         site_name=validated_config.site,
-        system_type=validated_config.system_type,
+        file_formats=FileFormatResolver(
+            default=validated_config.file_formats.default,
+            overrides=validated_config.file_formats.overrides
+            ),
+        custom_metadata=custom_metadata,
         variables=site_variables
         )
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+def dictify_custom_metadata(metadata):
+    
+    if metadata is None: 
+        return
+    rslt = {}
+    for name, field in dict(metadata).items():
+        sub_rslt = {}
+        for sub_name, sub_field in dict(field).items():
+            sub_rslt[sub_name] = sub_field
+        rslt[name] = sub_rslt
+    return rslt
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
