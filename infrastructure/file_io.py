@@ -73,6 +73,12 @@ def get_backup_files(file_path, abs_path=True):
 # -----------------------------------------------------------------------------    
 
 # -----------------------------------------------------------------------------    
+def list_available_files(dir_path: Path | str, pattern: str) -> list[str]:
+    
+    return sorted(Path(dir_path).glob(pattern))
+# -----------------------------------------------------------------------------    
+
+# -----------------------------------------------------------------------------    
 
 def read_yml(file_path: Path, enforce_unique_keys=False) -> dict:
     

@@ -43,6 +43,7 @@ class StatisticType(str, Enum):
     VAR = 'variance'
     COVAR = 'covariance'
     COUNT = 'count'
+    SAMPLE = 'instantaneous'
 
 ###############################################################################
 ### END INITS ###
