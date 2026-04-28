@@ -111,6 +111,7 @@ class FileGroup:
 ###############################################################################
 
 # -----------------------------------------------------------------------------
+
 def get_variables_from_file(file_path: Path, system_type: str):
     """Get the variable names from the file header"""
     
