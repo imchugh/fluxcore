@@ -14,8 +14,9 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Set, Dict, List
 
-from services.domain.metadata_config_service import SiteRuntimeConfig
-from services.domain.data import raw_data_loader
+from domain.enums import FileType
+from services.metadata.metadata_config_service import SiteRuntimeConfig
+from services.data import raw_data_loader
 from infrastructure import paths, file_io
 
 ###############################################################################
@@ -70,10 +71,9 @@ class FileGroup:
         """
         if not self._variables_by_file_cache:
             for file in self.all_files:
-                header_adapter = raw_data_loader.get_header_adapter(
-                    system_type=self.file_format
+                header_vars = get_variables_from_file(
+                    file_path=file, system_type=self.file_format
                     )
-                header_vars = set(header_adapter.load(file_path=file)['variable'])
                 self._variables_by_file_cache[file] = set(header_vars)
         return self._variables_by_file_cache
     # -------------------------------------------------------------------------
@@ -111,6 +111,16 @@ class FileGroup:
 ###############################################################################
 
 # -----------------------------------------------------------------------------
+def get_variables_from_file(file_path: Path, system_type: str):
+    """Get the variable names from the file header"""
+    
+    header_adapter = raw_data_loader.get_header_adapter(
+        system_type=system_type
+        )
+    return set(header_adapter.load(file_path=file_path)['variable'])
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 
 def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
     """
@@ -127,7 +137,7 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
         for raw_var in var_def.raw_inputs:
             group_name = raw_var.file
             file_format = runtime_cfg.file_formats.resolve(group_name)
-            file_ext = FILE_EXT_LOOKUP[file_format]
+            file_ext = FileType[file_format].extension
             group = groups.get(group_name)
             if group is None:
                 master = base_path / f"{group_name}.{file_ext}"

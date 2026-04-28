@@ -15,38 +15,14 @@ from __future__ import annotations
 import re
 
 from datetime import datetime
-from enum import Enum
 from typing import Dict, Optional, ClassVar, Union
 from pydantic import BaseModel, field_validator, model_validator, Field, ValidationError
 
 from infrastructure.file_io import read_yml
+from domain.enums import StatisticType, ALLOWED_FILE_TYPES
 
 ###############################################################################
 ### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN INITS ###
-###############################################################################
-
-ALLOWED_FILE_TYPES = {'CSI', 'LICOR'}
-
-class StatisticType(str, Enum):
-    """Simple statistic validation class"""
-    
-    AVG = 'average'
-    SUM = 'sum'
-    MIN = 'minimum'
-    MAX = 'maximum'
-    STDEV = 'standard_deviation'
-    VAR = 'variance'
-    COVAR = 'covariance'
-    COUNT = 'count'
-    SAMPLE = 'instantaneous'
-
-###############################################################################
-### END INITS ###
 ###############################################################################
 
 
