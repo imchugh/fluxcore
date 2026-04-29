@@ -75,7 +75,7 @@ def get_backup_files(file_path, abs_path=True):
 # -----------------------------------------------------------------------------    
 def list_available_files(
         dir_path: Path | str, pattern: str | list[str]
-        ) -> list[str]:
+        ) -> list[Path]:
     
     if isinstance(pattern, str):
         pattern_list = [pattern]
