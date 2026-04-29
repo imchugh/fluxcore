@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Set, Dict, List
 
 from domain.enums import FileType
-from services.metadata.metadata_config_service import SiteRuntimeConfig
+from services.metadata.variable_metadata_service import SiteRuntimeConfig
 from services.data import raw_data_loader
 from infrastructure import paths, file_io
 
@@ -112,13 +112,36 @@ class FileGroup:
 
 # -----------------------------------------------------------------------------
 
-def get_variables_from_file(file_path: Path, system_type: str):
+def get_variables_from_file(
+        file_path: Path | str, system_type: str, incl_backups: bool=False
+        ):
     """Get the variable names from the file header"""
     
+    # Set FileType
+    ftype = FileType[system_type]
+    
+    # Sort out paths
+    file_path = Path(file_path)
+    if not file_path.exists:
+        raise FileNotFoundError(f'File {file_path} does not exist!')
+    
+    # Build iterable
+    file_list = [file_path]
+    if incl_backups:
+        file_list.append(file_io.get_backup_files(file_path=file_path))
+        
+    # Load adapter
     header_adapter = raw_data_loader.get_header_adapter(
-        system_type=system_type
+        system_type=ftype.name
         )
-    return set(header_adapter.load(file_path=file_path)['variable'])
+    
+    # Iterate over files
+    rslt = set()
+    for file in file_list:
+        rslt.update(header_adapter.load(file_path=file_path)['variable'])
+    
+    # Return a list
+    return sorted(rslt)
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------

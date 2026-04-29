@@ -13,7 +13,7 @@ Created on Tue Mar 10 10:54:46 2026
 import pandas as pd
 import pathlib
 
-from services.domain.utils.config_loader import load_config_file_from_name
+from services.config_loader import load_config_file_from_name
 from infrastructure import file_io
 
 ###############################################################################

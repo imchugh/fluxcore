@@ -19,12 +19,13 @@ from typing import Dict, Optional, ClassVar, Union
 from pydantic import BaseModel, field_validator, model_validator, Field, ValidationError
 
 from infrastructure.file_io import read_yml
-from domain.enums import StatisticType, ALLOWED_FILE_TYPES
+from domain.enums import StatisticType, FileType
 
 ###############################################################################
 ### END IMPORTS ###
 ###############################################################################
 
+ALLOWED_FILE_TYPES = [x.name for x in FileType]
 
 ###############################################################################
 ### BEGIN PYDANTIC VALIDATION CLASSES ###
