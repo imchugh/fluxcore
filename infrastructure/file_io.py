@@ -73,9 +73,18 @@ def get_backup_files(file_path, abs_path=True):
 # -----------------------------------------------------------------------------    
 
 # -----------------------------------------------------------------------------    
-def list_available_files(dir_path: Path | str, pattern: str) -> list[str]:
+def list_available_files(
+        dir_path: Path | str, pattern: str | list[str]
+        ) -> list[str]:
     
-    return sorted(Path(dir_path).glob(pattern))
+    if isinstance(pattern, str):
+        pattern_list = [pattern]
+    elif isinstance(pattern, list):
+        pattern_list = pattern
+    files = set()
+    for this_pattern in pattern_list:
+        files.update(Path(dir_path).glob(this_pattern))
+    return sorted(files)
 # -----------------------------------------------------------------------------    
 
 # -----------------------------------------------------------------------------    
