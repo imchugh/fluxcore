@@ -153,14 +153,17 @@ class NameParser:
                 f"Unrecognized elements remain in '{variable_name}': {elems}"
                 )
        
-        return {
-            'quantity': quantity,
-            'instrument_type': instrument_type,
-            'process': process,
-            'vertical_location': vertical_location,
-            'horizontal_location': horizontal_location,
-            'replicate': replicate           
-            }
+        # Return parsed variable class
+        return ParsedVariableName(
+            
+            quantity = quantity,
+            instrument_type = instrument_type,
+            process = process,
+            vertical_location = vertical_location,
+            horizontal_location = horizontal_location,
+            replicate = replicate
+            
+            )
     
     # -------------------------------------------------------------------------
 
