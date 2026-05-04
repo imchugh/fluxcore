@@ -118,7 +118,7 @@ def _build_config_index() -> dict[str, pathlib.Path]:
 
 #------------------------------------------------------------------------------
 
-def load_config_file(file: pathlib.Path)-> ConfigType:
+def load_config_file(file: pathlib.Path | str)-> ConfigType:
     """
     Load the configuration file.
 
@@ -132,7 +132,8 @@ def load_config_file(file: pathlib.Path)-> ConfigType:
         ConfigType: one of the return structures.
 
     """
-       
+    
+    file = pathlib.Path(file)
     if file.suffix == ".txt":
         return read_text(file_path=file)
     if file.suffix == ".yml":

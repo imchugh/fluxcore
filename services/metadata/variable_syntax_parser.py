@@ -13,8 +13,21 @@ Created on Mon Mar  2 10:28:57 2026
 from dataclasses import dataclass
 from typing import List, Tuple
 
+from services import config_loader
+
 ###############################################################################
 ### END IMPORTS ###
+###############################################################################
+
+
+###############################################################################
+### BEGIN INITS ###
+###############################################################################
+
+CANONICAL_VARS = config_loader.load_config_file_from_name('canonical_variables')
+
+###############################################################################
+### END INITS ###
 ###############################################################################
 
 
@@ -25,7 +38,7 @@ from typing import List, Tuple
 # -----------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class VariableDefinition:
+class CanonicalVariableDefinition:
     """Container for site metadata"""
     
     quantity: str
@@ -39,6 +52,42 @@ class VariableDefinition:
     plausible_max: float | None
     standard_name: str | None
     standard_units: str
+    valid_input_units: list[str]
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ParsedVariableName:
+
+    quantity: str
+    instrument_type: str | None
+    process: str | None
+    vertical_location: str | None
+    horizontal_location: str | None
+    replicate: str | None
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
+class CanonicalResolver:
+
+    def __init__(self, canonical_vars: dict):
+        self._canonical = canonical_vars
+
+    def validate(self, parsed: ParsedVariableName) -> None:
+        if parsed.quantity not in self._canonical:
+            raise VariableNameParseError(
+                f"Unknown quantity '{parsed.quantity}'"
+                )
+
+    def to_model(
+        self, parsed: ParsedVariableName
+        ) -> CanonicalVariableDefinition:
+
+        self.validate(parsed)
+        canonical = self._canonical[parsed.quantity]
+        return CanonicalVariableDefinition(**(parsed.__dict__ | canonical))
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -54,8 +103,7 @@ class NameParser:
 
     # Private module-level constants
     _VALID_INSTRUMENTS = ['SONIC', 'IRGA', 'RAD']
-    # _VALID_FLUX_SYSTEMS = {'EF': 'EasyFlux', 'EP': 'EddyPro', 'DL': 'TERNflux'}
-    _VALID_LOC_UNITS = ['cm', 'm']
+    _VALID_LOC_UNITS = ['m']
     _VALID_SUFFIXES = {
         'Av': 'average', 'Sd': 'standard_deviation', 'Vr': 'variance',
         'Sum': 'sum', 'Ct': 'sum', 'QC': 'quality_control_flag'
@@ -67,10 +115,6 @@ class NameParser:
         """Load the standard variable names from the fixed internal config."""
         
         pass
-        # # Load YAML via config_loader
-        # self.canonical_vars = (
-        #     config_loader.load_config_file_from_name("pfp_std_names")
-        #     )
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
@@ -90,10 +134,7 @@ class NameParser:
 
         # Exhaust the components of the name string
         process, elems = self._parse_process(elems)
-        
-        # # Get system type
-        # sys_type, elems = self._parse_system_type(elems)
-        
+               
         # Check there is only one element remaining 
         # (there should be only one remaining component)
         if len(elems) > 1:
@@ -120,25 +161,7 @@ class NameParser:
             'horizontal_location': horizontal_location,
             'replicate': replicate           
             }
-
-        # # Step 4: return structured definition object
-        # return VariableDefinition(
-            
-        #     # Structural components
-        #     quantity=quantity,
-        #     instrument_type=instrument_type,
-        #     process=process,
-        #     vertical_location=vertical_location,
-        #     horizontal_location=horizontal_location,
-        #     replicate=replicate,
-        
-        #     # Canonical metadata
-        #     long_name=canonical["long_name"],
-        #     standard_name=canonical.get("standard_name"),
-        #     standard_units=canonical["standard_units"],
-        #     plausible_min=canonical.get("plausible_min"),
-        #     plausible_max=canonical.get("plausible_max"),
-        #     )
+    
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
@@ -204,31 +227,6 @@ class NameParser:
                 elems = elems[:-1]
         return process, elems       
     # -------------------------------------------------------------------------
-
-    # # -------------------------------------------------------------------------
-    
-    # def _parse_system_type(
-    #         self, elems: List[str]
-    #         ) -> Tuple[str | None, List[str]]:
-    #     """
-    #     Extract system type.
-
-    #     Args:
-    #         elems: list of name elements (substrings).
-
-    #     Returns:
-    #         system type and remaining elements.
-
-    #     """
-        
-    #     system_type = None
-    #     if len(elems) > 0:
-    #         candidate = elems[0]
-    #         if candidate in self._VALID_FLUX_SYSTEMS:
-    #             system_type = self._VALID_FLUX_SYSTEMS[candidate]
-    #             elems = elems[1:]
-    #     return system_type, elems
-    # # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     
