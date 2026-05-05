@@ -243,7 +243,7 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
         parsed_name_elems = name_parser.parse_variable_name(variable_name=variable)
 
         # Ensure the quantity exists in canonical metadata
-        quantity = parsed_name_elems["quantity"]
+        quantity = parsed_name_elems.quantity
         if quantity not in canonical_metadata:
             raise ValueError(
                 f"Variable '{variable}': canonical quantity '{quantity}' not found"
