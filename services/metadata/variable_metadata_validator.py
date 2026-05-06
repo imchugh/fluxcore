@@ -19,13 +19,14 @@ from typing import Dict, Optional, ClassVar, Union
 from pydantic import BaseModel, field_validator, model_validator, Field, ValidationError
 
 from infrastructure.file_io import read_yml
-from domain.enums import StatisticType, FileType
+from domain.enums import StatisticType, FileType, FluxSystemType
 
 ###############################################################################
 ### END IMPORTS ###
 ###############################################################################
 
 ALLOWED_FILE_TYPES = [x.name for x in FileType]
+ALLOWED_FLUX_SYSTEM_TYPES = [x.name for x in FluxSystemType]
 
 ###############################################################################
 ### BEGIN PYDANTIC VALIDATION CLASSES ###
@@ -190,6 +191,30 @@ class FileTypesConfig(BaseModel):
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+class FluxSystemTypesConfig(BaseModel):
+    """Define the architecture / rules for validation of file_types"""
+
+    # -------------------------------------------------------------------------
+    # Define attributes
+    
+    flux_system: str
+    # -------------------------------------------------------------------------
+    
+    # -------------------------------------------------------------------------
+    @field_validator("flux_system")
+    def validate_default(cls, v):
+        """Ensure that passed flux system type is allowed"""
+        
+        if v not in ALLOWED_FLUX_SYSTEM_TYPES:
+            breakpoint()
+            raise ValueError(
+                f"flux system type must be one of {ALLOWED_FLUX_SYSTEM_TYPES}")
+        return v
+    # -------------------------------------------------------------------------
+    
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 # Output-level variable configuration
 # -----------------------------------------------------------------------------
 
@@ -200,11 +225,13 @@ class VariableConfig(BaseModel):
     # -------------------------------------------------------------------------
     # Define attributes
     
+    # Mandatory
     statistic_type: StatisticType
-    height: str
-
+    height: float
     input_variables: Dict[str, InputVariableConfig]
-
+    
+    # Optional
+    height_range: Optional[tuple[float, float]] = None
     standard_name: Optional[str] = None
     
     # Allow future fields
@@ -224,6 +251,7 @@ class SiteConfig(BaseModel):
 
     site: str
     file_formats: FileTypesConfig
+    flux_system: str
     variables: Dict[str, VariableConfig]
 
     custom_metadata: Optional[CustomMetadataConfig] = None

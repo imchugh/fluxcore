@@ -22,6 +22,9 @@ configs/pfp_std_names.yml
 ### BEGIN IMPORTS ###
 ###############################################################################
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
@@ -29,11 +32,12 @@ from typing import Dict, Optional
 # -----------------------------------------------------------------------------
 
 from infrastructure.paths import get_local_stream_path
-
-from services.metadata.variable_definition_builder import build_variable_definition, VariableDefinition
+from services.metadata.variable_definition_builder import build_variable_definition
 from services.metadata.variable_metadata_validator import validate_L1_config_structure
 from services.metadata.variable_syntax_parser import NameParser
 from services.config_loader import load_config_file_from_name
+if TYPE_CHECKING:
+    from domain.metadata.variable_definition import VariableDefinition
 
 ###############################################################################
 ### END IMPORTS ###
@@ -73,6 +77,7 @@ class SiteRuntimeConfig:
     
     site_name: str
     file_formats: FileFormatResolver
+    flux_system: str
     custom_metadata: Dict[str, Dict[str, Dict[str, str]]]
     variables: Dict[str, 'VariableDefinition']
     
@@ -223,7 +228,7 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     name_parser = NameParser()
     
     # Load canonical metadata
-    canonical_metadata = load_config_file_from_name('pfp_std_names')
+    canonical_metadata = load_config_file_from_name('canonical_variables')
     
     # Validate site-level configuration file
     validated_config = validate_L1_config_structure(file=file_path)
@@ -266,23 +271,10 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
             default=validated_config.file_formats.default,
             overrides=validated_config.file_formats.overrides
             ),
+        flux_system=validated_config.flux_system,
         custom_metadata=custom_metadata,
         variables=site_variables
         )
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-def dictify_custom_metadata(metadata):
-    
-    if metadata is None: 
-        return
-    rslt = {}
-    for name, field in dict(metadata).items():
-        sub_rslt = {}
-        for sub_name, sub_field in dict(field).items():
-            sub_rslt[sub_name] = sub_field
-        rslt[name] = sub_rslt
-    return rslt
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -299,19 +291,13 @@ def load_runtime_config_by_site(site: str) -> SiteRuntimeConfig:
 
     """
     
-    # # Get base directory
-    # file_path = get_local_stream_path(
-    #     resource='configs', 
-    #     stream='site_config_files',
-    #     )
-    
-    
-    
-    # Temporary hack
-    # file_path = file_path.parent / 'Test' / f'{site}.yml'
-    
-    file_path = Path(f'/opt/TERN_EP/site_configs/new_exp/{site}.yml')
-    
+    # Get base directory
+    file_path = get_local_stream_path(
+        resource='configs', 
+        stream='site_config_files',
+        file_name=f'{site}.yml'
+        )
+       
     # Do static validation
     return load_runtime_config(file_path=file_path)
 # -----------------------------------------------------------------------------        

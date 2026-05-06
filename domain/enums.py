@@ -37,3 +37,9 @@ class FileType(str, Enum):
             if ft.value == ext:
                 return ft
         raise ValueError(f"No FileType for extension '{ext}'")    
+        
+class FluxSystemType(str, Enum):
+    
+    TERNFLUX = 'TERN standard and legacy programs'
+    EASYFLUX = 'Campbell Scientific Instruments EasyFlux program'
+    SMARTFLUX = 'Licor Smartflux program'

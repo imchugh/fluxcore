@@ -15,6 +15,7 @@ import pathlib
 
 from services.config_loader import load_config_file_from_name
 from infrastructure import file_io
+from domain.constants import TIME_INDEX_NAME, DATA_TIME_FORMAT
 
 ###############################################################################
 ### END IMPORTS ###
@@ -26,7 +27,6 @@ from infrastructure import file_io
 ###############################################################################
 
 FILE_FORMATS = load_config_file_from_name(name='raw_file_format')
-DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 ###############################################################################
 ### END INITS ###
@@ -70,10 +70,10 @@ def _TOA5_date_formatter(df):
     
     dttm = pd.to_datetime(
         df['TIMESTAMP'],
-        format=DATE_FORMAT,
+        format=DATA_TIME_FORMAT,
         errors="coerce"
         )
-    return df.set_index(keys=pd.Index(data=dttm, name='DATETIME'))
+    return df.set_index(keys=pd.Index(data=dttm, name=TIME_INDEX_NAME))
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -82,10 +82,10 @@ def _EddyPro_date_formatter(df):
     
     dttm = pd.to_datetime(
         df["date"] + " " + df["time"],
-        format=DATE_FORMAT,
+        format=DATA_TIME_FORMAT,
         errors="coerce"
         )
-    return df.set_index(keys=pd.Index(data=dttm, name='DATETIME'))
+    return df.set_index(keys=pd.Index(data=dttm, name=TIME_INDEX_NAME))
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
