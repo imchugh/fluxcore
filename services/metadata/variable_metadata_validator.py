@@ -19,14 +19,13 @@ from typing import Dict, Optional, ClassVar, Union
 from pydantic import BaseModel, field_validator, model_validator, Field, ValidationError
 
 from infrastructure.file_io import read_yml
-from domain.enums import StatisticType, FileType, FluxSystemType
+from domain.enums import StatisticType, FileType, FluxSystemType, VariableType
 
 ###############################################################################
 ### END IMPORTS ###
 ###############################################################################
 
-ALLOWED_FILE_TYPES = [x.name for x in FileType]
-ALLOWED_FLUX_SYSTEM_TYPES = [x.name for x in FluxSystemType]
+VALID_FILE_TYPES = [x.name for x in FileType]
 
 ###############################################################################
 ### BEGIN PYDANTIC VALIDATION CLASSES ###
@@ -167,9 +166,9 @@ class FileTypesConfig(BaseModel):
     def validate_default(cls, v):
         """Ensure that passed file type is allowed"""
         
-        if v not in ALLOWED_FILE_TYPES:
+        if v not in VALID_FILE_TYPES:
             raise ValueError(
-                f"default file type must be one of {ALLOWED_FILE_TYPES}")
+                f"default file type must be one of {VALID_FILE_TYPES}")
         return v
     # -------------------------------------------------------------------------
 
@@ -179,36 +178,12 @@ class FileTypesConfig(BaseModel):
         """Ensure that passed file type is allowed"""
         
         invalid = {
-            k: val for k, val in v.items() if val not in ALLOWED_FILE_TYPES
+            k: val for k, val in v.items() if val not in VALID_FILE_TYPES
             }
         if invalid:
             raise ValueError(
-                f"override file type must be one of {ALLOWED_FILE_TYPES}"
+                f"override file type must be one of {VALID_FILE_TYPES}"
                 )
-        return v
-    # -------------------------------------------------------------------------
-    
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-class FluxSystemTypesConfig(BaseModel):
-    """Define the architecture / rules for validation of file_types"""
-
-    # -------------------------------------------------------------------------
-    # Define attributes
-    
-    flux_system: str
-    # -------------------------------------------------------------------------
-    
-    # -------------------------------------------------------------------------
-    @field_validator("flux_system")
-    def validate_default(cls, v):
-        """Ensure that passed flux system type is allowed"""
-        
-        if v not in ALLOWED_FLUX_SYSTEM_TYPES:
-            breakpoint()
-            raise ValueError(
-                f"flux system type must be one of {ALLOWED_FLUX_SYSTEM_TYPES}")
         return v
     # -------------------------------------------------------------------------
     
@@ -226,17 +201,40 @@ class VariableConfig(BaseModel):
     # Define attributes
     
     # Mandatory
-    statistic_type: StatisticType
     height: float
     input_variables: Dict[str, InputVariableConfig]
     
-    # Optional
+    # Optional in yml, explicit in config
+    statistic_type: Optional[StatisticType] = None
+    variable_type: Optional[VariableType] = VariableType.CONTINUOUS
+    
+    # Optional outright
     height_range: Optional[tuple[float, float]] = None
     standard_name: Optional[str] = None
     
     # Allow future fields
     class Config:
         extra = "allow"
+    # -------------------------------------------------------------------------
+    
+    # -------------------------------------------------------------------------
+    
+    @model_validator(mode="after")
+    def validate_statistic_requirement(self):
+    
+        if self.variable_type == VariableType.CONTINUOUS:
+            if self.statistic_type is None:
+                raise ValueError(
+                    "Continuous variables must define statistic_type"
+                    )
+
+        if self.variable_type == VariableType.QUALITY_FLAG:
+            if self.statistic_type is not None:
+                raise ValueError(
+                    "Quality flag variables cannot define statistic_type"
+                    )
+    
+        return self
     # -------------------------------------------------------------------------
     
 # -----------------------------------------------------------------------------
@@ -251,7 +249,7 @@ class SiteConfig(BaseModel):
 
     site: str
     file_formats: FileTypesConfig
-    flux_system: str
+    flux_system: FluxSystemType
     variables: Dict[str, VariableConfig]
 
     custom_metadata: Optional[CustomMetadataConfig] = None

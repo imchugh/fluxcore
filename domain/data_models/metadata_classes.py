@@ -60,6 +60,7 @@ class VariableDefinition:
     instrument: str
     height: float
     statistic_type: str
+    variable_type: str
     quantity: str
 
     # Mandatory subclasses    

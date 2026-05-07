@@ -20,6 +20,14 @@ class StatisticType(str, Enum):
     COVAR = 'covariance'
     COUNT = 'count'
     SAMPLE = 'instantaneous'
+
+class VariableType(str, Enum):
+    """Semantic type of variable."""
+
+    CONTINUOUS = 'continuous'
+    QUALITY_FLAG = 'quality_flag'
+    CATEGORICAL = 'categorical'
+    INDEX = 'index'
     
 class FileType(str, Enum):
     """"""
@@ -40,6 +48,6 @@ class FileType(str, Enum):
         
 class FluxSystemType(str, Enum):
     
-    TERNFLUX = 'TERN standard and legacy programs'
-    EASYFLUX = 'Campbell Scientific Instruments EasyFlux program'
-    SMARTFLUX = 'Licor Smartflux program'
+    TERNFLUX = 'TERNFLUX'
+    EASYFLUX = 'EASYFLUX'
+    SMARTFLUX = 'SMARTFLUX'
