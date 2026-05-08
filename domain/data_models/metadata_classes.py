@@ -14,6 +14,8 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional
 
+from domain import enums
+
 ###############################################################################
 ### BEGIN IMPORTS ###
 ###############################################################################
@@ -39,15 +41,14 @@ class RawVariableMetadata:
 # -----------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class CanonicalVariableMetadata:
+class CanonicalQuantityMetadata:
     
     long_name: str
     standard_name: str
     standard_units: str
-    valid_input_units: [str]
+    valid_input_units: list[str]
     plausible_min: Optional[float] = None
     plausible_max: Optional[float] = None
-
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -59,13 +60,13 @@ class VariableDefinition:
     variable_name: str
     instrument: str
     height: float
-    statistic_type: str
-    variable_type: str
+    statistic_type: enums.StatisticType
+    variable_type: enums.VariableType
     quantity: str
 
-    # Mandatory subclasses    
+    # Mandatory subclasses
     raw_inputs: RawVariableMetadata
-    canonical: CanonicalVariableMetadata
+    canonical: CanonicalQuantityMetadata
     
     # Optional attributes
     instrument_type: Optional[str] = None
@@ -77,6 +78,7 @@ class VariableDefinition:
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 class SiteMetadata(dict):
     """
     Lightweight metadata container.
