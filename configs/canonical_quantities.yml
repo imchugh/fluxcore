@@ -927,8 +927,9 @@ time:
   plausible_max: null
   plausible_min: null
   standard_name: time
-  standard_units: days since 1800-01-01 00:00:00.0
-  valid_input_units: null
+  standard_units: 'days since 1800-01-01 00:00:00.0'
+  valid_input_units:
+  - 'days since 1800-01-01 00:00:00.0'
 ustar:
   long_name: Friction velocity
   plausible_max: 5.0

@@ -6,22 +6,38 @@ Created on Fri May  8 13:42:59 2026
 @author: imchugh
 """
 
+###############################################################################
+### BEGIN IMPORTS ###
+###############################################################################
+
 from dataclasses import asdict
+from typing import Optional
 
 from domain.data_models.metadata_classes import CanonicalQuantityMetadata
 from domain.enums import StatisticType, VariableType
-from typing import Optional
+from services.metadata.metadata_conversion_service import resolve_variance_units
 
-# from services import config_loader
+###############################################################################
+### END IMPORTS ###
+###############################################################################
 
+
+###############################################################################
+### BEGIN CLASSES ###
+###############################################################################
+
+# -----------------------------------------------------------------------------
 class CanonicalQuantityRegistry:
     """
     Registry containing invariant canonical quantity metadata plus
-    logic for deriving realized metadata representations.
+    logic for deriving realized metadata representations (QC, variance).
     """
 
     # -------------------------------------------------------------------------
-    def __init__(self, quantity_definitions: dict):
+    def __init__(
+            self, 
+            quantity_definitions: dict[str, CanonicalQuantityMetadata]
+            ):
         """
         Parameters
         ----------
@@ -29,10 +45,7 @@ class CanonicalQuantityRegistry:
             Raw YAML-loaded dictionary.
         """
 
-        self._registry: dict[str, CanonicalQuantityMetadata] = {
-            quantity: CanonicalQuantityMetadata(**attrs)
-            for quantity, attrs in quantity_definitions.items()
-        }
+        self._registry = quantity_definitions
 
     # -------------------------------------------------------------------------
     def has_quantity(self, quantity: str) -> bool:
@@ -106,35 +119,40 @@ class CanonicalQuantityRegistry:
 
         elif statistic_type == StatisticType.VAR:
 
-            units = attrs["standard_units"]
-
-            attrs["standard_units"] = f"({units})^2"
+            attrs["standard_units"] = resolve_variance_units(
+                units=base.standard_units, from_variance=False
+                )
 
             attrs["valid_input_units"] = [
-                f"({x})^2"
-                for x in attrs["valid_input_units"]
-            ]
+                resolve_variance_units(
+                    units=units, 
+                    from_variance=False
+                    )
+                for units in attrs["valid_input_units"]
+                ]
 
-            if attrs.get("long_name"):
-                attrs["long_name"] = (
-                    f"Variance of {attrs['long_name']}"
-                )
-
-            if attrs.get("standard_name"):
-                attrs["standard_name"] = (
-                    f"variance_of_{attrs['standard_name']}"
-                )
-
-            attrs["plausible_max"] = None
-            attrs["plausible_min"] = None
+            if base.plausible_min is not None:
+                attrs["plausible_min"] = 0
+            if base.plausible_max is not None:
+                attrs["plausible_max"] = attrs["plausible_max"] ** 2
 
         # ---------------------------------------------------------------------
 
         return CanonicalQuantityMetadata(**attrs)
 
     # -------------------------------------------------------------------------
+    
+    # -------------------------------------------------------------------------
+    
     @property
     def quantities(self) -> list[str]:
         """Return sorted quantity names."""
 
         return sorted(self._registry.keys())
+    # -------------------------------------------------------------------------
+    
+# -----------------------------------------------------------------------------
+
+###############################################################################
+### BEGIN CLASSES ###
+###############################################################################

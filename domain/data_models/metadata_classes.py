@@ -11,8 +11,10 @@ Created on Thu Mar  5 12:12:51 2026
 ###############################################################################
 
 from datetime import datetime
-from dataclasses import dataclass
+from pydantic.dataclasses import dataclass, ConfigDict
 from typing import Optional
+
+# -----------------------------------------------------------------------------
 
 from domain import enums
 
@@ -40,15 +42,25 @@ class RawVariableMetadata:
 
 # -----------------------------------------------------------------------------
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, config=ConfigDict(extra="forbid"))
 class CanonicalQuantityMetadata:
-    
+
     long_name: str
-    standard_name: str
+    standard_name: Optional[str]
     standard_units: str
     valid_input_units: list[str]
     plausible_min: Optional[float] = None
     plausible_max: Optional[float] = None
+
+# @dataclass(frozen=True)
+# class CanonicalQuantityMetadata:
+    
+#     long_name: str
+#     standard_name: str
+#     standard_units: str
+#     valid_input_units: list[str]
+#     plausible_min: Optional[float] = None
+#     plausible_max: Optional[float] = None
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -105,7 +117,7 @@ class SiteMetadata(dict):
         'canopy_height': float,
         'time_zone': str,
         'UTC_offset': float,
-    }
+        }
 
     # -------------------------------------------------------------------------
 

@@ -24,7 +24,7 @@ from services import config_loader
 ### BEGIN INITS ###
 ###############################################################################
 
-CANONICAL_VARS = config_loader.load_config_file_from_name('canonical_variables')
+CANONICAL_VARS = config_loader.load_config_file_from_name('canonical_quantities')
 
 ###############################################################################
 ### END INITS ###
