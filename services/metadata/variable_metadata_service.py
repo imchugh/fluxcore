@@ -35,7 +35,7 @@ from infrastructure.paths import get_local_stream_path
 from services.metadata.variable_definition_builder import build_variable_definition
 from services.metadata.variable_metadata_validator import validate_L1_config_structure
 from services.metadata.variable_syntax_parser import NameParser
-from services.config_loader import load_config_file_from_name
+from services.metadata.registry_build_service import build_canonical_quantity_registry
 if TYPE_CHECKING:
     from domain.metadata.variable_definition import VariableDefinition
 
@@ -228,7 +228,8 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     name_parser = NameParser()
     
     # Load canonical metadata
-    canonical_metadata = load_config_file_from_name('canonical_variables')
+    canonical_metadata = build_canonical_quantity_registry()
+    # load_config_file_from_name('canonical_variables')
     
     # Validate site-level configuration file
     validated_config = validate_L1_config_structure(file=file_path)
@@ -249,18 +250,25 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
 
         # Ensure the quantity exists in canonical metadata
         quantity = parsed_name_elems.quantity
-        if quantity not in canonical_metadata:
+        if quantity not in canonical_metadata.quantities:
             raise ValueError(
                 f"Variable '{variable}': canonical quantity '{quantity}' not found"
+                )
+
+        # Resolve it's output        
+        quantity_canonical_metadata = canonical_metadata.resolve(
+            quantity=quantity,
+            variable_type=raw_cfg.variable_type,
+            statistic_type=raw_cfg.statistic_type
             )
-        
+
         # Merge raw config + parsed name + canonical metadata into a simple 
         # metadata structure
         var_def = build_variable_definition(
             var_name=variable,
             raw_cfg=raw_cfg,
             parsed_name_elems=parsed_name_elems,
-            canonical_metadata=canonical_metadata[quantity]
+            canonical_metadata=quantity_canonical_metadata
             )
         site_variables[variable] = var_def
 

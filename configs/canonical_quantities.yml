@@ -736,7 +736,7 @@ Uy_SONIC:
   standard_name: null
   standard_units: m/s
   valid_input_units:
-  - m/snull
+  - m/s
 Uy_SONIC_Av:
   long_name: Lateral wind velocity component, sonic coordinates
   plausible_max: null
@@ -785,7 +785,7 @@ Uz_SONIC:
   standard_name: null
   standard_units: m/s
   valid_input_units:
-  - m.degC/s
+  - m/s
 Uz_SONIC_Av:
   long_name: Vertical wind velocity component, sonic coordinates
   plausible_max: null

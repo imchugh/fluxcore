@@ -12,7 +12,7 @@ Created on Thu Mar  5 12:12:51 2026
 
 from datetime import datetime
 from pydantic.dataclasses import dataclass, ConfigDict
-from typing import Optional
+from typing import Optional, Union
 
 # -----------------------------------------------------------------------------
 
@@ -36,8 +36,20 @@ class RawVariableMetadata:
     raw_units: str
     file: str
     instrument: str
-    begin: Optional[str] = None
-    end: Optional[str] = None
+    begin: Optional[Union[datetime, str]] = None
+    end: Optional[Union[datetime, str]] = None
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ParsedVariableName:
+
+    quantity: str
+    instrument_type: Optional[str] = None
+    vertical_location: Optional[str] = None
+    horizontal_location: Optional[str] = None
+    replicate: Optional[str] = None
+    statistic_id: Optional[str] = None
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -51,42 +63,31 @@ class CanonicalQuantityMetadata:
     valid_input_units: list[str]
     plausible_min: Optional[float] = None
     plausible_max: Optional[float] = None
-
-# @dataclass(frozen=True)
-# class CanonicalQuantityMetadata:
-    
-#     long_name: str
-#     standard_name: str
-#     standard_units: str
-#     valid_input_units: list[str]
-#     plausible_min: Optional[float] = None
-#     plausible_max: Optional[float] = None
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class VariableDefinition:
-    
-    # Mandatory attributes
+
+    # Core identity
     variable_name: str
+    quantity: str
+    variable_type: enums.VariableType
+
+    # Physical metadata
     instrument: str
     height: float
-    statistic_type: enums.StatisticType
-    variable_type: enums.VariableType
-    quantity: str
 
-    # Mandatory subclasses
-    raw_inputs: RawVariableMetadata
+    # Structural metadata
+    raw_inputs: tuple[RawVariableMetadata, ...]
     canonical: CanonicalQuantityMetadata
+    parsed_name_elems: ParsedVariableName
     
-    # Optional attributes
-    instrument_type: Optional[str] = None
+    # Optionals    
     height_range: Optional[tuple[float, float]] = None
-    vertical_location: Optional[str] = None
-    horizontal_location: Optional[str] = None
-    replicate: Optional[str] = None
-    diag_type: Optional[str] = None
+    statistic_type: Optional[enums.StatisticType] = None
+    diag_type: Optional[enums.DiagnosticType] = None
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------

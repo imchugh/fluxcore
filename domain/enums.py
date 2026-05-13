@@ -8,18 +8,36 @@ Created on Tue Apr 28 10:27:17 2026
 
 from enum import Enum
 
+class DiagnosticType(str, Enum):
+    
+    VALID_COUNT = "valid_count"
+    INVALID_COUNT = "invalid_count"
+
 class StatisticType(str, Enum):
     """Simple statistic validation class"""
     
-    AVG = 'average'
-    SUM = 'sum'
-    MIN = 'minimum'
-    MAX = 'maximum'
-    STDEV = 'standard_deviation'
-    VAR = 'variance'
-    COVAR = 'covariance'
-    COUNT = 'count'
-    SAMPLE = 'instantaneous'
+    AVG = ("average", "Av")
+    SUM = ("sum", "Sum")
+    MIN = ("minimum", "Min")
+    MAX = ("maximum", "Max")
+    STDEV = ("standard_deviation", "Sd")
+    VAR = ("variance", "Vr")
+    COVAR = ("covariance", "Cov")
+    COUNT = ("count", "Ct")
+    SAMPLE = ("instantaneous", "Inst")
+
+    def __new__(cls, value: str, suffix: str):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.suffix = suffix
+        return obj
+
+    @classmethod
+    def from_suffix(cls, suffix: str) -> "StatisticType":
+        for item in cls:
+            if item.suffix == suffix:
+                return item
+        raise ValueError(f"Unknown statistic suffix: {suffix}")
 
 class VariableType(str, Enum):
     """Semantic type of variable."""

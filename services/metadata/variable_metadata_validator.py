@@ -19,7 +19,9 @@ from typing import Dict, Optional, ClassVar, Union
 from pydantic import BaseModel, field_validator, model_validator, Field, ValidationError
 
 from infrastructure.file_io import read_yml
-from domain.enums import StatisticType, FileType, FluxSystemType, VariableType
+from domain.enums import (
+    StatisticType, FileType, FluxSystemType, VariableType, DiagnosticType
+    )
 
 ###############################################################################
 ### END IMPORTS ###
@@ -49,7 +51,7 @@ class InputVariableConfig(BaseModel):
     units: str
 
     # Optional
-    diag_type: Optional[str] = None
+    diag_type: DiagnosticType | None = None
     begin: Optional[Union[datetime, str]] = None
     end: Optional[Union[datetime, str]] = None
 
@@ -58,19 +60,19 @@ class InputVariableConfig(BaseModel):
         extra = "allow"
     # -------------------------------------------------------------------------
 
-    # -------------------------------------------------------------------------
-    @field_validator("diag_type")
-    def validate_diag_type_value(cls, v):
-        """Check that diag_type (where present) takes one of two values only"""
+    # # -------------------------------------------------------------------------
+    # @field_validator("diag_type")
+    # def validate_diag_type_value(cls, v):
+    #     """Check that diag_type (where present) takes one of two values only"""
         
-        if v is None:
-            return v
-        if v not in {"valid_count", "invalid_count"}:
-            raise ValueError(
-                "diag_type must be one of: valid_count, invalid_count"
-            )
-        return v
-    # -------------------------------------------------------------------------
+    #     if v is None:
+    #         return v
+    #     if v not in {"valid_count", "invalid_count"}:
+    #         raise ValueError(
+    #             "diag_type must be one of: valid_count, invalid_count"
+    #         )
+    #     return v
+    # # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     @field_validator("begin", "end", mode="before")
