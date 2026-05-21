@@ -11,10 +11,10 @@ Created on Fri May  8 13:42:59 2026
 ###############################################################################
 
 from dataclasses import asdict
-from typing import Optional
 
 from domain.data_models.metadata_classes import CanonicalQuantityMetadata
 from domain.enums import StatisticType, VariableType
+from services import config_loader
 from services.metadata.metadata_conversion_service import resolve_variance_units
 
 ###############################################################################
@@ -42,7 +42,7 @@ class CanonicalQuantityRegistry:
         Parameters
         ----------
         quantity_definitions : dict
-            Raw YAML-loaded dictionary.
+            Mapping of quantity name to materialised CanonicalQuantityMetadata.
         """
 
         self._registry = quantity_definitions
@@ -68,11 +68,11 @@ class CanonicalQuantityRegistry:
         return self._registry[quantity]
 
     # -------------------------------------------------------------------------
-    def resolve(
+    def resolve_metadata(
         self,
         quantity: str,
         variable_type: VariableType = VariableType.CONTINUOUS,
-        statistic_type: Optional[StatisticType] = None,
+        statistic_type: StatisticType | None = None,
         ) -> CanonicalQuantityMetadata:
         """
         Return realized metadata for a variable context.
@@ -103,12 +103,12 @@ class CanonicalQuantityRegistry:
             attrs["plausible_max"] = None
             attrs["plausible_min"] = None
 
-            if attrs.get("long_name"):
+            if attrs["long_name"]:
                 attrs["long_name"] = (
                     f"{attrs['long_name']} quality flag"
                 )
 
-            if attrs.get("standard_name"):
+            if attrs["standard_name"] is not None:
                 attrs["standard_name"] = (
                     f"{attrs['standard_name']}_quality_flag"
                 )
@@ -134,16 +134,14 @@ class CanonicalQuantityRegistry:
             if base.plausible_min is not None:
                 attrs["plausible_min"] = 0
             if base.plausible_max is not None:
-                attrs["plausible_max"] = attrs["plausible_max"] ** 2
+                attrs["plausible_max"] = base.plausible_max ** 2
 
         # ---------------------------------------------------------------------
 
         return CanonicalQuantityMetadata(**attrs)
 
     # -------------------------------------------------------------------------
-    
-    # -------------------------------------------------------------------------
-    
+
     @property
     def quantities(self) -> list[str]:
         """Return sorted quantity names."""
@@ -155,4 +153,34 @@ class CanonicalQuantityRegistry:
 
 ###############################################################################
 ### END CLASSES ###
+###############################################################################
+
+
+###############################################################################
+### BEGIN FUNCTIONS ###
+###############################################################################
+
+# -----------------------------------------------------------------------------
+def build_canonical_quantity_registry() -> CanonicalQuantityRegistry:
+    """
+    Build the canonical quantity registry from the standard config file.
+
+    This is the canonical factory for production use. The registry class
+    itself accepts already-materialised quantity definitions, so tests or
+    other callers can construct an instance directly without touching the
+    config file.
+    """
+
+    raw = config_loader.load_config_file_from_name('canonical_quantities')
+    return CanonicalQuantityRegistry(
+        quantity_definitions={
+            quantity: CanonicalQuantityMetadata(**quantity_dict)
+            for quantity, quantity_dict in raw.items()
+        }
+    )
+
+# -----------------------------------------------------------------------------
+
+###############################################################################
+### END FUNCTIONS ###
 ###############################################################################

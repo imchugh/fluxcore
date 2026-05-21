@@ -35,7 +35,7 @@ from typing import Dict, Optional
 from services.metadata.variable_definition_builder import build_variable_definition
 from services.metadata.variable_structural_validator import validate_L1_config_structure
 from services.metadata.variable_syntax_parser import NameParser
-from services.metadata.registry_build_service import build_canonical_quantity_registry
+from services.metadata.canonical_quantity_registry import build_canonical_quantity_registry
 from domain.enums import FileType
 
 if TYPE_CHECKING:
@@ -323,7 +323,7 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
 
         # Resolve it's output (ensure canonical fields are correct for 
         # variances, QC vals etc) 
-        quantity_canonical_metadata = canonical_metadata.resolve(
+        quantity_canonical_metadata = canonical_metadata.resolve_metadata(
             quantity=quantity,
             variable_type=raw_cfg.variable_type,
             statistic_type=raw_cfg.statistic_type
