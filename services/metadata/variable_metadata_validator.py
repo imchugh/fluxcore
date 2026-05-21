@@ -60,20 +60,6 @@ class InputVariableConfig(BaseModel):
         extra = "allow"
     # -------------------------------------------------------------------------
 
-    # # -------------------------------------------------------------------------
-    # @field_validator("diag_type")
-    # def validate_diag_type_value(cls, v):
-    #     """Check that diag_type (where present) takes one of two values only"""
-        
-    #     if v is None:
-    #         return v
-    #     if v not in {"valid_count", "invalid_count"}:
-    #         raise ValueError(
-    #             "diag_type must be one of: valid_count, invalid_count"
-    #         )
-    #     return v
-    # # -------------------------------------------------------------------------
-
     # -------------------------------------------------------------------------
     @field_validator("begin", "end", mode="before")
     def parse_datetime(cls, v):
@@ -252,6 +238,7 @@ class SiteConfig(BaseModel):
     site: str
     file_formats: FileTypesConfig
     flux_system: FluxSystemType
+    flux_file: str
     variables: Dict[str, VariableConfig]
 
     custom_metadata: Optional[CustomMetadataConfig] = None
@@ -332,6 +319,26 @@ class SiteConfig(BaseModel):
                 f"IRGA variables must use the same instrument; found {irga_instruments}"
             )
 
+        return self
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    @model_validator(mode="after")
+    def enforce_flux_file_consistency(self):
+        
+        file_list = set()
+        
+        for var_name, var_cfg in self.variables.items():
+            if any(var_name.startswith(prefix) for prefix in self.diag_prefixes):
+                for input_cfg in var_cfg.input_variables.values():
+                    if input_cfg.diag_type is not None:
+                        file_list.add(input_cfg.file)
+                        
+        if not self.flux_file in file_list:
+            raise ValueError(
+                'Flux file must be mapped to at least one variable!'
+                )
+            
         return self
     # -------------------------------------------------------------------------
     

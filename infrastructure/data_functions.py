@@ -33,6 +33,9 @@ def analyse_data_gaps(df: pd.DataFrame, interval_minutes: int) -> dict:
     if not isinstance(df.index, pd.DatetimeIndex):
         raise TypeError("DataFrame must have DatetimeIndex")
 
+    if df.empty:
+        raise ValueError('DataFrame must contain data!')
+
     # ensure clean index
     df = df.sort_index()
     df = df[~df.index.duplicated(keep="first")]
@@ -52,11 +55,16 @@ def analyse_data_gaps(df: pd.DataFrame, interval_minutes: int) -> dict:
     gap_starts = gaps.index - gaps
     gap_ends = gaps.index
 
-    gap_table = pd.DataFrame({
-        "gap_start": gap_starts,
-        "gap_end": gap_ends,
-        "missing_records": gap_sizes.values
-    }).reset_index(drop=True)
+    gap_table = (
+        pd.DataFrame(
+            {
+                "gap_start": gap_starts,
+                "gap_end": gap_ends,
+                "missing_records": gap_sizes.values
+                }
+            )
+        .reset_index(drop=True)
+        )
 
     # gap size distribution
     gap_distribution = gap_sizes.value_counts().sort_index()
@@ -77,4 +85,4 @@ def analyse_data_gaps(df: pd.DataFrame, interval_minutes: int) -> dict:
         "pct_missing": pct_missing,
         "gap_distribution": gap_distribution,
         "gap_table": gap_table
-    }
+        }

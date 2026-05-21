@@ -26,6 +26,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -36,6 +37,8 @@ from services.metadata.variable_definition_builder import build_variable_definit
 from services.metadata.variable_metadata_validator import validate_L1_config_structure
 from services.metadata.variable_syntax_parser import NameParser
 from services.metadata.registry_build_service import build_canonical_quantity_registry
+from domain.enums import FileType
+
 if TYPE_CHECKING:
     from domain.metadata.variable_definition import VariableDefinition
 
@@ -48,50 +51,142 @@ if TYPE_CHECKING:
 ### BEGIN CLASSES ###
 ###############################################################################
 
-# -----------------------------------------------------------------------------
-@dataclass(frozen=True)
-class FileFormatResolver:
-    """Simple class to store file format defaults and overrides, """
+# # -----------------------------------------------------------------------------
+# @dataclass(frozen=True)
+# class FileFormatResolver:
+#     """Simple class to store file format defaults and overrides, """
     
-    default: str
-    overrides: Dict[str, str]
+#     default: str
+#     overrides: Dict[str, str]
 
-    def resolve(self, file_group: str) -> str:
-        """
-        Return override format if file group name is in overrides, 
-        otherwise default
-        """
+#     def resolve(self, file_group: str) -> str:
+#         """
+#         Return override format if file group name is in overrides, 
+#         otherwise default
+#         """
         
-        return self.overrides.get(file_group, self.default)
-# -----------------------------------------------------------------------------
+#         return self.overrides.get(file_group, self.default)
+# # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 
+# @dataclass(frozen=True)
+# class SiteRuntimeConfig:
+#     """Simple container for: 
+#         1) site name, and;
+#         2) the loaded and validated variable definition  
+
+#     """
+    
+#     site_name: str
+#     file_formats: FileFormatResolver
+#     flux_system: str
+#     flux_file: str
+#     custom_metadata: Dict[str, Dict[str, Dict[str, str]]]
+#     variables: Dict[str, 'VariableDefinition']
+
+# -----------------------------------------------------------------------------
 @dataclass(frozen=True)
 class SiteRuntimeConfig:
-    """Simple container for: 
-        1) site name, and;
-        2) the loaded and validated variable definition  
 
-    """
-    
     site_name: str
-    file_formats: FileFormatResolver
+
+    # Store FILE FORMATS, not extensions
+    file_format_default: str
+    file_format_overrides: dict[str, str]
+
     flux_system: str
-    custom_metadata: Dict[str, Dict[str, Dict[str, str]]]
-    variables: Dict[str, 'VariableDefinition']
-    
+    flux_file: str
+
+    custom_metadata: Optional[dict[str, dict[str, dict[str, str]]]]
+
+    variables: dict[str, 'VariableDefinition']
+
+    # -------------------------------------------------------------------------
+    # File format helpers
+    # -------------------------------------------------------------------------
+
+    def get_file_format(self, file_group: str) -> str:
+        """
+        Resolve file format name for file group.
+
+        Returns:
+            e.g. 'CSI'
+        """
+
+        return self.file_format_overrides.get(
+            file_group,
+            self.file_format_default
+            )
+
+    # -------------------------------------------------------------------------
+
+    def get_file_type(self, file_group: str) -> FileType:
+        """
+        Resolve FileType enum for file group.
+        """
+
+        format_name = self.get_file_format(file_group)
+
+        return FileType[format_name]
+
+    # -------------------------------------------------------------------------
+
+    def get_file_extension(self, file_group: str) -> str:
+        """
+        Resolve extension for file group.
+
+        Returns:
+            e.g. 'dat'
+        """
+
+        return self.get_file_type(file_group).extension
+
+    # -------------------------------------------------------------------------
+
+    def get_filename(self, file_group: str) -> str:
+        """
+        Construct canonical filename.
+        """
+
+        ext = self.get_file_extension(file_group)
+
+        return f"{file_group}.{ext}"
+
+    # -------------------------------------------------------------------------
+
     @property
+    def flux_filename(self) -> str:
+        """
+        Canonical flux filename.
+        """
+
+        return self.get_filename(self.flux_file)
+
+    # -------------------------------------------------------------------------
+
+    @cached_property
+    def input_file_groups(self) -> tuple[str, ...]:
+    
+        rslt = {
+            raw_var.file
+            for attrs in self.variables.values()
+            for raw_var in attrs.raw_inputs
+            if raw_var.file
+            }
+    
+        return tuple(sorted(rslt))
+
+    # -------------------------------------------------------------------------
+    
+    @cached_property
     def sonic_instrument(self) -> Optional[str]:
         return compute_sonic_instrument(self.variables)
     
-    @property
+    @cached_property
     def irga_instrument(self) -> Optional[str]:
         return compute_irga_instrument(self.variables)
     
-    @property
-    def diag_type(self) -> Optional[str]:
-        return compute_diag_type(self.variables)
 # -----------------------------------------------------------------------------
 
 
@@ -178,34 +273,6 @@ def _compute_instrument(
     return next(iter(instruments), None) if instruments else None
 # -----------------------------------------------------------------------------
 
-
-
-# -----------------------------------------------------------------------------
-
-def compute_diag_type(variables: dict[str, VariableDefinition]) -> Optional[str]:
-    """
-    Get the diagnostic type from the dict of variable definitions (note that
-    validation function has already enforced only a single diagnostic type can be
-    diagnosed for any diagnostic variable - therefore no error raising).
-
-    Args:
-        variables: dict collection of variable definitions.
-
-    Returns:
-        diag type.
-
-    """
-    
-    
-    diag_prefixes = ["Diag_"]
-    diag_types = {
-        var.raw.diag_type
-        for name, var in variables.items()
-        if any(name.startswith(prefix) for prefix in diag_prefixes)
-        }
-    return next(iter(diag_types), None) if diag_types else None
-# -----------------------------------------------------------------------------
-
 # -----------------------------------------------------------------------------
 
 def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:  
@@ -255,7 +322,8 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
                 f"Variable '{variable}': canonical quantity '{quantity}' not found"
                 )
 
-        # Resolve it's output        
+        # Resolve it's output (ensure canonical fields are correct for 
+        # variances, QC vals etc) 
         quantity_canonical_metadata = canonical_metadata.resolve(
             quantity=quantity,
             variable_type=raw_cfg.variable_type,
@@ -275,11 +343,14 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     # Return immutable SiteRuntimeConfig object
     return SiteRuntimeConfig(
         site_name=validated_config.site,
-        file_formats=FileFormatResolver(
-            default=validated_config.file_formats.default,
-            overrides=validated_config.file_formats.overrides
-            ),
+        file_format_default=validated_config.file_formats.default,
+        file_format_overrides=validated_config.file_formats.overrides,
+        # file_formats=FileFormatResolver(
+        #     default=validated_config.file_formats.default,
+        #     overrides=validated_config.file_formats.overrides
+        #     ),
         flux_system=validated_config.flux_system,
+        flux_file=validated_config.flux_file,
         custom_metadata=custom_metadata,
         variables=site_variables
         )

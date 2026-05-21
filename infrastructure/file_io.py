@@ -9,9 +9,11 @@ Created on Thu Feb 26 13:35:13 2026
 import csv
 import json
 import logging
+import os
 import pandas as pd
 import yaml
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -203,32 +205,67 @@ def read_csv(file_path: Path) -> pd.DataFrame:
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-def write_json_file(
-    *,
-    file_path: Path,
-    data: list[dict],
-    run_id: str,
-) -> None:
+def write_json(
+        *,
+        file_path: Path,
+        data: Any,
+        indent: int = 2,
+        sort_keys: bool = False,
+        atomic: bool = True,
+        ) -> None:
+    """
+    Write JSON data to disk.
 
-    logger.info(
-        "json_write_start",
-        extra={
-            "run_id": run_id,
-            "path": str(file_path),
-        },
-    )
+    Args:
+        file_path:
+            Destination path.
 
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4)
+        data:
+            JSON-serializable object.
 
-    logger.info(
-        "json_write_complete",
-        extra={
-            "run_id": run_id,
-            "path": str(file_path),
-            "records": len(data),
-        },
-    )
+        indent:
+            JSON indentation level.
+
+        sort_keys:
+            Whether to sort dictionary keys.
+
+        atomic:
+            If True, write via temporary file replacement to avoid
+            partially-written/corrupted files.
+    """
+
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if atomic:
+
+        tmp_path = file_path.with_suffix(
+            f"{file_path.suffix}.tmp"
+            )
+
+        with open(tmp_path, "w", encoding="utf-8") as f:
+
+            json.dump(
+                data,
+                f,
+                indent=indent,
+                sort_keys=sort_keys,
+                )
+
+            f.flush()
+            os.fsync(f.fileno())
+
+        tmp_path.replace(file_path)
+
+    else:
+
+        with open(file_path, "w", encoding="utf-8") as f:
+
+            json.dump(
+                data,
+                f,
+                indent=indent,
+                sort_keys=sort_keys,
+                )
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
