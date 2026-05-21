@@ -32,9 +32,8 @@ from typing import Dict, Optional
 
 # -----------------------------------------------------------------------------
 
-from infrastructure.paths import get_local_stream_path
 from services.metadata.variable_definition_builder import build_variable_definition
-from services.metadata.variable_metadata_validator import validate_L1_config_structure
+from services.metadata.variable_structural_validator import validate_L1_config_structure
 from services.metadata.variable_syntax_parser import NameParser
 from services.metadata.registry_build_service import build_canonical_quantity_registry
 from domain.enums import FileType
@@ -345,41 +344,12 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
         site_name=validated_config.site,
         file_format_default=validated_config.file_formats.default,
         file_format_overrides=validated_config.file_formats.overrides,
-        # file_formats=FileFormatResolver(
-        #     default=validated_config.file_formats.default,
-        #     overrides=validated_config.file_formats.overrides
-        #     ),
         flux_system=validated_config.flux_system,
         flux_file=validated_config.flux_file,
         custom_metadata=custom_metadata,
         variables=site_variables
         )
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-def load_runtime_config_by_site(site: str) -> SiteRuntimeConfig:
-    """
-    Convenience function for load_runtime_config to allow site-based calling.
-
-    Args:
-        site: name of site.
-
-    Returns:
-        the SiteRunTimeConfig object that contains the validator plus mapping.
-
-    """
-    
-    # Get base directory
-    file_path = get_local_stream_path(
-        resource='configs', 
-        stream='site_config_files',
-        file_name=f'{site}.yml'
-        )
-       
-    # Do static validation
-    return load_runtime_config(file_path=file_path)
-# -----------------------------------------------------------------------------        
+# -----------------------------------------------------------------------------    
     
 ###############################################################################
 ### END FUNCTIONS ###

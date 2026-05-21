@@ -329,10 +329,8 @@ class SiteConfig(BaseModel):
         file_list = set()
         
         for var_name, var_cfg in self.variables.items():
-            if any(var_name.startswith(prefix) for prefix in self.diag_prefixes):
-                for input_cfg in var_cfg.input_variables.values():
-                    if input_cfg.diag_type is not None:
-                        file_list.add(input_cfg.file)
+            for input_cfg in var_cfg.input_variables.values():
+                file_list.add(input_cfg.file)
                         
         if not self.flux_file in file_list:
             raise ValueError(

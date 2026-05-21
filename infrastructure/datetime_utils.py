@@ -49,8 +49,8 @@ class SunTime:
         self.lon = lon
         self.elev = elev
 
-        self.timezone_name = get_timezone(lat=lat, lon=lon)
-        self.tz = ZoneInfo(self.timezone_name)
+        self.tz_name = get_timezone(lat=lat, lon=lon)
+        self.tz = get_standard_timezone(tz_name=self.tz_name)
 
         obs = ephem.Observer()
         obs.lat = str(lat)
@@ -130,6 +130,17 @@ class SunTime:
 
 # -----------------------------------------------------------------------------
 
+def get_standard_timezone(tz_name: str):
+
+    tz = ZoneInfo(tz_name)
+
+    winter_dt = datetime(2026, 7, 1, tzinfo=tz)
+
+    return timezone(winter_dt.utcoffset())
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
 def get_utc_now(as_iso=False) -> str:
     """
     Generate UTC ISO8601 timestamp.
@@ -143,9 +154,9 @@ def get_utc_now(as_iso=False) -> str:
 
 # -----------------------------------------------------------------------------
 
-def get_tz_aware_datetime(naive_dt, tz, as_iso=False):
+def get_tz_aware_datetime(naive_dt, tz_name, as_iso=False):
     
-    tz_dt = naive_dt.astimezone(ZoneInfo(tz))
+    tz_dt = naive_dt.astimezone(get_standard_timezone(tz_name=tz_name))
     if not as_iso:
         return tz_dt
     return tz_dt.isoformat()
@@ -154,12 +165,12 @@ def get_tz_aware_datetime(naive_dt, tz, as_iso=False):
 # -----------------------------------------------------------------------------
 
 def get_local_datetime_now(
-        tz, return_tz_aware: bool=True, as_iso: bool=False
+        tz_name, return_tz_aware: bool=True, as_iso: bool=False
         ):
     
     local = get_tz_aware_datetime(
         naive_dt=get_utc_now(), 
-        tz=tz
+        tz_name=tz_name
         )
     if not return_tz_aware:
         local = local.replace(tzinfo=None)
