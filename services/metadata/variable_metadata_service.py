@@ -22,12 +22,9 @@ Responsibilities:
 ### BEGIN IMPORTS ###
 ###############################################################################
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, Optional
 
 # -----------------------------------------------------------------------------
 
@@ -35,7 +32,7 @@ from services.metadata.variable_structural_validator import validate_L1_config_s
 from services.metadata.variable_syntax_parser import NameParser
 from services.metadata.canonical_quantity_registry import build_canonical_quantity_registry
 from domain.data_models.metadata_classes import RawVariableMetadata, VariableDefinition
-from domain.enums import FileType
+from domain.enums import FileType, FluxSystemType
 
 ###############################################################################
 ### END IMPORTS ###
@@ -45,40 +42,6 @@ from domain.enums import FileType
 ###############################################################################
 ### BEGIN CLASSES ###
 ###############################################################################
-
-# # -----------------------------------------------------------------------------
-# @dataclass(frozen=True)
-# class FileFormatResolver:
-#     """Simple class to store file format defaults and overrides, """
-    
-#     default: str
-#     overrides: Dict[str, str]
-
-#     def resolve(self, file_group: str) -> str:
-#         """
-#         Return override format if file group name is in overrides, 
-#         otherwise default
-#         """
-        
-#         return self.overrides.get(file_group, self.default)
-# # -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-# @dataclass(frozen=True)
-# class SiteRuntimeConfig:
-#     """Simple container for: 
-#         1) site name, and;
-#         2) the loaded and validated variable definition  
-
-#     """
-    
-#     site_name: str
-#     file_formats: FileFormatResolver
-#     flux_system: str
-#     flux_file: str
-#     custom_metadata: Dict[str, Dict[str, Dict[str, str]]]
-#     variables: Dict[str, 'VariableDefinition']
 
 # -----------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -90,12 +53,12 @@ class SiteRuntimeConfig:
     file_format_default: str
     file_format_overrides: dict[str, str]
 
-    flux_system: str
+    flux_system: FluxSystemType
     flux_file: str
 
-    custom_metadata: Optional[dict[str, dict[str, dict[str, str]]]]
+    custom_metadata: dict[str, dict[str, dict[str, str]]] | None
 
-    variables: dict[str, 'VariableDefinition']
+    variables: dict[str, VariableDefinition]
 
     # -------------------------------------------------------------------------
     # File format helpers
@@ -175,11 +138,11 @@ class SiteRuntimeConfig:
     # -------------------------------------------------------------------------
     
     @cached_property
-    def sonic_instrument(self) -> Optional[str]:
+    def sonic_instrument(self) -> str | None:
         return compute_sonic_instrument(self.variables)
-    
+
     @cached_property
-    def irga_instrument(self) -> Optional[str]:
+    def irga_instrument(self) -> str | None:
         return compute_irga_instrument(self.variables)
     
 # -----------------------------------------------------------------------------
@@ -199,7 +162,7 @@ class SiteRuntimeConfig:
 
 def compute_sonic_instrument(
         variables: dict[str, VariableDefinition]
-        ) -> Optional[str]:
+        ) -> str | None:
     """
     Get the sonic instrument.
                                                                     
@@ -221,7 +184,7 @@ def compute_sonic_instrument(
 
 def compute_irga_instrument(
         variables: dict[str, VariableDefinition],
-        ) -> Optional[str]:
+        ) -> str | None:
 
     """
     Get the irga instrument.
@@ -245,7 +208,7 @@ def compute_irga_instrument(
 def _compute_instrument(
         variables: dict[str, VariableDefinition],
         instrument_substring: str,
-        ) -> Optional[str]:
+        ) -> str | None:
     """
     Get the instrument from the dict of variable definitions (note that
     validation function has already enforced only a single instrument can be
@@ -259,13 +222,12 @@ def _compute_instrument(
 
     """
     
-    instruments = []
+    instruments = set()
     for name, var in variables.items():
-        for raw_input in var.raw_inputs:
-            if instrument_substring in name:
-                instruments.append(raw_input.instrument)
-    instruments = set(instruments)
-    return next(iter(instruments), None) if instruments else None
+        if instrument_substring in name:
+            for raw_input in var.raw_inputs:
+                instruments.add(raw_input.instrument)
+    return next(iter(instruments), None)
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -316,8 +278,8 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
                 f"Variable '{variable}': canonical quantity '{quantity}' not found"
                 )
 
-        # Resolve it's output (ensure canonical fields are correct for 
-        # variances, QC vals etc) 
+        # Resolve its output (ensure canonical fields are correct for
+        # variances, QC vals etc)
         quantity_canonical_metadata = canonical_metadata.resolve_metadata(
             quantity=quantity,
             variable_type=raw_cfg.variable_type,
