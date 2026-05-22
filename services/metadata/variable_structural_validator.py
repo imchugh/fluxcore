@@ -10,14 +10,12 @@ Created on Mon Mar  2 13:52:01 2026
 ### BEGIN IMPORTS ###
 ###############################################################################
 
-from __future__ import annotations
-
 import re
 
 from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
-from pydantic import BaseModel, field_validator, model_validator, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator, Field, ValidationError
 
 from infrastructure.file_io import read_yml
 from domain.enums import (
@@ -42,10 +40,12 @@ VALID_FILE_TYPES = [x.name for x in FileType]
 # -----------------------------------------------------------------------------
 class InputVariableConfig(BaseModel):
     """Define the architecture / rules validation rules for input variables"""
-    
+
+    model_config = ConfigDict(extra='allow')
+
     # -------------------------------------------------------------------------
     # Define attributes
-    
+
     # Mandatory
     instrument: str
     file: str
@@ -55,10 +55,6 @@ class InputVariableConfig(BaseModel):
     diag_type: DiagnosticType | None = None
     begin: datetime | str | None = None
     end: datetime | str | None = None
-
-    # Allow future fields
-    class Config:
-        extra = "allow"
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
@@ -80,23 +76,6 @@ class InputVariableConfig(BaseModel):
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-class CustomMetadataConfig(BaseModel):
-    """Define architecture of custom metadata"""
-    
-    # -------------------------------------------------------------------------
-    # Define attributes
-    
-    # Mandatory
-    horizontal_location: HorizontalLocationConfig
-
-    # Allow future fields
-    class Config:
-        extra = "allow"  
-    # -------------------------------------------------------------------------
-    
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
 class HorizontalLocationConfig(BaseModel):
     """Define the architecture / rules for validation of horizontal location"""
 
@@ -108,12 +87,12 @@ class HorizontalLocationConfig(BaseModel):
     aboveground: dict[str, str] | None = None
 
     # -------------------------------------------------------------------------
-    
+
     # -------------------------------------------------------------------------
     @field_validator("belowground", "aboveground")
     def validate_keys(cls, v):
         """Ensure that horizontal location keys are alphabetic"""
-        
+
         if v is None:
             return v
 
@@ -124,19 +103,34 @@ class HorizontalLocationConfig(BaseModel):
                 )
         return v
     # -------------------------------------------------------------------------
-    
-    # -------------------------------------------------------------------------    
+
+    # -------------------------------------------------------------------------
     @model_validator(mode="after")
     def ensure_at_least_one_category(self):
         """Ensure that at least one expected field is in structure"""
-        
+
         if not self.belowground and not self.aboveground:
             raise ValueError(
                 "horizontal_location must contain at least one of 'belowground' or 'aboveground'"
             )
         return self
     # -------------------------------------------------------------------------
-    
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+class CustomMetadataConfig(BaseModel):
+    """Define architecture of custom metadata"""
+
+    model_config = ConfigDict(extra='allow')
+
+    # -------------------------------------------------------------------------
+    # Define attributes
+
+    # Mandatory
+    horizontal_location: HorizontalLocationConfig
+    # -------------------------------------------------------------------------
+
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -185,10 +179,12 @@ class FileTypesConfig(BaseModel):
 # -----------------------------------------------------------------------------
 class VariableConfig(BaseModel):
     """Define the complete architecture for canonical variable"""
-    
+
+    model_config = ConfigDict(extra='allow')
+
     # -------------------------------------------------------------------------
     # Define attributes
-    
+
     # Mandatory
     height: float
     input_variables: dict[str, InputVariableConfig]
@@ -200,10 +196,6 @@ class VariableConfig(BaseModel):
     # Optional outright
     height_range: tuple[float, float] | None = None
     standard_name: str | None = None
-    
-    # Allow future fields
-    class Config:
-        extra = "allow"
     # -------------------------------------------------------------------------
     
     # -------------------------------------------------------------------------
