@@ -315,7 +315,7 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
             canonical=quantity_canonical_metadata,
             parsed_name_elems=parsed_name_elems,
             diag_type=first_input.diag_type,
-        )
+            )
 
     # Return immutable SiteRuntimeConfig object
     return SiteRuntimeConfig(
