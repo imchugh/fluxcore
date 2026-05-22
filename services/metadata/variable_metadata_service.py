@@ -4,17 +4,17 @@
 Created on Tue Mar  3 06:59:42 2026
 @author: imchugh
 
-This module creates a runtime variable metadata configuration class containing
-information required to build a generic dataset from site data.
+Assembles SiteRuntimeConfig — the runtime variable metadata object containing
+all information required to build a generic dataset from site data.
 
-It combines validation functionality from the following modules:
-    - variable_metadata_validator: structural validation of the input yml
-    - variable_syntax_parser: syntax validation of the top-level yml variable 
-    names
-It creates (static) class-based variable object based on definitions in 
-variable_definition_builder.
-It combines variable metadata with canonical metadata accessed from 
-configs/pfp_std_names.yml
+Responsibilities:
+    - structural validation of the site config YML
+      (via variable_structural_validator)
+    - variable name parsing and syntax validation
+      (via variable_syntax_parser)
+    - canonical quantity resolution for each variable
+      (via canonical_quantity_registry)
+    - assembly of VariableDefinition and SiteRuntimeConfig objects
 
 """
 
@@ -23,7 +23,6 @@ configs/pfp_std_names.yml
 ###############################################################################
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
 from dataclasses import dataclass
 from functools import cached_property
@@ -32,14 +31,11 @@ from typing import Dict, Optional
 
 # -----------------------------------------------------------------------------
 
-from services.metadata.variable_definition_builder import build_variable_definition
 from services.metadata.variable_structural_validator import validate_L1_config_structure
 from services.metadata.variable_syntax_parser import NameParser
 from services.metadata.canonical_quantity_registry import build_canonical_quantity_registry
+from domain.data_models.metadata_classes import RawVariableMetadata, VariableDefinition
 from domain.enums import FileType
-
-if TYPE_CHECKING:
-    from domain.metadata.variable_definition import VariableDefinition
 
 ###############################################################################
 ### END IMPORTS ###
@@ -295,7 +291,6 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     
     # Load canonical metadata
     canonical_metadata = build_canonical_quantity_registry()
-    # load_config_file_from_name('canonical_variables')
     
     # Validate site-level configuration file
     validated_config = validate_L1_config_structure(file=file_path)
@@ -329,15 +324,36 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
             statistic_type=raw_cfg.statistic_type
             )
 
-        # Merge raw config + parsed name + canonical metadata into a simple 
-        # metadata structure
-        var_def = build_variable_definition(
-            var_name=variable,
-            raw_cfg=raw_cfg,
-            parsed_name_elems=parsed_name_elems,
-            canonical_metadata=quantity_canonical_metadata
+        # Assemble per-input metadata
+        raw_inputs = tuple(
+            RawVariableMetadata(
+                raw_name=raw_name,
+                raw_units=cfg.units,
+                instrument=cfg.instrument,
+                file=cfg.file,
+                begin=cfg.begin,
+                end=cfg.end,
             )
-        site_variables[variable] = var_def
+            for raw_name, cfg in raw_cfg.input_variables.items()
+        )
+
+        # instrument and diag_type are validated to be consistent across
+        # all inputs (enforced by validate_L1_config_structure), so take
+        # from the first input explicitly rather than relying on loop-scope.
+        first_input = next(iter(raw_cfg.input_variables.values()))
+
+        site_variables[variable] = VariableDefinition(
+            variable_name=variable,
+            quantity=parsed_name_elems.quantity,
+            variable_type=raw_cfg.variable_type,
+            instrument=first_input.instrument,
+            height=raw_cfg.height,
+            statistic_type=raw_cfg.statistic_type,
+            raw_inputs=raw_inputs,
+            canonical=quantity_canonical_metadata,
+            parsed_name_elems=parsed_name_elems,
+            diag_type=first_input.diag_type,
+        )
 
     # Return immutable SiteRuntimeConfig object
     return SiteRuntimeConfig(
