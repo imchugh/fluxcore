@@ -15,7 +15,8 @@ from __future__ import annotations
 import re
 
 from datetime import datetime
-from typing import Dict, Optional, ClassVar, Union
+from pathlib import Path
+from typing import ClassVar
 from pydantic import BaseModel, field_validator, model_validator, Field, ValidationError
 
 from infrastructure.file_io import read_yml
@@ -52,8 +53,8 @@ class InputVariableConfig(BaseModel):
 
     # Optional
     diag_type: DiagnosticType | None = None
-    begin: Optional[Union[datetime, str]] = None
-    end: Optional[Union[datetime, str]] = None
+    begin: datetime | str | None = None
+    end: datetime | str | None = None
 
     # Allow future fields
     class Config:
@@ -102,9 +103,9 @@ class HorizontalLocationConfig(BaseModel):
     # -------------------------------------------------------------------------
     # Define attributes
 
-    # All optional    
-    belowground: Optional[Dict[str, str]] = None
-    aboveground: Optional[Dict[str, str]] = None
+    # All optional
+    belowground: dict[str, str] | None = None
+    aboveground: dict[str, str] | None = None
 
     # -------------------------------------------------------------------------
     
@@ -146,7 +147,7 @@ class FileTypesConfig(BaseModel):
     # Define attributes
     
     default: str
-    overrides: Dict[str, str] = Field(default_factory=dict)
+    overrides: dict[str, str] = Field(default_factory=dict)
     # -------------------------------------------------------------------------
     
     # -------------------------------------------------------------------------
@@ -190,15 +191,15 @@ class VariableConfig(BaseModel):
     
     # Mandatory
     height: float
-    input_variables: Dict[str, InputVariableConfig]
-    
+    input_variables: dict[str, InputVariableConfig]
+
     # Optional in yml, explicit in config
-    statistic_type: Optional[StatisticType] = None
-    variable_type: Optional[VariableType] = VariableType.CONTINUOUS
-    
+    statistic_type: StatisticType | None = None
+    variable_type: VariableType = VariableType.CONTINUOUS
+
     # Optional outright
-    height_range: Optional[tuple[float, float]] = None
-    standard_name: Optional[str] = None
+    height_range: tuple[float, float] | None = None
+    standard_name: str | None = None
     
     # Allow future fields
     class Config:
@@ -239,9 +240,9 @@ class SiteConfig(BaseModel):
     file_formats: FileTypesConfig
     flux_system: FluxSystemType
     flux_file: str
-    variables: Dict[str, VariableConfig]
+    variables: dict[str, VariableConfig]
 
-    custom_metadata: Optional[CustomMetadataConfig] = None
+    custom_metadata: CustomMetadataConfig | None = None
 
     # class-level constants for validation
     diag_prefixes: ClassVar[list[str]] = ["Diag_"]
@@ -278,7 +279,7 @@ class SiteConfig(BaseModel):
     # -------------------------------------------------------------------------    
     @model_validator(mode="after")
     def enforce_diag_rules(self):
-        """"""
+        """Enforce that all diagnostic variables share the same diag_type."""
         
         diag_types = set()
 
@@ -288,7 +289,7 @@ class SiteConfig(BaseModel):
                     if input_cfg.diag_type is not None:
                         diag_types.add(input_cfg.diag_type)
 
-        if diag_types and len(diag_types) > 1:
+        if len(diag_types) > 1:
             raise ValueError(
                 f"Diagnostic variables have inconsistent diag_type values: {diag_types}. Must all be same."
             )
@@ -332,7 +333,7 @@ class SiteConfig(BaseModel):
             for input_cfg in var_cfg.input_variables.values():
                 file_list.add(input_cfg.file)
                         
-        if not self.flux_file in file_list:
+        if self.flux_file not in file_list:
             raise ValueError(
                 'Flux file must be mapped to at least one variable!'
                 )
@@ -352,12 +353,12 @@ class SiteConfig(BaseModel):
 ###############################################################################
 
 # -----------------------------------------------------------------------------
-def validate_variable(config_data, key):
+def validate_variable(config_data: dict, key: str) -> tuple[bool, list]:
     """
-    External variable validator used to test e.g. UI validity after user 
+    External variable validator used to test e.g. UI validity after user
     changes
     """
-    
+
     try:
         VariableConfig(**config_data["variables"][key])
         return True, []
@@ -366,7 +367,7 @@ def validate_variable(config_data, key):
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-def validate_all(config_data):
+def validate_all(config_data: dict) -> tuple[bool, list]:
     """
     External config validator used to test e.g. UI validity after user changes
     """
@@ -379,7 +380,7 @@ def validate_all(config_data):
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-def validate_L1_config_structure(file: str) -> SiteConfig:
+def validate_L1_config_structure(file: Path | str) -> SiteConfig:
     """Validate YAML structure and return Config object."""
     return SiteConfig(**read_yml(file_path=file, enforce_unique_keys=True))
 # -----------------------------------------------------------------------------
