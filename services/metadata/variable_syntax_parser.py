@@ -10,11 +10,7 @@ Created on Mon Mar  2 10:28:57 2026
 ### BEGIN IMPORTS ###
 ###############################################################################
 
-# from dataclasses import dataclass
-from typing import List, Tuple
-
 from domain.data_models.metadata_classes import ParsedVariableName
-from domain.enums import StatisticType
 
 ###############################################################################
 ### END IMPORTS ###
@@ -43,14 +39,12 @@ class NameParser:
     # -------------------------------------------------------------------------
     
     def __init__(self):
-        """Load the standard variable names from the fixed internal config."""
-        
         pass
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     
-    def parse_variable_name(self, variable_name: str) -> dict:
+    def parse_variable_name(self, variable_name: str) -> ParsedVariableName:
         """Parse a variable name and return structured components.
 
         Raises:
@@ -105,19 +99,16 @@ class NameParser:
     # -------------------------------------------------------------------------
     
     def _parse_quantity(
-            self, elems: List[str]
-            ) -> Tuple[str, str | None, List[str]]:
+            self, elems: list[str]
+            ) -> tuple[str, str | None, list[str]]:
         """
-        Extract the fundamental quantity
+        Extract the fundamental quantity and optional instrument type.
 
         Args:
             elems: list of name elements (substrings).
 
-        Raises:
-            VariableNameParseError: raised if quantity not listed in config.
-
         Returns:
-            quantity and remaining elements.
+            quantity, instrument type (or None), and remaining elements.
 
         """
         
@@ -141,7 +132,7 @@ class NameParser:
 
     # -------------------------------------------------------------------------
     
-    def _parse_process(self, elems: List[str]) -> Tuple[str | None, List[str]]:
+    def _parse_process(self, elems: list[str]) -> tuple[str | None, list[str]]:
         """
         Extract statistical_process (is ALWAYS the final element).
 
@@ -154,20 +145,19 @@ class NameParser:
         """
         
         process = None
-        if len(elems) > 0:
-            candidate = elems[-1]
-            StatisticType.from_suffix(suffix='Av')
-            # if candidate in self._VALID_SUFFIXES:
-            process = candidate
+        if elems:
+            # TODO: validate candidate against StatisticType.from_suffix()
+            # Validation was removed; candidate is accepted unconditionally.
+            process = elems[-1]
             elems = elems[:-1]
-        return process, elems       
+        return process, elems
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     
     def _parse_vertical_location(
-            self, elems: List[str]
-            ) -> Tuple[str | None, List[str]]:
+            self, elems: list[str]
+            ) -> tuple[str | None, list[str]]:
         """
         Extract vertical location.
 
@@ -183,7 +173,7 @@ class NameParser:
         """
         
         vertical_location = None
-        if len(elems) > 0:
+        if elems:
             candidate = elems[0]
             for unit in self._VALID_LOC_UNITS:
                 if unit in candidate:
@@ -206,8 +196,8 @@ class NameParser:
     # -------------------------------------------------------------------------
     
     def _parse_horizontal_location(
-            self, elems: List[str]
-            ) -> Tuple[str | None, List[str]]:
+            self, elems: list[str]
+            ) -> tuple[str | None, list[str]]:
         """
         Extract horizontal location.
 
@@ -220,17 +210,18 @@ class NameParser:
         """
 
         horizontal_location = None
-        if len(elems) > 0:
+        if elems:
             candidate = elems[0]
             if candidate[0].isalpha():
                 horizontal_location = candidate[0]
-                elems = candidate[1:]
+                remainder = candidate[1:]
+                elems = [remainder] if remainder else []
         return horizontal_location, elems
     # -------------------------------------------------------------------------
     
     # -------------------------------------------------------------------------
     
-    def _parse_replicate(self, elems: List[str]) -> Tuple[str | None, List[str]]:
+    def _parse_replicate(self, elems: list[str]) -> tuple[str | None, list[str]]:
         """
         Extract replicates.
 
@@ -243,7 +234,7 @@ class NameParser:
         """
         
         replicate = None
-        if len(elems) > 0:
+        if elems:
             candidate = elems[0]
             if candidate.isdigit():
                 replicate = candidate
