@@ -269,6 +269,76 @@ def write_json(
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+def write_toa5_csv(
+        *,
+        file_path: Path,
+        headers: list[list],
+        data: pd.DataFrame,
+        atomic: bool = True,
+        ) -> None:
+    """
+    Write headers and data to a TOA5-format CSV file.
+
+    Handles raw I/O mechanics only: TOA5 CSV quoting conventions, atomic
+    write via a temporary file, and fsync.  All domain concerns (building
+    the info line, concatenating multiple DataFrames, validating column
+    counts) are the caller's responsibility.
+
+    Args:
+        file_path:
+            Destination path.  Parent directories are created automatically.
+        headers:
+            Ordered list of rows to write before the data.  For a standard
+            TOA5 file this is four lists: info, variable-names, units, and
+            sampling-type.
+        data:
+            DataFrame to write.  Written without its index; the caller must
+            include any timestamp column explicitly as a data column.
+        atomic:
+            If True (default), write via a temporary file that is atomically
+            renamed to ``file_path`` on success.  The temporary file is
+            removed on failure.  Set False only when atomicity is guaranteed
+            by the caller.
+    """
+
+    _SEP = ','
+    _NA  = 'NAN'
+
+    file_path = Path(file_path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _write(f) -> None:
+        writer = csv.writer(f, delimiter=_SEP, quoting=csv.QUOTE_ALL)
+        for row in headers:
+            writer.writerow(row)
+        data.to_csv(
+            f,
+            header=False,
+            index=False,
+            na_rep=_NA,
+            sep=_SEP,
+            quoting=csv.QUOTE_NONNUMERIC,
+        )
+
+    if atomic:
+        tmp_path = file_path.with_suffix(file_path.suffix + '.tmp')
+        try:
+            with open(tmp_path, 'w', newline='\n') as f:
+                _write(f)
+                f.flush()
+                os.fsync(f.fileno())
+            tmp_path.replace(file_path)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+    else:
+        with open(file_path, 'w', newline='\n') as f:
+            _write(f)
+
+    logger.info('Wrote TOA5 file: %s', file_path.name)
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 def write_yml_file(
     file_path: str | Path,
     data: dict,
