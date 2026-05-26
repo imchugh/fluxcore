@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import pandas as pd
+import numpy as np
 import yaml
 from pathlib import Path
 from typing import Any
@@ -301,24 +302,49 @@ def write_toa5_csv(
             by the caller.
     """
 
-    _SEP = ','
-    _NA  = 'NAN'
+    _SEP         = ','
+    _NA          = 'NAN'
+    _FLOAT_FMT   = '%.7g'   # matches Campbell logger's 7-significant-figure output
 
     file_path = Path(file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _write(f) -> None:
+        # Headers: every cell quoted (QUOTE_ALL), standard TOA5 convention.
         writer = csv.writer(f, delimiter=_SEP, quoting=csv.QUOTE_ALL)
         for row in headers:
             writer.writerow(row)
-        data.to_csv(
-            f,
-            header=False,
-            index=False,
-            na_rep=_NA,
-            sep=_SEP,
-            quoting=csv.QUOTE_NONNUMERIC,
-        )
+
+        # Data rows: per-column-type formatting written directly, bypassing
+        # to_csv so that float_format and quoting can be controlled
+        # independently.
+        #   - string  columns → quoted         e.g. "2025-01-01 00:00:00"
+        #   - integer columns → bare integer   e.g. 190
+        #   - float   columns → %.7g, unquoted e.g. 0, 16.31809, 6.704941e-05
+        #   - NaN in any column → "NAN" (quoted, matching logger output)
+        col_fmt = []
+        for col in data.columns:
+            s = data[col]
+            if pd.api.types.is_string_dtype(s):
+                col_fmt.append([
+                    f'"{v}"' if pd.notna(v) else f'"{_NA}"'
+                    for v in s
+                ])
+            elif pd.api.types.is_integer_dtype(s):
+                col_fmt.append([
+                    _NA if pd.isna(v) else str(v)
+                    for v in s
+                ])
+            else:  # float
+                arr = s.to_numpy(dtype=float, na_value=np.nan)
+                nan_mask = np.isnan(arr)
+                formatted = np.empty(len(arr), dtype=object)
+                formatted[nan_mask]  = f'"{_NA}"'
+                formatted[~nan_mask] = [_FLOAT_FMT % v for v in arr[~nan_mask]]
+                col_fmt.append(formatted.tolist())
+
+        for row in zip(*col_fmt):
+            f.write(_SEP.join(row) + '\n')
 
     if atomic:
         tmp_path = file_path.with_suffix(file_path.suffix + '.tmp')
