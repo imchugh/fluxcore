@@ -110,7 +110,7 @@ def get_variables_from_file(
     
     # Sort out paths
     file_path = Path(file_path)
-    if not file_path.exists:
+    if not file_path.exists():
         raise FileNotFoundError(f'File {file_path} does not exist!')
     
     # Build iterable
@@ -148,7 +148,7 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
     for var_def in runtime_cfg.variables.values():
         for raw_var in var_def.raw_inputs:
             group_name = raw_var.file
-            file_format = runtime_cfg.file_formats.resolve(group_name)
+            file_format = runtime_cfg.get_file_format(group_name)
             file_ext = FileType[file_format].extension
             group = groups.get(group_name)
             if group is None:
