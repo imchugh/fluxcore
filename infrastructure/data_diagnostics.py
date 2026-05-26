@@ -8,6 +8,9 @@ Created on Tue Mar 17 09:13:20 2026
 
 import pandas as pd
 
+from infrastructure import data_conditioning
+
+
 def analyse_data_gaps(df: pd.DataFrame, interval_minutes: int) -> dict:
     """
     Analyse timestamp gaps in a dataframe.
@@ -30,15 +33,14 @@ def analyse_data_gaps(df: pd.DataFrame, interval_minutes: int) -> dict:
         }
     """
 
-    if not isinstance(df.index, pd.DatetimeIndex):
-        raise TypeError("DataFrame must have DatetimeIndex")
+    data_conditioning.check_datetime_index(df)
 
     if df.empty:
         raise ValueError('DataFrame must contain data!')
 
     # ensure clean index
     df = df.sort_index()
-    df = df[~df.index.duplicated(keep="first")]
+    df = df[~df.index.duplicated(keep='first')]
 
     expected = pd.Timedelta(minutes=interval_minutes)
 
