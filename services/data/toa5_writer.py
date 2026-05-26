@@ -39,7 +39,6 @@ from infrastructure import data_conditioning, file_io
 ###############################################################################
 
 _TIMESTAMP_COL = 'TIMESTAMP'
-_RECORD_COL    = 'RECORD'
 
 # Default TOA5 info line (line 1) used when no `info` argument is supplied.
 DEFAULT_TOA5_INFO: list[str] = [
@@ -61,6 +60,30 @@ DEFAULT_TOA5_INFO: list[str] = [
 ###############################################################################
 ### BEGIN FUNCTIONS ###
 ###############################################################################
+
+# -----------------------------------------------------------------------------
+def _coerce_integer_floats(data: pd.DataFrame) -> pd.DataFrame:
+    """Convert float columns that contain only whole-number values to Int64.
+
+    Pandas represents integer columns that contain any NaN as float64, which
+    causes values like 50 to be written as 50.0.  This restores the original
+    integer representation for any float column where every non-NaN value has
+    a zero fractional part (e.g. RECORD, sample counts, diagnostic flags,
+    totals).
+
+    Args:
+        data: DataFrame to process.
+
+    Returns:
+        DataFrame with qualifying float columns cast to Int64.
+    """
+
+    for col in data.select_dtypes(include='float').columns:
+        non_null = data[col].dropna()
+        if len(non_null) and (non_null % 1 == 0).all():
+            data[col] = data[col].astype('Int64')
+    return data
+# -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 def write_toa5(
@@ -141,9 +164,11 @@ def write_toa5(
     # Insert TIMESTAMP from the DatetimeIndex as the first column.
     data.insert(0, _TIMESTAMP_COL, data.index.strftime(DATA_TIME_FORMAT))
 
-    # RECORD must be written as integers (no decimal point).
-    if _RECORD_COL in data.columns:
-        data[_RECORD_COL] = data[_RECORD_COL].astype('Int64')
+    # Float columns whose non-NaN values are all whole numbers should be
+    # written as integers (no decimal point), matching the original logger
+    # output.  This handles RECORD, diagnostic flags, sample counts, totals,
+    # etc. without needing to enumerate them explicitly.
+    data = _coerce_integer_floats(data)
 
     # --- validate header / column consistency --------------------------------
 
