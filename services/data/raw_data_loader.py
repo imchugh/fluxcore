@@ -10,10 +10,10 @@ Created on Tue Mar 10 10:54:46 2026
 ### BEGIN IMPORTS ###
 ###############################################################################
 
+import csv
 import pandas as pd
 import pathlib
 
-from services.config_loader import load_config_file_from_name
 from infrastructure import file_io
 from domain.constants import TIME_INDEX_NAME, DATA_TIME_FORMAT
 
@@ -26,7 +26,25 @@ from domain.constants import TIME_INDEX_NAME, DATA_TIME_FORMAT
 ### BEGIN INITS ###
 ###############################################################################
 
-FILE_FORMATS = load_config_file_from_name(name='raw_file_format')
+# TOA5 and EddyPro are fixed industry-standard formats; these constants
+# capture only the fields consumed by this module (header line positions,
+# separator, non-numeric columns, NA sentinel, and CSV quoting mode).
+_FILE_FORMATS = {
+    'TOA5': {
+        'header_lines':    {'info': 0, 'variable': 1, 'units': 2, 'sampling': 3},
+        'separator':       ',',
+        'non_numeric_cols': ['TIMESTAMP'],
+        'na_values':       'NAN',
+        'quoting':         csv.QUOTE_NONNUMERIC,
+    },
+    'EddyPro': {
+        'header_lines':    {'variable': 0, 'units': 1},
+        'separator':       '\t',
+        'non_numeric_cols': ['DATAH', 'filename', 'date', 'time'],
+        'na_values':       'NaN',
+        'quoting':         csv.QUOTE_MINIMAL,
+    },
+}
 
 ###############################################################################
 ### END INITS ###
@@ -53,7 +71,7 @@ def load_raw_data(
     # Get data
     df = file_io.read_csv_data(
         file_path=file_path, 
-        file_format=FILE_FORMATS[file_format],
+        file_format=_FILE_FORMATS[file_format],
         on_bad_lines='skip'
         )
     
@@ -92,7 +110,7 @@ def _EddyPro_date_formatter(df):
 
 def _drop_non_numeric(df, file_format):
     
-    cols_to_drop = FILE_FORMATS[file_format]['non_numeric_cols']
+    cols_to_drop = _FILE_FORMATS[file_format]['non_numeric_cols']
     return df.drop(columns=cols_to_drop, errors='ignore')
 # -----------------------------------------------------------------------------
 
@@ -112,7 +130,7 @@ def get_data_adapter(system_type):
 
 def load_raw_header(file_path, file_format: str) -> list[list]:
     
-    fmt = FILE_FORMATS[file_format]
+    fmt = _FILE_FORMATS[file_format]
     header_dict = fmt.get('header_lines')
     lines = list(header_dict.values())
     keys = list(header_dict.keys())
