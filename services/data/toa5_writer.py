@@ -13,9 +13,9 @@ Raw I/O mechanics (CSV quoting, atomic write) are handled by
 ``infrastructure.file_io.write_toa5_csv``.
 
 The caller is responsible for ensuring that:
-  - the DataFrame columns match the variable-name header list.
-  - any timestamp column is already formatted as a string (the function writes
-    data as-is and does not reformat datetime values).
+  - the DataFrame has a DatetimeIndex (used as the TIMESTAMP column).
+  - the variable-name header list includes 'TIMESTAMP' as its first entry
+    and otherwise matches the DataFrame columns in order.
 """
 
 ###############################################################################
@@ -36,6 +36,10 @@ from infrastructure import data_conditioning, file_io
 ###############################################################################
 ### BEGIN CONSTANTS ###
 ###############################################################################
+
+_TIMESTAMP_COL    = 'TIMESTAMP'
+_TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S'
+_RECORD_COL       = 'RECORD'
 
 # Default TOA5 info line (line 1) used when no `info` argument is supplied.
 DEFAULT_TOA5_INFO: list[str] = [
@@ -79,8 +83,9 @@ def write_toa5(
             the frames are concatenated in order before writing.
         headers:
             List of three lists — [variables, units, sampling] — matching
-            lines 2–4 of the TOA5 file.  The number of elements in the
-            variable-name list must equal the number of columns in ``data``.
+            lines 2–4 of the TOA5 file.  The variable-name list must begin
+            with ``'TIMESTAMP'`` and otherwise match the DataFrame columns in
+            order (i.e. its length equals ``len(data.columns) + 1``).
         file_path:
             Destination file path.  Parent directories are created
             automatically if they do not already exist.
@@ -97,9 +102,9 @@ def write_toa5(
         TypeError: if any DataFrame does not have a DatetimeIndex.
         ValueError: if a list of DataFrames is supplied and their inferred
             time intervals are not all equal; if ``headers`` does not contain
-            exactly three lists; or if the length of the variable-name list
-            (``headers[0]``) does not match the number of columns in the
-            (possibly concatenated) DataFrame.
+            exactly three lists; or if the variable-name list (``headers[0]``)
+            length does not equal the number of data columns plus one (for
+            ``TIMESTAMP``).
     """
 
     # --- normalise inputs ----------------------------------------------------
@@ -129,12 +134,25 @@ def write_toa5(
             f'(variables, units, sampling); got {len(headers)}.'
         )
 
+    # --- prepare data for output ---------------------------------------------
+
+    data = data.copy()
+
+    # Insert TIMESTAMP from the DatetimeIndex as the first column.
+    data.insert(0, _TIMESTAMP_COL, data.index.strftime(_TIMESTAMP_FORMAT))
+
+    # RECORD must be written as integers (no decimal point).
+    if _RECORD_COL in data.columns:
+        data[_RECORD_COL] = data[_RECORD_COL].astype('Int64')
+
+    # --- validate header / column consistency --------------------------------
+
     n_data_cols = len(data.columns)
     n_header_cols = len(headers[0])
     if n_header_cols != n_data_cols:
         raise ValueError(
             f'Variable-name header has {n_header_cols} entries but data has '
-            f'{n_data_cols} columns.'
+            f'{n_data_cols} columns (including TIMESTAMP).'
         )
 
     # --- delegate write to infrastructure ------------------------------------
