@@ -26,6 +26,7 @@ import pathlib
 
 import pandas as pd
 
+from domain.constants import DATA_TIME_FORMAT
 from infrastructure import data_conditioning, file_io
 
 ###############################################################################
@@ -37,9 +38,8 @@ from infrastructure import data_conditioning, file_io
 ### BEGIN CONSTANTS ###
 ###############################################################################
 
-_TIMESTAMP_COL    = 'TIMESTAMP'
-_TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S'
-_RECORD_COL       = 'RECORD'
+_TIMESTAMP_COL = 'TIMESTAMP'
+_RECORD_COL    = 'RECORD'
 
 # Default TOA5 info line (line 1) used when no `info` argument is supplied.
 DEFAULT_TOA5_INFO: list[str] = [
@@ -139,7 +139,7 @@ def write_toa5(
     data = data.copy()
 
     # Insert TIMESTAMP from the DatetimeIndex as the first column.
-    data.insert(0, _TIMESTAMP_COL, data.index.strftime(_TIMESTAMP_FORMAT))
+    data.insert(0, _TIMESTAMP_COL, data.index.strftime(DATA_TIME_FORMAT))
 
     # RECORD must be written as integers (no decimal point).
     if _RECORD_COL in data.columns:
