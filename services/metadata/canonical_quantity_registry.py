@@ -176,8 +176,8 @@ def build_canonical_quantity_registry() -> CanonicalQuantityRegistry:
         quantity_definitions={
             quantity: CanonicalQuantityMetadata(**quantity_dict)
             for quantity, quantity_dict in raw.items()
-        }
-    )
+            }
+        )
 
 # -----------------------------------------------------------------------------
 
