@@ -121,16 +121,8 @@ CT:
   standard_units: K.mg/m^3
   valid_input_units:
   - K.mg/m^3
-Diag_IRGA:
-  long_name: IRGA diagnostic value
-  plausible_max: 36000.0
-  plausible_min: 0.0
-  standard_name: null
-  standard_units: dimensionless
-  valid_input_units:
-  - dimensionless
-Diag_SONIC:
-  long_name: Sonic diagnostic value
+Diag:
+  long_name: Diagnostic value
   plausible_max: 36000.0
   plausible_min: 0.0
   standard_name: null

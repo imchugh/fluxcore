@@ -55,39 +55,39 @@ class NameParser:
         elems = variable_name.split("_")
 
         # Quantity / Instrument quantity
-        quantity, instrument_type, elems = self._parse_quantity(elems)
+        quantity, qualifier, elems = self._parse_quantity(elems)
 
         # Exhaust the components of the name string
         process, elems = self._parse_process(elems)
-               
-        # Check there is only one element remaining 
+
+        # Check there is only one element remaining
         # (there should be only one remaining component)
         if len(elems) > 1:
             raise VariableNameParseError(
                 f"Unrecognized elements remain in '{variable_name}': {elems}"
                 )
-        
+
         # Split elements that aren't separated by underscores
         vertical_location, elems = self._parse_vertical_location(elems)
         horizontal_location, elems = self._parse_horizontal_location(elems)
         replicate, elems = self._parse_replicate(elems)
-        
+
         # Raise if unprocessed elements remain
         if elems:
             raise VariableNameParseError(
                 f"Unrecognized elements remain in '{variable_name}': {elems}"
                 )
-       
+
         # Return parsed variable class
         return ParsedVariableName(
-            
+
             quantity = quantity,
-            instrument_type = instrument_type,
+            qualifier = qualifier,
             statistic_id = process,
             vertical_location = vertical_location,
             horizontal_location = horizontal_location,
             replicate = replicate
-            
+
             )
     
     # -------------------------------------------------------------------------
@@ -102,32 +102,47 @@ class NameParser:
             self, elems: list[str]
             ) -> tuple[str, str | None, list[str]]:
         """
-        Extract the fundamental quantity and optional instrument type.
+        Extract the fundamental quantity and optional qualifier.
+
+        For ``Diag`` variables the element immediately following ``Diag``
+        (if present) is consumed as the qualifier (e.g. ``IRGA``, ``SONIC``,
+        ``Fe``) without being merged into the quantity name.  This means
+        ``Diag_IRGA_Ct``, ``Diag_Fe_Ct``, and ``Diag_SONIC_Ct`` all resolve
+        to quantity ``'Diag'``, distinguished only by their qualifier.
+
+        For all other quantities, the element immediately following the
+        quantity is consumed as the qualifier and merged into the quantity name
+        when it is one of the recognised instrument types (e.g. ``AH_IRGA``).
 
         Args:
             elems: list of name elements (substrings).
 
         Returns:
-            quantity, instrument type (or None), and remaining elements.
-
+            quantity, qualifier (or None), and remaining elements.
         """
-        
+
         # Raise if nothing
         if not elems:
             raise VariableNameParseError("Variable name is empty")
 
-        # Initialise
         quantity = elems[0]
-        instrument = None
+        qualifier = None
         remainder = elems[1:]
 
-        # Check if an instrument quantity e.g. AH versus AH_IRGA
-        if remainder and remainder[0] in self._VALID_INSTRUMENTS:
-            instrument = remainder[0]
-            quantity = f"{quantity}_{instrument}"
+        if quantity == 'Diag':
+            # Dedicated diagnostic branch: next element is a free-form
+            # qualifier and is NOT merged into the quantity name.
+            if remainder:
+                qualifier = remainder[0]
+                remainder = remainder[1:]
+
+        elif remainder and remainder[0] in self._VALID_INSTRUMENTS:
+            # Standard instrument-compound quantity e.g. AH_IRGA.
+            qualifier = remainder[0]
+            quantity = f"{quantity}_{qualifier}"
             remainder = remainder[1:]
 
-        return quantity, instrument, remainder
+        return quantity, qualifier, remainder
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------

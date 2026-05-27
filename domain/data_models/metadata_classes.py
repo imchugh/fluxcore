@@ -45,7 +45,7 @@ class RawVariableMetadata:
 class ParsedVariableName:
 
     quantity: str
-    instrument_type: Optional[str] = None
+    qualifier: Optional[str] = None
     vertical_location: Optional[str] = None
     horizontal_location: Optional[str] = None
     replicate: Optional[str] = None
