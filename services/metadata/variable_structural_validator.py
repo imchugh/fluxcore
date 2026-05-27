@@ -202,19 +202,23 @@ class VariableConfig(BaseModel):
     
     @model_validator(mode="after")
     def validate_statistic_requirement(self):
-    
+
         if self.variable_type == VariableType.CONTINUOUS:
             if self.statistic_type is None:
                 raise ValueError(
                     "Continuous variables must define statistic_type"
                     )
 
-        if self.variable_type == VariableType.QUALITY_FLAG:
+        if self.variable_type in (
+                VariableType.QUALITY_FLAG,
+                VariableType.COUNTER,
+                ):
             if self.statistic_type is not None:
                 raise ValueError(
-                    "Quality flag variables cannot define statistic_type"
+                    f"{self.variable_type.value} variables cannot define "
+                    "statistic_type"
                     )
-    
+
         return self
     # -------------------------------------------------------------------------
     

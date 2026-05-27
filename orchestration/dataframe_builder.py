@@ -58,6 +58,7 @@ class VariableSpec:
 
     # Statistical context
     statistic_type: StatisticType | None
+    variable_type: VariableType
 
     # xarray variable attrs
     height: float
@@ -175,7 +176,9 @@ def _build_registry(
                 else:
                     canonical_units = var_cfg.canonical.standard_units
 
-                # Normalise site units: QC variables carry no meaningful unit
+                # Normalise site units: QC variables carry no meaningful unit.
+                # COUNTER variables keep their raw_units ('valid_count' or
+                # 'invalid_count') so conversion can fire when needed.
                 if var_cfg.variable_type == VariableType.QUALITY_FLAG:
                     site_units = 'dimensionless'
                 else:
@@ -193,6 +196,7 @@ def _build_registry(
                     canonical_units=canonical_units,
                     site_units=site_units,
                     statistic_type=var_cfg.statistic_type,
+                    variable_type=var_cfg.variable_type,
                     height=var_cfg.height,
                     height_range=var_cfg.height_range,
                     instrument=raw_input.instrument,
@@ -423,6 +427,16 @@ def _apply_conversions(
 
         # Unit conversion — no-op when from_units already matches canonical
         if from_units != spec.canonical_units:
+
+            # Counter conversion (invalid_count → valid_count) requires
+            # n_samples, which is not yet threaded through the pipeline.
+            if spec.variable_type == VariableType.COUNTER:
+                raise NotImplementedError(
+                    f"Counter variable {variable!r} has from_units="
+                    f"{from_units!r} but conversion to 'valid_count' "
+                    f"requires n_samples, which is not yet available here."
+                    )
+
             converter = conversion_service.get_unit_conversion(spec.quantity)
             try:
                 df[variable] = converter(data=df[variable], from_units=from_units)

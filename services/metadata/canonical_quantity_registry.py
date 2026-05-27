@@ -114,6 +114,27 @@ class CanonicalQuantityRegistry:
                 )
 
         # ---------------------------------------------------------------------
+        # COUNTERS
+        # Counter variables (diagnostic sample counts) are always expressed as
+        # a count of valid samples.  Raw data may arrive as either valid_count
+        # or invalid_count; conversion to valid_count is handled downstream.
+        # ---------------------------------------------------------------------
+
+        elif variable_type == VariableType.COUNTER:
+
+            attrs["standard_units"] = "valid_count"
+            attrs["valid_input_units"] = ["valid_count", "invalid_count"]
+
+            attrs["plausible_min"] = 0
+            attrs["plausible_max"] = None
+            attrs["standard_name"] = None
+
+            if attrs["long_name"]:
+                attrs["long_name"] = (
+                    f"{attrs['long_name']} sample count"
+                )
+
+        # ---------------------------------------------------------------------
         # VARIANCE
         # ---------------------------------------------------------------------
 

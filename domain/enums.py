@@ -44,6 +44,7 @@ class VariableType(str, Enum):
 
     CONTINUOUS = 'continuous'
     QUALITY_FLAG = 'quality_flag'
+    COUNTER = 'counter'
     CATEGORICAL = 'categorical'
     INDEX = 'index'
     
