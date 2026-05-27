@@ -32,7 +32,7 @@ from services.metadata.variable_structural_validator import validate_L1_config_s
 from services.metadata.variable_syntax_parser import NameParser
 from services.metadata.canonical_quantity_registry import build_canonical_quantity_registry
 from domain.data_models.metadata_classes import RawVariableMetadata, VariableDefinition
-from domain.enums import FileType, FluxSystemType
+from domain.enums import FileType, FluxSystemType, StatisticType, VariableType
 
 ###############################################################################
 ### END IMPORTS ###
@@ -232,6 +232,51 @@ def _compute_instrument(
 
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+
+def _check_name_config_consistency(
+        variable: str,
+        parsed_name,
+        statistic_type,
+        variable_type,
+        ) -> None:
+    """
+    Cross-check parsed name fields against config declarations.
+
+    The parser resolves the terminal suffix into either statistic_id (a
+    StatisticType suffix: Av, Sd, Vr ...) or variable_type_id (a
+    VariableType suffix: QC, Ct).  The config independently declares
+    statistic_type and variable_type.  This function verifies they agree.
+
+    Args:
+        variable:      canonical variable name (for error messages).
+        parsed_name:   ParsedVariableName produced by the parser.
+        statistic_type: StatisticType declared in the config, or None.
+        variable_type:  VariableType declared in the config.
+    """
+
+    if parsed_name.statistic_id is not None:
+        stat_from_name = StatisticType.from_suffix(parsed_name.statistic_id)
+        if statistic_type != stat_from_name:
+            raise ValueError(
+                f"Variable '{variable}': name suffix '{parsed_name.statistic_id}'"
+                f" implies statistic_type={stat_from_name.value!r}, but config"
+                f" declares statistic_type={statistic_type!r}"
+                )
+
+    if parsed_name.variable_type_id is not None:
+        vtype_from_name = VariableType.from_suffix(parsed_name.variable_type_id)
+        if variable_type != vtype_from_name:
+            raise ValueError(
+                f"Variable '{variable}': name suffix '{parsed_name.variable_type_id}'"
+                f" implies variable_type={vtype_from_name.value!r}, but config"
+                f" declares variable_type={variable_type!r}"
+                )
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
 def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:  
     """
     Assemble the runtime_config class.
@@ -270,6 +315,14 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
         
         # Parse the variable name (syntax validation)
         parsed_name_elems = name_parser.parse_variable_name(variable_name=variable)
+
+        # Cross-check name suffix against config declarations
+        _check_name_config_consistency(
+            variable=variable,
+            parsed_name=parsed_name_elems,
+            statistic_type=raw_cfg.statistic_type,
+            variable_type=raw_cfg.variable_type,
+            )
 
         # Ensure the quantity exists in canonical metadata
         quantity = parsed_name_elems.quantity

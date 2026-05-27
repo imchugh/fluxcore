@@ -41,11 +41,24 @@ class StatisticType(str, Enum):
 class VariableType(str, Enum):
     """Semantic type of variable."""
 
-    CONTINUOUS = 'continuous'
-    QUALITY_FLAG = 'quality_flag'
-    COUNTER = 'counter'
-    CATEGORICAL = 'categorical'
-    INDEX = 'index'
+    CONTINUOUS   = ('continuous',   None)
+    QUALITY_FLAG = ('quality_flag', 'QC')
+    COUNTER      = ('counter',      'Ct')
+    CATEGORICAL  = ('categorical',  None)
+    INDEX        = ('index',        None)
+
+    def __new__(cls, value: str, suffix: str | None):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.suffix = suffix
+        return obj
+
+    @classmethod
+    def from_suffix(cls, suffix: str) -> 'VariableType':
+        for item in cls:
+            if item.suffix == suffix:
+                return item
+        raise ValueError(f"Unknown variable type suffix: {suffix!r}")
     
 class FileType(str, Enum):
     """"""

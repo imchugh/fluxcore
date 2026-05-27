@@ -11,7 +11,7 @@ Created on Mon Mar  2 10:28:57 2026
 ###############################################################################
 
 from domain.data_models.metadata_classes import ParsedVariableName
-from domain.enums import StatisticType
+from domain.enums import StatisticType, VariableType
 
 ###############################################################################
 ### END IMPORTS ###
@@ -57,9 +57,9 @@ class NameParser:
 
         # Quantity / Instrument quantity
         quantity, qualifier, elems = self._parse_quantity(elems)
-
+        
         # Exhaust the components of the name string
-        process, elems = self._parse_process(elems)
+        statistic_id, variable_type_id, elems = self._parse_process(elems)
 
         # Check there is only one element remaining
         # (there should be only one remaining component)
@@ -84,7 +84,8 @@ class NameParser:
 
             quantity = quantity,
             qualifier = qualifier,
-            statistic_id = process,
+            statistic_id = statistic_id,
+            variable_type_id = variable_type_id,
             vertical_location = vertical_location,
             horizontal_location = horizontal_location,
             replicate = replicate
@@ -138,9 +139,10 @@ class NameParser:
                 remainder = remainder[1:]
 
         elif remainder and remainder[0] in self._VALID_INSTRUMENTS:
-            # Standard instrument-compound quantity e.g. AH_IRGA.
+            # Instrument qualifier: stored in qualifier, NOT merged into the
+            # quantity name.  The canonical quantity lookup always uses the
+            # base name (e.g. 'AH' for 'AH_IRGA_Av').
             qualifier = remainder[0]
-            quantity = f"{quantity}_{qualifier}"
             remainder = remainder[1:]
 
         return quantity, qualifier, remainder
@@ -148,30 +150,48 @@ class NameParser:
 
     # -------------------------------------------------------------------------
     
-    def _parse_process(self, elems: list[str]) -> tuple[str | None, list[str]]:
+    def _parse_process(
+            self, elems: list[str]
+            ) -> tuple[str | None, str | None, list[str]]:
         """
-        Extract the statistic identifier, which MUST be the final element.
+        Extract the role-identifying suffix, which MUST be the final element.
 
-        The candidate is validated against StatisticType; if it is not a
-        recognised suffix (e.g. '2m' in 'Ta_2m') it is left in place for
-        the location parsers to consume.
+        The candidate is tried first against StatisticType (Av, Sd, Vr ...),
+        then against VariableType (QC, Ct).  If neither matches (e.g. '2m'
+        in 'Ta_2m') it is left in place for the location parsers to consume.
 
         Args:
             elems: list of name elements (substrings).
 
         Returns:
-            statistic suffix (or None) and remaining elements.
+            statistic_id (or None), variable_type_id (or None), and remaining
+            elements.  Exactly one of the two id fields is non-None when a
+            suffix is recognised.
         """
 
-        process = None
+        statistic_id = None
+        variable_type_id = None
+
         if elems:
+            candidate = elems[-1]
+
             try:
-                StatisticType.from_suffix(elems[-1])
-                process = elems[-1]
-                elems = elems[:-1]
+                StatisticType.from_suffix(candidate)
+                statistic_id = candidate
             except ValueError:
-                pass  # last element is not a statistic — leave for location parsers
-        return process, elems
+                pass
+
+            if statistic_id is None:
+                try:
+                    VariableType.from_suffix(candidate)
+                    variable_type_id = candidate
+                except ValueError:
+                    pass
+
+            if statistic_id is not None or variable_type_id is not None:
+                elems = elems[:-1]
+
+        return statistic_id, variable_type_id, elems
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
@@ -233,7 +253,7 @@ class NameParser:
         horizontal_location = None
         if elems:
             candidate = elems[0]
-            if candidate[0].isalpha():
+            if candidate[0].islower():
                 horizontal_location = candidate[0]
                 remainder = candidate[1:]
                 elems = [remainder] if remainder else []

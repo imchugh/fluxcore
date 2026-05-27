@@ -49,7 +49,8 @@ class ParsedVariableName:
     vertical_location: Optional[str] = None
     horizontal_location: Optional[str] = None
     replicate: Optional[str] = None
-    statistic_id: Optional[str] = None
+    statistic_id: Optional[str] = None      # set when suffix is a StatisticType (Av, Sd, Vr ...)
+    variable_type_id: Optional[str] = None  # set when suffix is a VariableType  (QC, Ct)
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
