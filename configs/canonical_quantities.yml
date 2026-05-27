@@ -31,22 +31,6 @@ AH_IRGA:
   standard_units: g/m^3
   valid_input_units:
   - g/m^3
-AH_IRGA_Av:
-  long_name: Absolute humidity
-  plausible_max: 50.0
-  plausible_min: 0.0
-  standard_name: mass_concentration_of_water_vapor_in_air
-  standard_units: g/m^3
-  valid_input_units:
-  - g/m^3
-AH_IRGA_Sd:
-  long_name: Absolute humidity
-  plausible_max: null
-  plausible_min: 0.0
-  standard_name: null
-  standard_units: g/m^3
-  valid_input_units:
-  - g/m^3
 APAR:
   long_name: Incident photosynthetically active radiation absorbed
   plausible_max: null
@@ -82,22 +66,6 @@ CO2Sig_IRGA:
   - frac
   - percent
 CO2_IRGA:
-  long_name: CO2 mole fraction
-  plausible_max: 1500.0
-  plausible_min: 350.0
-  standard_name: mole_fraction_of_carbon_dioxide_in_air
-  standard_units: umol/mol
-  valid_input_units:
-  - umol/mol
-CO2_IRGA_Av:
-  long_name: CO2 mole fraction
-  plausible_max: 1500.0
-  plausible_min: 350.0
-  standard_name: mole_fraction_of_carbon_dioxide_in_air
-  standard_units: umol/mol
-  valid_input_units:
-  - umol/mol
-CO2_IRGA_Sd:
   long_name: CO2 mole fraction
   plausible_max: 1500.0
   plausible_min: 350.0
@@ -589,24 +557,6 @@ Tv_SONIC:
   valid_input_units:
   - degC
   - K
-Tv_SONIC_Av:
-  long_name: Virtual temperature
-  plausible_max: 60.0
-  plausible_min: -40.0
-  standard_name: virtual_temperature
-  standard_units: degC
-  valid_input_units:
-  - degC
-  - K
-Tv_SONIC_Sd:
-  long_name: Virtual temperature
-  plausible_max: null
-  plausible_min: null
-  standard_name: virtual_temperature
-  standard_units: degC
-  valid_input_units:
-  - degC
-  - K
 U:
   long_name: Wind speed, east component
   plausible_max: null
@@ -672,22 +622,6 @@ Ux_SONIC:
   standard_units: m/s
   valid_input_units:
   - m/s
-Ux_SONIC_Av:
-  long_name: Longitudinal wind velocity component, sonic coordinates
-  plausible_max: null
-  plausible_min: null
-  standard_name: null
-  standard_units: m/s
-  valid_input_units:
-  - m/s
-Ux_SONIC_Sd:
-  long_name: Longitudinal wind velocity component, sonic coordinates
-  plausible_max: null
-  plausible_min: null
-  standard_name: null
-  standard_units: m/s
-  valid_input_units:
-  - m/s
 UyA:
   long_name: Covariance of Uy and H2O
   plausible_max: null
@@ -729,22 +663,6 @@ Uy_SONIC:
   standard_units: m/s
   valid_input_units:
   - m/s
-Uy_SONIC_Av:
-  long_name: Lateral wind velocity component, sonic coordinates
-  plausible_max: null
-  plausible_min: null
-  standard_name: null
-  standard_units: m/s
-  valid_input_units:
-  - m/s
-Uy_SONIC_Sd:
-  long_name: Lateral wind velocity component, sonic coordinates
-  plausible_max: null
-  plausible_min: null
-  standard_name: null
-  standard_units: m/s
-  valid_input_units:
-  - m/s
 UzA:
   long_name: Covariance of Uz and H2O
   plausible_max: null
@@ -771,22 +689,6 @@ UzT:
   valid_input_units:
   - m.degC/s
 Uz_SONIC:
-  long_name: Vertical wind velocity component, sonic coordinates
-  plausible_max: null
-  plausible_min: null
-  standard_name: null
-  standard_units: m/s
-  valid_input_units:
-  - m/s
-Uz_SONIC_Av:
-  long_name: Vertical wind velocity component, sonic coordinates
-  plausible_max: null
-  plausible_min: null
-  standard_name: null
-  standard_units: m/s
-  valid_input_units:
-  - m/s
-Uz_SONIC_Sd:
   long_name: Vertical wind velocity component, sonic coordinates
   plausible_max: null
   plausible_min: null
@@ -919,9 +821,9 @@ time:
   plausible_max: null
   plausible_min: null
   standard_name: time
-  standard_units: 'days since 1800-01-01 00:00:00.0'
+  standard_units: days since 1800-01-01 00:00:00.0
   valid_input_units:
-  - 'days since 1800-01-01 00:00:00.0'
+  - days since 1800-01-01 00:00:00.0
 ustar:
   long_name: Friction velocity
   plausible_max: 5.0
