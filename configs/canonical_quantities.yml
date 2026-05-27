@@ -6,7 +6,7 @@ AC:
   standard_units: mg.g/m^3
   valid_input_units:
   - mg.g/m^3
-AGC_IRGA:
+AGC:
   long_name: IRGA automatic gain control value
   plausible_max: 100.0
   plausible_min: 0.0
@@ -16,14 +16,6 @@ AGC_IRGA:
   - frac
   - percent
 AH:
-  long_name: Absolute humidity
-  plausible_max: 50.0
-  plausible_min: 0.0
-  standard_name: mass_concentration_of_water_vapor_in_air
-  standard_units: g/m^3
-  valid_input_units:
-  - g/m^3
-AH_IRGA:
   long_name: Absolute humidity
   plausible_max: 50.0
   plausible_min: 0.0
@@ -56,7 +48,7 @@ CO2:
   standard_units: umol/mol
   valid_input_units:
   - umol/mol
-CO2Sig_IRGA:
+CO2Sig:
   long_name: CO2 signal strength
   plausible_max: 102.5
   plausible_min: 0.0
@@ -65,15 +57,7 @@ CO2Sig_IRGA:
   valid_input_units:
   - frac
   - percent
-CO2_IRGA:
-  long_name: CO2 mole fraction
-  plausible_max: 1500.0
-  plausible_min: 350.0
-  standard_name: mole_fraction_of_carbon_dioxide_in_air
-  standard_units: umol/mol
-  valid_input_units:
-  - umol/mol
-CO2c_IRGA:
+CO2c:
   long_name: CO2 concentration
   plausible_max: 1600.0
   plausible_min: 400.0
@@ -204,14 +188,6 @@ Fn:
   standard_units: W/m^2
   valid_input_units:
   - W/m^2
-Fn_RAD:
-  long_name: Net radiation
-  plausible_max: 1000.0
-  plausible_min: -300.0
-  standard_name: surface_net_downward_radiative_flux
-  standard_units: W/m^2
-  valid_input_units:
-  - W/m^2
 Fpard:
   long_name: Downwelling photosynthetically active radiation
   plausible_max: null
@@ -279,7 +255,7 @@ H2O:
   standard_units: mmol/mol
   valid_input_units:
   - mmol/mol
-H2OSig_IRGA:
+H2OSig:
   long_name: H2O signal strength
   plausible_max: 102.5
   plausible_min: 0.0
@@ -287,14 +263,6 @@ H2OSig_IRGA:
   standard_units: percent
   valid_input_units:
   - percent
-H2O_IRGA:
-  long_name: H2O concentration
-  plausible_max: 0.0
-  plausible_min: 80.0
-  standard_name: mole_fraction_of_water_vapor_in_air
-  standard_units: mmol/mol
-  valid_input_units:
-  - mmol/mol
 L:
   long_name: Monin-Obukhov length
   plausible_max: null
@@ -347,16 +315,7 @@ RH:
   valid_input_units:
   - frac
   - percent
-RH_IRGA:
-  long_name: Relative humidity
-  plausible_max: 100.0
-  plausible_min: 0.0
-  standard_name: relative_humidity
-  standard_units: percent
-  valid_input_units:
-  - frac
-  - percent
-RHint_SONIC:
+RHint:
   long_name: Sonic anemometer internal relative humidity
   plausible_max: 100.0
   plausible_min: 0.0
@@ -414,7 +373,16 @@ Sco2:
   valid_input_units:
   - mg/m^2/s
   - umol/m^2/s
-SigCO2_IRGA:
+Sig:
+  long_name: Signal strength
+  plausible_max: 102.5
+  plausible_min: 0.0
+  standard_name: null
+  standard_units: percent
+  valid_input_units:
+  - frac
+  - percent
+SigCO2:
   long_name: CO2 signal strength
   plausible_max: 102.5
   plausible_min: 0.0
@@ -423,17 +391,8 @@ SigCO2_IRGA:
   valid_input_units:
   - frac
   - percent
-SigH2O_IRGA:
+SigH2O:
   long_name: H2O signal strength
-  plausible_max: 102.5
-  plausible_min: 0.0
-  standard_name: null
-  standard_units: percent
-  valid_input_units:
-  - frac
-  - percent
-Sig_IRGA:
-  long_name: Signal strength
   plausible_max: 102.5
   plausible_min: 0.0
   standard_name: null
@@ -467,16 +426,7 @@ Ta:
   valid_input_units:
   - degC
   - K
-Ta_SONIC:
-  long_name: Air temperature derived from sonic temperature and humidity
-  plausible_max: 60.0
-  plausible_min: -40.0
-  standard_name: null
-  standard_units: degC
-  valid_input_units:
-  - degC
-  - K
-Tbody_RAD:
+Tbody:
   long_name: Radiometer body temperature
   plausible_max: 60.0
   plausible_min: -40.0
@@ -503,16 +453,7 @@ Td:
   valid_input_units:
   - degC
   - K
-Td_IRGA:
-  long_name: Dew point temperature
-  plausible_max: 40.0
-  plausible_min: -65.0
-  standard_name: dew_point_temperature
-  standard_units: degC
-  valid_input_units:
-  - degC
-  - K
-Tint_SONIC:
+Tint:
   long_name: Sonic anemometer internal temperature
   plausible_max: 60.0
   plausible_min: -40.0
@@ -548,7 +489,7 @@ Tstar:
   valid_input_units:
   - degC
   - K
-Tv_SONIC:
+Tv:
   long_name: Virtual temperature
   plausible_max: 60.0
   plausible_min: -40.0
@@ -565,11 +506,11 @@ U:
   standard_units: m/s
   valid_input_units:
   - m/s
-U_SONIC:
-  long_name: Wind speed, east component
+Ux:
+  long_name: Longitudinal wind velocity component, sonic coordinates
   plausible_max: null
   plausible_min: null
-  standard_name: eastward_wind
+  standard_name: null
   standard_units: m/s
   valid_input_units:
   - m/s
@@ -614,8 +555,8 @@ UxUz:
   standard_units: m^2/s^2
   valid_input_units:
   - m^2/s^2
-Ux_SONIC:
-  long_name: Longitudinal wind velocity component, sonic coordinates
+Uy:
+  long_name: Lateral wind velocity component, sonic coordinates
   plausible_max: null
   plausible_min: null
   standard_name: null
@@ -655,8 +596,8 @@ UyUz:
   standard_units: m^2/s^2
   valid_input_units:
   - m^2/s^2
-Uy_SONIC:
-  long_name: Lateral wind velocity component, sonic coordinates
+Uz:
+  long_name: Vertical wind velocity component, sonic coordinates
   plausible_max: null
   plausible_min: null
   standard_name: null
@@ -688,14 +629,6 @@ UzT:
   standard_units: m.degC/s
   valid_input_units:
   - m.degC/s
-Uz_SONIC:
-  long_name: Vertical wind velocity component, sonic coordinates
-  plausible_max: null
-  plausible_min: null
-  standard_name: null
-  standard_units: m/s
-  valid_input_units:
-  - m/s
 V:
   long_name: Wind speed, north component
   plausible_max: null
@@ -720,14 +653,6 @@ VPD:
   standard_units: kPa
   valid_input_units:
   - kPa
-V_SONIC:
-  long_name: Wind speed, north component
-  plausible_max: null
-  plausible_min: null
-  standard_name: northward_wind
-  standard_units: m/s
-  valid_input_units:
-  - m/s
 Vbat:
   long_name: Battery voltage
   plausible_max: null
@@ -744,23 +669,7 @@ W:
   standard_units: m/s
   valid_input_units:
   - m/s
-W_SONIC:
-  long_name: Wind speed, vertical component
-  plausible_max: null
-  plausible_min: null
-  standard_name: null
-  standard_units: m/s
-  valid_input_units:
-  - m/s
 Wd:
-  long_name: Wind direction
-  plausible_max: 360.0
-  plausible_min: 0.0
-  standard_name: wind_from_direction
-  standard_units: degrees
-  valid_input_units:
-  - degrees
-Wd_SONIC:
   long_name: Wind direction
   plausible_max: 360.0
   plausible_min: 0.0
@@ -776,15 +685,7 @@ Ws:
   standard_units: m/s
   valid_input_units:
   - m/s
-Ws_SONIC:
-  long_name: Wind speed
-  plausible_max: 60.0
-  plausible_min: 0.0
-  standard_name: wind_speed
-  standard_units: m/s
-  valid_input_units:
-  - m/s
-pitch_SONIC:
+pitch:
   long_name: sonic anemometer pitch angle
   plausible_max: 90.0
   plausible_min: 0.0
@@ -800,7 +701,7 @@ ps:
   standard_units: kPa
   valid_input_units:
   - kPa
-roll_SONIC:
+roll:
   long_name: sonic anemometer roll angle
   plausible_max: 90.0
   plausible_min: 0.0

@@ -182,8 +182,27 @@ class SiteMetadata(dict):
     # -------------------------------------------------------------------------    
 
     # -------------------------------------------------------------------------
+
+    @property
+    def n_samples(self) -> int | None:
+        """
+        Expected number of high-frequency samples in one averaging period.
+
+        Calculated from time_step (minutes) and freq_hz (Hz).  Returns None
+        if either field is absent or not yet populated.
+        """
+
+        time_step = self.get('time_step')
+        freq_hz = self.get('freq_hz')
+        if time_step is None or freq_hz is None:
+            return None
+        return time_step * 60 * freq_hz
+
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
     def __repr__(self):
-        
+
         label = self.get("site_name", None)
         if label:
             return f"<SiteMetadata {label}>"

@@ -23,6 +23,7 @@ from typing import Callable
 
 from domain.enums import StatisticType, VariableType
 from services.metadata.variable_metadata_service import SiteRuntimeConfig
+from services.metadata.site_registry import SiteContext
 from services.metadata import file_mapping_service
 from services.metadata.file_mapping_service import FileGroup
 from services.metadata.metadata_conversion_service import resolve_variance_units
@@ -99,21 +100,25 @@ class DataframeBuildResult:
 
 # -----------------------------------------------------------------------------
 
-def build(runtime_cfg: SiteRuntimeConfig) -> DataframeBuildResult:
+def build(ctx: SiteContext) -> DataframeBuildResult:
     """
     Build a canonical dataframe and per-variable xarray attrs from a site
-    runtime configuration.
+    context.
 
     Validates file groups, loads and unit-converts raw data, merges
     overlapping instrument periods, and renames to canonical variable names.
 
     Args:
-        runtime_cfg: assembled site runtime configuration.
+        ctx: fully-assembled site context (runtime config + site metadata).
+             Site metadata provides n_samples (time_step * freq_hz * 60),
+             needed when COUNTER variables are stored as invalid_count.
 
     Returns:
         DataframeBuildResult containing the canonical dataframe and a dict
         of per-variable xarray attribute dicts keyed by canonical name.
     """
+
+    runtime_cfg = ctx.runtime_config
 
     file_groups = file_mapping_service.build_file_groups(runtime_cfg)
     for group in file_groups.values():
@@ -121,7 +126,11 @@ def build(runtime_cfg: SiteRuntimeConfig) -> DataframeBuildResult:
 
     registry = _build_registry(runtime_cfg=runtime_cfg, file_groups=file_groups)
 
-    df = _build_dataframe(file_groups=file_groups, registry=registry)
+    df = _build_dataframe(
+        file_groups=file_groups,
+        registry=registry,
+        n_samples=ctx.metadata.n_samples,
+        )
 
     var_attrs = _build_var_attrs(registry=registry)
 
@@ -176,11 +185,18 @@ def _build_registry(
                 else:
                     canonical_units = var_cfg.canonical.standard_units
 
-                # Normalise site units: QC variables carry no meaningful unit.
-                # COUNTER variables keep their raw_units ('valid_count' or
-                # 'invalid_count') so conversion can fire when needed.
+                # Normalise site units.
+                # QC: no meaningful unit regardless of what the file says.
+                # COUNTER: preserve raw_units so conversion fires when needed,
+                #   but treat 'dimensionless' as 'valid_count' (the count is
+                #   already in canonical form, just unlabelled in the source).
+                # Others: use raw_units if provided, else fall back to canonical.
                 if var_cfg.variable_type == VariableType.QUALITY_FLAG:
                     site_units = 'dimensionless'
+                elif var_cfg.variable_type == VariableType.COUNTER:
+                    site_units = raw_input.raw_units or 'valid_count'
+                    if site_units == 'dimensionless':
+                        site_units = 'valid_count'
                 else:
                     site_units = (
                         raw_input.raw_units or var_cfg.canonical.standard_units
@@ -307,6 +323,7 @@ def _output_statistic(var_spec: VariableSpec) -> StatisticType | None:
 def _build_dataframe(
         file_groups: dict[str, FileGroup],
         registry: dict[str, VariableSpec],
+        n_samples: int | None = None,
         ) -> pd.DataFrame:
     """
     Build the canonical dataframe.
@@ -327,6 +344,7 @@ def _build_dataframe(
                 mapper=mapper,
                 loader=loader,
                 registry=registry,
+                n_samples=n_samples,
                 )
             )
 
@@ -349,6 +367,7 @@ def _build_file_group_dataframe(
         mapper: FileGroup,
         loader: Callable,
         registry: dict[str, VariableSpec],
+        n_samples: int | None = None,
         ) -> pd.DataFrame:
     """
     Load and process all files in a file group.
@@ -375,7 +394,7 @@ def _build_file_group_dataframe(
             columns={col: rename_map[col] for col in df.columns if col in rename_map}
             )
 
-        df = _apply_conversions(df=df, registry=registry)
+        df = _apply_conversions(df=df, registry=registry, n_samples=n_samples)
 
         dfs.append(df)
 
@@ -399,6 +418,7 @@ def _filter_variables(df: pd.DataFrame, variables: set) -> pd.DataFrame:
 def _apply_conversions(
         df: pd.DataFrame,
         registry: dict[str, VariableSpec],
+        n_samples: int | None = None,
         ) -> pd.DataFrame:
     """
     Apply statistical transforms and unit conversions in a single pass.
@@ -406,6 +426,9 @@ def _apply_conversions(
     For variance variables: take the square root (data → stdev), then derive
     the post-transform units and convert further if site stdev-form units
     differ from canonical stdev-form units.
+
+    For counter variables stored as invalid_count: subtract from n_samples
+    to yield valid_count.
 
     For all other variables: convert units if site units differ from canonical.
 
@@ -428,14 +451,16 @@ def _apply_conversions(
         # Unit conversion — no-op when from_units already matches canonical
         if from_units != spec.canonical_units:
 
-            # Counter conversion (invalid_count → valid_count) requires
-            # n_samples, which is not yet threaded through the pipeline.
+            # Counter: invalid_count → valid_count = n_samples - invalid_count
             if spec.variable_type == VariableType.COUNTER:
-                raise NotImplementedError(
-                    f"Counter variable {variable!r} has from_units="
-                    f"{from_units!r} but conversion to 'valid_count' "
-                    f"requires n_samples, which is not yet available here."
-                    )
+                if n_samples is None:
+                    raise ValueError(
+                        f"Counter variable {variable!r} has from_units="
+                        f"{from_units!r} but n_samples is not available. "
+                        f"Ensure site metadata includes time_step and freq_hz."
+                        )
+                df[variable] = n_samples - df[variable]
+                continue
 
             converter = conversion_service.get_unit_conversion(spec.quantity)
             try:
