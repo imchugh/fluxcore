@@ -11,6 +11,7 @@ Created on Mon Mar  2 10:28:57 2026
 ###############################################################################
 
 from domain.data_models.metadata_classes import ParsedVariableName
+from domain.enums import StatisticType
 
 ###############################################################################
 ### END IMPORTS ###
@@ -149,22 +150,27 @@ class NameParser:
     
     def _parse_process(self, elems: list[str]) -> tuple[str | None, list[str]]:
         """
-        Extract statistical_process (is ALWAYS the final element).
+        Extract the statistic identifier, which MUST be the final element.
+
+        The candidate is validated against StatisticType; if it is not a
+        recognised suffix (e.g. '2m' in 'Ta_2m') it is left in place for
+        the location parsers to consume.
 
         Args:
             elems: list of name elements (substrings).
 
         Returns:
-            process and remaining elements.
-
+            statistic suffix (or None) and remaining elements.
         """
-        
+
         process = None
         if elems:
-            # TODO: validate candidate against StatisticType.from_suffix()
-            # Validation was removed; candidate is accepted unconditionally.
-            process = elems[-1]
-            elems = elems[:-1]
+            try:
+                StatisticType.from_suffix(elems[-1])
+                process = elems[-1]
+                elems = elems[:-1]
+            except ValueError:
+                pass  # last element is not a statistic — leave for location parsers
         return process, elems
     # -------------------------------------------------------------------------
 
