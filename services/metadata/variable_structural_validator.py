@@ -272,26 +272,21 @@ class SiteConfig(BaseModel):
         return self
     # -------------------------------------------------------------------------
 
-    # -------------------------------------------------------------------------    
+    # -------------------------------------------------------------------------
     @model_validator(mode="after")
     def enforce_diag_rules(self):
-        """Enforce that all diagnostic variables share the same diag_type."""
-        
-        diag_types = set()
+        """Enforce that counter variables declare a diag_type."""
 
         for var_name, var_cfg in self.variables.items():
-            if any(var_name.startswith(prefix) for prefix in self.diag_prefixes):
-                for input_cfg in var_cfg.input_variables.values():
-                    if input_cfg.diag_type is not None:
-                        diag_types.add(input_cfg.diag_type)
-
-        if len(diag_types) > 1:
-            raise ValueError(
-                f"Diagnostic variables have inconsistent diag_type values: {diag_types}. Must all be same."
-            )
-
+            if var_cfg.variable_type == VariableType.COUNTER:
+                for input_name, input_cfg in var_cfg.input_variables.items():
+                    if input_cfg.diag_type is None:
+                        raise ValueError(
+                            f"Counter variable '{var_name}' input "
+                            f"'{input_name}' must specify diag_type"
+                            )
         return self
-    # -------------------------------------------------------------------------    
+    # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     @model_validator(mode="after")
@@ -302,9 +297,9 @@ class SiteConfig(BaseModel):
 
         for var_name, var_cfg in self.variables.items():
             for input_cfg in var_cfg.input_variables.values():
-                if var_name.endswith(self.sonic_suffix):
+                if self.sonic_suffix in var_name:
                     sonic_instruments.add(input_cfg.instrument)
-                if var_name.endswith(self.irga_suffix):
+                if self.irga_suffix in var_name:
                     irga_instruments.add(input_cfg.instrument)
 
         if len(sonic_instruments) > 1:
@@ -315,6 +310,69 @@ class SiteConfig(BaseModel):
             raise ValueError(
                 f"IRGA variables must use the same instrument; found {irga_instruments}"
             )
+
+        return self
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    @model_validator(mode="after")
+    def enforce_diag_prefix_rules(self):
+        """Enforce that Diag_-prefixed variables are declared as counter type."""
+
+        for var_name, var_cfg in self.variables.items():
+            if any(var_name.startswith(p) for p in self.diag_prefixes):
+                if var_cfg.variable_type != VariableType.COUNTER:
+                    raise ValueError(
+                        f"Variable '{var_name}' has a diagnostic prefix but "
+                        f"variable_type is '{var_cfg.variable_type.value}'; "
+                        "expected 'counter'"
+                        )
+        return self
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    @model_validator(mode="after")
+    def enforce_name_type_consistency(self):
+        """
+        Enforce bidirectional agreement between variable name suffix and
+        variable_type. Rules:
+          - If the name ends with a known type suffix (e.g. _Ct, _QC), the
+            declared variable_type must match.
+          - If the declared variable_type carries a suffix, the name must end
+            with that suffix — except for Diag_-prefixed variables, which are
+            counter by convention without the _Ct suffix.
+        """
+
+        suffix_to_type = {
+            vt.suffix: vt
+            for vt in VariableType
+            if vt.suffix is not None
+            }
+
+        for var_name, var_cfg in self.variables.items():
+            vtype = var_cfg.variable_type
+            is_diag = any(var_name.startswith(p) for p in self.diag_prefixes)
+
+            # Reverse check: name carries a known suffix → type must match
+            for suffix, expected_type in suffix_to_type.items():
+                if var_name.endswith(f"_{suffix}"):
+                    if vtype != expected_type:
+                        raise ValueError(
+                            f"Variable '{var_name}' name implies type "
+                            f"'{expected_type.value}' (suffix '_{suffix}') "
+                            f"but variable_type is '{vtype.value}'"
+                            )
+                    break
+
+            # Forward check: type carries a suffix → name must end with it
+            # Diag_-prefixed variables are the conventional exception
+            if vtype.suffix is not None and not is_diag:
+                if not var_name.endswith(f"_{vtype.suffix}"):
+                    raise ValueError(
+                        f"Variable '{var_name}' has variable_type "
+                        f"'{vtype.value}' but name does not end with "
+                        f"'_{vtype.suffix}'"
+                        )
 
         return self
     # -------------------------------------------------------------------------
