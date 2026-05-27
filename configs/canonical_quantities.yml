@@ -424,7 +424,7 @@ SigCO2_IRGA:
   - frac
   - percent
 SigH2O_IRGA:
-  long_name: CO2 signal strength
+  long_name: H2O signal strength
   plausible_max: 102.5
   plausible_min: 0.0
   standard_name: null
