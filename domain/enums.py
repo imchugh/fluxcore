@@ -23,7 +23,6 @@ class StatisticType(str, Enum):
     STDEV = ("standard_deviation", "Sd")
     VAR = ("variance", "Vr")
     COVAR = ("covariance", "Cov")
-    COUNT = ("count", "Ct")
     SAMPLE = ("instantaneous", "Inst")
 
     def __new__(cls, value: str, suffix: str):
