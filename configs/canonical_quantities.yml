@@ -23,6 +23,7 @@ AH:
   standard_units: g/m^3
   valid_input_units:
   - g/m^3
+  - mmol/m^3
 APAR:
   long_name: Incident photosynthetically active radiation absorbed
   plausible_max: null
@@ -65,6 +66,7 @@ CO2c:
   standard_units: mg/m^3
   valid_input_units:
   - mg/m^3
+  - mmol/m^3
 CT:
   long_name: Covariance of H2O and T
   plausible_max: null
@@ -701,6 +703,8 @@ ps:
   standard_units: kPa
   valid_input_units:
   - kPa
+  - hPa
+  - Pa
 roll:
   long_name: sonic anemometer roll angle
   plausible_max: 90.0

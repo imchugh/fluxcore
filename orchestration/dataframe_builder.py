@@ -18,6 +18,7 @@ VariableSpec            dataclass (exported for downstream type-hinting)
 import pandas as pd
 from dataclasses import dataclass
 from typing import Callable
+from datetime import datetime
 
 # -----------------------------------------------------------------------------
 
@@ -120,20 +121,25 @@ def build(ctx: SiteContext) -> DataframeBuildResult:
 
     runtime_cfg = ctx.runtime_config
 
+    # File groups contain mapping and validation of variables to files
     file_groups = file_mapping_service.build_file_groups(runtime_cfg)
     for group in file_groups.values():
         group.validate()
 
+    # Registry entries generated for all input variables specified in config
     registry = _build_registry(runtime_cfg=runtime_cfg, file_groups=file_groups)
 
+    # Build the dataframe
     df = _build_dataframe(
         file_groups=file_groups,
         registry=registry,
         n_samples=ctx.metadata.n_samples,
         )
 
+    # Create the requisite variable attrs for the L1 NetCDF file
     var_attrs = _build_var_attrs(registry=registry)
 
+    # Return as a class
     return DataframeBuildResult(df=df, var_attrs=var_attrs)
 
 # -----------------------------------------------------------------------------
@@ -239,11 +245,21 @@ def _build_var_attrs(registry: dict[str, VariableSpec]) -> dict[str, dict]:
     rslt = {}
 
     canonical_groups = _canonical_from_registry(registry)
-
+   
     for _, var_specs in canonical_groups.items():
+
+        # instrument_history = _history_from_instruments(
+        #     groups=var_specs, 
+        #     default_start=datetime.now(), 
+        #     default_end=datetime.now()
+        #     )                 
+
+        # breakpoint()
 
         # Last entry carries the current (most recent) instrument
         main_spec = var_specs[-1]
+
+
 
         attrs = {
             'height':         main_spec.height,
@@ -278,6 +294,36 @@ def _canonical_from_registry(
     for entry in registry.values():
         groups.setdefault(entry.canonical_name, []).append(entry)
     return groups
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+def _history_from_instruments(
+        groups: tuple[VariableSpec],
+        default_start: datetime,
+        default_end: datetime
+        ) -> dict[str, dict[str, datetime]]:
+        
+    
+    instrument_history = {}
+    instruments = set()
+    for this_group in groups:
+        instruments.add(this_group.instrument)
+    if len(instruments) == 1:
+        groups = [groups[-1]]
+    breakpoint()
+    for this_group in groups:
+        begin = this_group.begin
+        if begin is None:
+            begin = default_start
+        end = this_group.end
+        if end is None:
+            end = default_end
+        instrument_history[this_group.instrument] = {
+            'start_date': begin, 
+            'end_date': end
+            }
+    return instrument_history
 
 # -----------------------------------------------------------------------------
 

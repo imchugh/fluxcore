@@ -11,6 +11,7 @@ Created on Fri May  8 13:42:59 2026
 ###############################################################################
 
 from dataclasses import asdict
+from functools import lru_cache
 
 from domain.data_models.metadata_classes import CanonicalQuantityMetadata
 from domain.enums import StatisticType, VariableType
@@ -182,6 +183,7 @@ class CanonicalQuantityRegistry:
 ###############################################################################
 
 # -----------------------------------------------------------------------------
+@lru_cache(maxsize=None)
 def build_canonical_quantity_registry() -> CanonicalQuantityRegistry:
     """
     Build the canonical quantity registry from the standard config file.
@@ -190,6 +192,10 @@ def build_canonical_quantity_registry() -> CanonicalQuantityRegistry:
     itself accepts already-materialised quantity definitions, so tests or
     other callers can construct an instance directly without touching the
     config file.
+
+    Cached: the registry is built once per process and reused on every
+    subsequent call. In tests that need an isolated instance, call
+    ``build_canonical_quantity_registry.cache_clear()`` in teardown.
     """
 
     raw = config_loader.load_config_file_from_name('canonical_quantities')
