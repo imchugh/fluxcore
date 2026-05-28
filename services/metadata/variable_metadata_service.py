@@ -339,6 +339,20 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
             statistic_type=raw_cfg.statistic_type
             )
 
+        # Validate that each input's declared units are acceptable for this
+        # quantity. COUNTER variables are skipped — their units field is a
+        # placeholder ("dimensionless"); the meaningful unit (valid_count vs
+        # invalid_count) is carried by diag_type and validated separately.
+        if raw_cfg.variable_type != VariableType.COUNTER:
+            for raw_name, cfg in raw_cfg.input_variables.items():
+                if cfg.units not in quantity_canonical_metadata.valid_input_units:
+                    raise ValueError(
+                        f"Variable '{variable}' input '{raw_name}': "
+                        f"units '{cfg.units}' is not valid for quantity "
+                        f"'{quantity}'. Expected one of: "
+                        f"{quantity_canonical_metadata.valid_input_units}"
+                        )
+
         # Assemble per-input metadata
         raw_inputs = tuple(
             RawVariableMetadata(

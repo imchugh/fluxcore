@@ -449,7 +449,7 @@ def _apply_conversions(
             from_units = resolve_variance_units(spec.site_units)
 
         # Unit conversion — no-op when from_units already matches canonical
-        if from_units != spec.canonical_units:
+        if from_units != spec.canonical_units: 
 
             # Counter: invalid_count → valid_count = n_samples - invalid_count
             if spec.variable_type == VariableType.COUNTER:
@@ -464,12 +464,19 @@ def _apply_conversions(
 
             converter = conversion_service.get_unit_conversion(spec.quantity)
             try:
-                df[variable] = converter(data=df[variable], from_units=from_units)
+                result = converter(data=df[variable], from_units=from_units)
             except Exception as e:
                 raise RuntimeError(
                     f"Unit conversion failed for {variable!r} "
                     f"({from_units!r} → {spec.canonical_units!r})"
                     ) from e
+            if result is None:
+                raise RuntimeError(
+                    f"Unit conversion returned None for {variable!r}: "
+                    f"converter for quantity {spec.quantity!r} does not "
+                    f"handle from_units={from_units!r}"
+                    )
+            df[variable] = result
 
     return df
 
@@ -542,7 +549,7 @@ def _merge_block(
     """Assemble one canonical series from consecutive instrument segments."""
 
     result = pd.Series(index=df.index, dtype=float)
-
+    
     for alias, info in block.items():
         segment = df.loc[info['begin']: info['end'], alias]
         result.loc[segment.index] = segment
