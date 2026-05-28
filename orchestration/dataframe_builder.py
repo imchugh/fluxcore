@@ -18,7 +18,6 @@ VariableSpec            dataclass (exported for downstream type-hinting)
 import pandas as pd
 from dataclasses import dataclass
 from typing import Callable
-from datetime import datetime
 
 # -----------------------------------------------------------------------------
 
@@ -248,34 +247,18 @@ def _build_var_attrs(registry: dict[str, VariableSpec]) -> dict[str, dict]:
    
     for _, var_specs in canonical_groups.items():
 
-        # instrument_history = _history_from_instruments(
-        #     groups=var_specs, 
-        #     default_start=datetime.now(), 
-        #     default_end=datetime.now()
-        #     )                 
-
-        # breakpoint()
-
-        # Last entry carries the current (most recent) instrument
         main_spec = var_specs[-1]
 
-
-
         attrs = {
-            'height':         main_spec.height,
-            'height_range':   main_spec.height_range,
-            'instrument':     main_spec.instrument,
-            'long_name':      main_spec.long_name,
-            'standard_name':  main_spec.standard_name,
-            'statistic_type': _output_statistic(main_spec),
-            'units':          main_spec.canonical_units,
+            'height':             main_spec.height,
+            'height_range':       main_spec.height_range,
+            'instrument':         main_spec.instrument,
+            'instrument_history': _history_from_instruments(var_specs),
+            'long_name':          main_spec.long_name,
+            'standard_name':      main_spec.standard_name,
+            'statistic_type':     _output_statistic(main_spec),
+            'units':              main_spec.canonical_units,
             }
-
-        if len(var_specs) > 1:
-            attrs['instrument_history'] = {
-                spec.instrument: [spec.begin, spec.end]
-                for spec in var_specs
-                }
 
         rslt[_canonical_output_name(main_spec)] = attrs
 
@@ -299,31 +282,22 @@ def _canonical_from_registry(
 
 # -----------------------------------------------------------------------------
 def _history_from_instruments(
-        groups: tuple[VariableSpec],
-        default_start: datetime,
-        default_end: datetime
-        ) -> dict[str, dict[str, datetime]]:
-        
-    
-    instrument_history = {}
-    instruments = set()
-    for this_group in groups:
-        instruments.add(this_group.instrument)
+        var_specs: list[VariableSpec],
+        ) -> dict[str, dict] | None:
+    """
+    Return instrument changeover history, or None for single-instrument variables.
+
+    Dates are always explicit for multi-instrument variables (required for the
+    merge step), so no defaults are needed.
+    """
+
+    instruments = {spec.instrument for spec in var_specs}
     if len(instruments) == 1:
-        groups = [groups[-1]]
-    breakpoint()
-    for this_group in groups:
-        begin = this_group.begin
-        if begin is None:
-            begin = default_start
-        end = this_group.end
-        if end is None:
-            end = default_end
-        instrument_history[this_group.instrument] = {
-            'start_date': begin, 
-            'end_date': end
-            }
-    return instrument_history
+        return None
+    return {
+        spec.instrument: {'start_date': spec.begin, 'end_date': spec.end}
+        for spec in var_specs
+        }
 
 # -----------------------------------------------------------------------------
 
