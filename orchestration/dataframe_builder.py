@@ -255,6 +255,7 @@ def _build_var_attrs(registry: dict[str, VariableSpec]) -> dict[str, dict]:
             'instrument':         main_spec.instrument,
             'instrument_history': _history_from_instruments(var_specs),
             'long_name':          main_spec.long_name,
+            'quantity':           main_spec.quantity,
             'standard_name':      main_spec.standard_name,
             'statistic_type':     _output_statistic(main_spec),
             'units':              main_spec.canonical_units,
