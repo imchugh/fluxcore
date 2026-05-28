@@ -199,7 +199,30 @@ class VariableConfig(BaseModel):
     # -------------------------------------------------------------------------
     
     # -------------------------------------------------------------------------
-    
+
+    # -------------------------------------------------------------------------
+    @field_validator("height_range")
+    @classmethod
+    def validate_height_range(cls, v):
+        """
+        Enforce ordering by ascending absolute value.
+        Depths are negative, so e.g. [0.0, -0.3] is valid (0.0 < 0.3 in
+        absolute terms) but [-0.3, 0.0] or [0.0, 0.3] with equal magnitudes
+        are not.  Exactly-two-element constraint is enforced by the type
+        annotation tuple[float, float].
+        """
+
+        if v is None:
+            return v
+        if abs(v[0]) >= abs(v[1]):
+            raise ValueError(
+                "height_range must be ordered by ascending absolute value "
+                f"(|first| < |second|); got [{v[0]}, {v[1]}]"
+                )
+        return v
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
     @model_validator(mode="after")
     def validate_statistic_requirement(self):
 
