@@ -56,6 +56,7 @@ def get_ds_years(ds):
 def build(
         site_name: str,
         output_dir: pathlib.Path | str | None = None,
+        constrain_to_commission: bool = True,
         ) -> list[pathlib.Path]:
     """
     Build L1 NetCDF files for all data years at a site.
@@ -68,6 +69,9 @@ def build(
         site_name: registered site name.
         output_dir: directory to write files into. Defaults to the
             homogenised_data/nc stream path for this site.
+        constrain_to_commission: if True (default), skip years before the
+            site's date_commissioned. Prevents pre-flux ancillary-only years
+            from appearing in sites with long logger histories.
 
     Returns:
         List of paths to files written.
@@ -80,8 +84,14 @@ def build(
     ds = L1_constructor.build_dataset_from_site_name(site_name)
     ds = build_L1_ds_complete(ds)
 
+    commission_year = None
+    if constrain_to_commission and 'date_commissioned' in ds.attrs:
+        commission_year = pd.Timestamp(ds.attrs['date_commissioned']).year
+
     written = []
     for year in get_ds_years(ds):
+        if commission_year is not None and year < commission_year:
+            continue
         year_ds = build_L1_ds_by_year(ds=ds, year=year)
         file_path = output_dir / f'{site_name}_{year}_L1.nc'
         file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
