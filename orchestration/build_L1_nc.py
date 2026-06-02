@@ -11,6 +11,7 @@ Created on Wed May  6 09:46:11 2026
 ###############################################################################
 
 import datetime
+import pathlib
 import pandas as pd
 import numpy as np
 
@@ -18,6 +19,8 @@ import numpy as np
 
 from domain import time_utils
 from domain.constants import SITE_PLACEHOLDER, DATA_TIME_FORMAT, NC_ENCODING
+from infrastructure import file_io, paths
+from orchestration import L1_constructor
 from services import config_loader
 
 ###############################################################################
@@ -28,11 +31,6 @@ from services import config_loader
 ###############################################################################
 ### BEGIN INITS ###
 ###############################################################################
-
-SITE_DETAIL_SUBSET = [
-    'fluxnet_id', 'latitude', 'longitude', 'elevation', 'time_step',
-    'time_zone', 'canopy_height', 'tower_height', 'soil', 'vegetation'
-    ]
 
 STD_METADATA = config_loader.load_config_file_from_name(name='nc_metadata')
 CRS_METADATA = config_loader.load_config_file_from_name(name='nc_dim_attrs')
@@ -49,19 +47,57 @@ CRS_METADATA = config_loader.load_config_file_from_name(name='nc_dim_attrs')
 # -----------------------------------------------------------------------------
 
 def get_ds_years(ds):
-    
+
     return np.unique(ds.time.dt.year).tolist()
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 
+def build(
+        site_name: str,
+        output_dir: pathlib.Path | str | None = None,
+        ) -> list[pathlib.Path]:
+    """
+    Build L1 NetCDF files for all data years at a site.
+
+    Constructs the base L1 dataset via L1_constructor, augments it with
+    NetCDF global attributes and spatial dimensions, then writes one file
+    per data year to output_dir.
+
+    Args:
+        site_name: registered site name.
+        output_dir: directory to write files into. Defaults to the
+            homogenised_data/nc stream path for this site.
+
+    Returns:
+        List of paths to files written.
+    """
+
+    if output_dir is None:
+        output_dir = paths.get_local_stream_path('homogenised_data', 'nc') / site_name
+    output_dir = pathlib.Path(output_dir)
+
+    ds = L1_constructor.build_dataset_from_site_name(site_name)
+    ds = build_L1_ds_complete(ds)
+
+    written = []
+    for year in get_ds_years(ds):
+        year_ds = build_L1_ds_by_year(ds=ds, year=year)
+        file_path = output_dir / f'{site_name}_{year}_L1.nc'
+        file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
+        written.append(file_path)
+
+    return written
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
 def build_L1_ds_complete(ds):
-           
+
     ds = do_dim_ops(ds=ds)
     ds = assign_crs_variable(ds=ds)
     ds = assign_L1_global_generic_attrs(ds=ds)
-    ds.time.encoding = NC_ENCODING
-    
+
     return ds
 # -----------------------------------------------------------------------------
 
@@ -79,7 +115,7 @@ def build_L1_ds_by_year(ds, year):
         ]
     
     # Subset the dataset
-    year_ds = ds.sel(time=time_bounds)
+    year_ds = ds.sel(time=slice(*time_bounds))
     
     # Add time-based attrs
     ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
@@ -195,5 +231,3 @@ def assign_L1_global_generic_attrs(ds):
 ###############################################################################
 ### END FUNCTIONS ###
 ###############################################################################
-
-    

@@ -12,6 +12,7 @@ import logging
 import os
 import pandas as pd
 import numpy as np
+import xarray as xr
 import yaml
 from pathlib import Path
 from typing import Any
@@ -362,6 +363,45 @@ def write_toa5_csv(
             _write(f)
 
     logger.info('Wrote TOA5 file: %s', file_path.name)
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+def write_netcdf(
+        *,
+        ds: xr.Dataset,
+        file_path: Path,
+        time_units: str = None,
+        atomic: bool = True,
+        ) -> None:
+    """
+    Write an xarray Dataset to NetCDF.
+
+    Args:
+        ds: Dataset to write.
+        file_path: Destination path. Parent directories created automatically.
+        time_units: CF units string for time encoding (e.g. 'seconds since
+            1800-01-01'). If None, xarray chooses its own default.
+        atomic: If True (default), write via a temporary file that is
+            atomically renamed on success.
+    """
+
+    file_path = Path(file_path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    encoding = {'time': {'units': time_units}} if time_units else {}
+
+    if atomic:
+        tmp_path = file_path.with_suffix(file_path.suffix + '.tmp')
+        try:
+            ds.to_netcdf(tmp_path, encoding=encoding)
+            tmp_path.replace(file_path)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+    else:
+        ds.to_netcdf(file_path, encoding=encoding)
+
+    logger.info('Wrote NetCDF file: %s', file_path.name)
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
