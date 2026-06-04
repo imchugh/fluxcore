@@ -27,7 +27,7 @@ from services.metadata.site_registry import SiteContext
 from services.metadata import file_mapping_service
 from services.metadata.file_mapping_service import FileGroup
 from services.metadata.metadata_conversion_service import resolve_variance_units
-from services.data import raw_data_loader, conversion_service
+from services.data import raw_data_loader, transform_service
 from infrastructure.data_conditioning import condition_dataframe
 
 ###############################################################################
@@ -483,7 +483,7 @@ def _apply_conversions(
                 df[variable] = n_samples - df[variable]
                 continue
 
-            converter = conversion_service.get_unit_conversion(spec.quantity)
+            converter = transform_service.get_unit_conversion(spec.quantity)
             try:
                 result = converter(data=df[variable], from_units=from_units)
             except Exception as e:
