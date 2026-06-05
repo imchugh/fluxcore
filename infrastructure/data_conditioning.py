@@ -81,6 +81,7 @@ def condition_dataframe(
     check_datetime_index(df)
 
     df = df.sort_index()
+    df = df[df.index.notna()]
     df = df[~df.index.duplicated(keep='first')]
 
     if interval_in is None:
