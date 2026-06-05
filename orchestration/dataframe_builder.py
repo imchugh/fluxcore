@@ -100,7 +100,7 @@ class DataframeBuildResult:
 
 # -----------------------------------------------------------------------------
 
-def build(ctx: SiteContext) -> DataframeBuildResult:
+def build(ctx: SiteContext, start_date: pd.Timestamp | None = None) -> DataframeBuildResult:
     """
     Build a canonical dataframe and per-variable xarray attrs from a site
     context.
@@ -112,6 +112,9 @@ def build(ctx: SiteContext) -> DataframeBuildResult:
         ctx: fully-assembled site context (runtime config + site metadata).
              Site metadata provides n_samples (time_step * freq_hz * 60),
              needed when COUNTER variables are stored as invalid_count.
+        start_date: if provided, records before this timestamp are discarded
+             after loading each file.  Use to limit processing to a single
+             year without reading full site history.
 
     Returns:
         DataframeBuildResult containing the canonical dataframe and a dict
@@ -133,6 +136,7 @@ def build(ctx: SiteContext) -> DataframeBuildResult:
         file_groups=file_groups,
         registry=registry,
         n_samples=ctx.metadata.n_samples,
+        start_date=start_date,
         )
 
     # Create the requisite variable attrs for the L1 NetCDF file
@@ -345,6 +349,7 @@ def _build_dataframe(
         file_groups: dict[str, FileGroup],
         registry: dict[str, VariableSpec],
         n_samples: int | None = None,
+        start_date: pd.Timestamp | None = None,
         ) -> pd.DataFrame:
     """
     Build the canonical dataframe.
@@ -360,14 +365,15 @@ def _build_dataframe(
     dfs = []
     for _, mapper in file_groups.items():
         loader = raw_data_loader.get_data_adapter(system_type=mapper.file_format)
-        dfs.append(
-            _build_file_group_dataframe(
-                mapper=mapper,
-                loader=loader,
-                registry=registry,
-                n_samples=n_samples,
-                )
+        group_df = _build_file_group_dataframe(
+            mapper=mapper,
+            loader=loader,
+            registry=registry,
+            n_samples=n_samples,
+            start_date=start_date,
             )
+        if not group_df.empty:
+            dfs.append(group_df)
 
     # Step 2
     df = pd.concat(dfs, axis=1)
@@ -389,6 +395,7 @@ def _build_file_group_dataframe(
         loader: Callable,
         registry: dict[str, VariableSpec],
         n_samples: int | None = None,
+        start_date: pd.Timestamp | None = None,
         ) -> pd.DataFrame:
     """
     Load and process all files in a file group.
@@ -396,6 +403,7 @@ def _build_file_group_dataframe(
     For each file: load, filter to expected variables, apply aliasing,
     apply statistical transforms and unit conversions.  Then concatenate
     vertically across master + backup files and condition the time index.
+    Files whose latest record predates start_date are skipped entirely.
     """
 
     rename_map = {
@@ -409,6 +417,11 @@ def _build_file_group_dataframe(
 
         df = loader.load(file)
 
+        if start_date is not None:
+            if df.index.max() < start_date:
+                continue
+            df = df[df.index >= start_date]
+
         df = _filter_variables(df=df, variables=mapper.expected_variables)
 
         df = df.rename(
@@ -418,6 +431,9 @@ def _build_file_group_dataframe(
         df = _apply_conversions(df=df, registry=registry, n_samples=n_samples)
 
         dfs.append(df)
+
+    if not dfs:
+        return pd.DataFrame()
 
     df = pd.concat(dfs).sort_index()
 

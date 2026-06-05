@@ -10,6 +10,9 @@ import csv
 import json
 import logging
 import os
+import shutil
+import tempfile
+from enum import Enum
 import pandas as pd
 import numpy as np
 import xarray as xr
@@ -366,6 +369,33 @@ def write_toa5_csv(
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+def _serialize_attrs(attrs: dict) -> dict:
+    """Convert attr values to NetCDF-compatible types.
+
+    Enums are replaced with their .value; None entries are dropped.
+    All other values pass through unchanged.
+    """
+    return {
+        k: v.value if isinstance(v, Enum) else v
+        for k, v in attrs.items()
+        if v is not None
+        }
+
+
+def _serialize_dataset_attrs(ds: xr.Dataset) -> xr.Dataset:
+    """Serialize attrs in-place for NetCDF output.
+
+    Modifies ds directly — safe to call on a year slice since xarray copies
+    attrs on sel(), so the source dataset is not affected.
+    """
+    ds.attrs = _serialize_attrs(ds.attrs)
+    for name in list(ds.variables):
+        if ds[name].attrs:
+            ds[name].attrs = _serialize_attrs(ds[name].attrs)
+    return ds
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 def write_netcdf(
         *,
         ds: xr.Dataset,
@@ -388,13 +418,18 @@ def write_netcdf(
     file_path = Path(file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
+    ds = _serialize_dataset_attrs(ds)
     encoding = {'time': {'units': time_units}} if time_units else {}
 
     if atomic:
-        tmp_path = file_path.with_suffix(file_path.suffix + '.tmp')
+        # Write to a local temp file then move to the destination.  This avoids
+        # HDF5 file-locking hangs when the destination is on a network filesystem.
+        fd, tmp_str = tempfile.mkstemp(suffix='.nc.tmp', dir=file_path.parent)
+        os.close(fd)
+        tmp_path = Path(tmp_str)
         try:
             ds.to_netcdf(tmp_path, encoding=encoding)
-            tmp_path.replace(file_path)
+            shutil.move(tmp_path, file_path)
         except Exception:
             tmp_path.unlink(missing_ok=True)
             raise
