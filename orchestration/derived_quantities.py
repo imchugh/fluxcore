@@ -19,7 +19,7 @@ pad_co2(result)      -> DataframeBuildResult
 import pandas as pd
 
 from domain.enums import StatisticType
-from orchestration.dataframe_builder import DataframeBuildResult
+from orchestration.L1_constructor import DataframeBuildResult
 from services.data.transform_service import get_calculation
 from services.metadata.canonical_quantity_registry import build_canonical_quantity_registry
 
