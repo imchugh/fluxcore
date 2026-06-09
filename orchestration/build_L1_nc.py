@@ -97,9 +97,9 @@ def build(
     ds = build_L1_ds_complete(ds)
 
     written = []
-    for year in get_ds_years(ds):
-        year_ds = build_L1_ds_by_year(ds=ds, year=year)
-        file_path = output_dir / f'{site_name}_{year}_L1.nc'
+    for ds_year in get_ds_years(ds):
+        year_ds = build_L1_ds_by_year(ds=ds, year=ds_year)
+        file_path = output_dir / f'{site_name}_{ds_year}_L1.nc'
         file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
         written.append(file_path)
 
@@ -261,7 +261,7 @@ def assign_variable_flags(ds):
 
     """
 
-    var_list = [var for var in ds.variables if not var in ds.dims]
+    var_list = [var for var in ds.variables if var not in ds.dims and var != 'crs']
     for var in var_list:
         ds[f'{var}_QCFlag'] = (
             ['time', 'latitude', 'longitude'],

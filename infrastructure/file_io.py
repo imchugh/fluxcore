@@ -372,14 +372,19 @@ def write_toa5_csv(
 def _serialize_attrs(attrs: dict) -> dict:
     """Convert attr values to NetCDF-compatible types.
 
-    Enums are replaced with their .value; None entries are dropped.
-    All other values pass through unchanged.
+    Enums are replaced with their .value; tuples are converted to lists;
+    None entries are dropped. All other values pass through unchanged.
     """
-    return {
-        k: v.value if isinstance(v, Enum) else v
-        for k, v in attrs.items()
-        if v is not None
-        }
+    result = {}
+    for k, v in attrs.items():
+        if v is None:
+            continue
+        if isinstance(v, Enum):
+            v = v.value
+        elif isinstance(v, tuple):
+            v = list(v)
+        result[k] = v
+    return result
 
 
 def _serialize_dataset_attrs(ds: xr.Dataset) -> xr.Dataset:

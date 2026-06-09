@@ -377,6 +377,7 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
             variable_type=raw_cfg.variable_type,
             instrument=first_input.instrument,
             height=raw_cfg.height,
+            height_range=raw_cfg.height_range,
             statistic_type=raw_cfg.statistic_type,
             raw_inputs=raw_inputs,
             canonical=quantity_canonical_metadata,

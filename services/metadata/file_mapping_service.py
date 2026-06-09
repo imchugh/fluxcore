@@ -116,17 +116,17 @@ def get_variables_from_file(
     # Build iterable
     file_list = [file_path]
     if incl_backups:
-        file_list.append(file_io.get_backup_files(file_path=file_path))
-        
+        file_list.extend(file_io.get_backup_files(file_path=file_path))
+
     # Load adapter
     header_adapter = raw_data_loader.get_header_adapter(
         system_type=ftype.name
         )
-    
+
     # Iterate over files
     rslt = set()
     for file in file_list:
-        rslt.update(header_adapter.load(file_path=file_path)['variable'])
+        rslt.update(header_adapter.load(file_path=file)['variable'])
     
     # Return a list
     return sorted(rslt)
