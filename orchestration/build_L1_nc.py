@@ -275,6 +275,8 @@ def assign_variable_flags(ds):
 def filter_variable_attrs(ds):
 
     for var in ds.variables:
+        if var == 'crs':
+            continue
         ds[var].attrs = {
             k: v for k, v in ds[var].attrs.items()
             if k in VARIABLE_NC_ATTRS
