@@ -57,7 +57,6 @@ def get_ds_years(ds):
 def build(
         site_name: str,
         output_dir: pathlib.Path | str | None = None,
-        constrain_to_commission: bool = True,
         year: int | None = None,
         ) -> list[pathlib.Path]:
     """
@@ -67,13 +66,14 @@ def build(
     NetCDF global attributes and spatial dimensions, then writes one file
     per data year to output_dir.
 
+    The dataset is truncated to the temporal extent of the flux file group,
+    so ancillary data (e.g. soil loggers) predating the flux system does not
+    produce empty output years.
+
     Args:
         site_name: registered site name.
         output_dir: directory to write files into. Defaults to the
             homogenised_data/nc stream path for this site.
-        constrain_to_commission: if True (default), skip years before the
-            site's date_commissioned. Prevents pre-flux ancillary-only years
-            from appearing in sites with long logger histories.
         year: if provided, only build that calendar year and discard all
             earlier records during data loading.  Use for the 30-min
             operational update cycle to avoid reading full site history.
@@ -90,14 +90,8 @@ def build(
     ds = L1_constructor.build_dataset_from_site_name(site_name, start_date=start_date)
     ds = build_L1_ds_complete(ds)
 
-    commission_year = None
-    if constrain_to_commission and 'date_commissioned' in ds.attrs:
-        commission_year = pd.Timestamp(ds.attrs['date_commissioned']).year
-
     written = []
     for year in get_ds_years(ds):
-        if commission_year is not None and year < commission_year:
-            continue
         year_ds = build_L1_ds_by_year(ds=ds, year=year)
         file_path = output_dir / f'{site_name}_{year}_L1.nc'
         file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)

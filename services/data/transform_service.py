@@ -49,18 +49,16 @@ def convert_signal_strength(data, from_units='frac'):
 
 
 @register_conversion('Diag')
-def convert_diagnostic(data, n_samples, from_units='invalid_count'):
-    """Convert diagnostic counts to valid_count form.
+def convert_diagnostic(data, n_samples, from_units='valid_count'):
+    """Convert diagnostic counts from valid_count to invalid_count form.
 
-    Diag variables can be stored as either valid_count or invalid_count.
-    The pipeline standardises to valid_count; invalid_count is converted
-    by subtracting from the total number of samples in the period.
-
-    Note: n_samples must be supplied by the caller; _apply_conversions
-    does not yet pass this — wiring it up is a TODO.
+    The pipeline standardises to invalid_count (0 = no error, n_samples = all
+    errors). Sites that store valid_count are converted by subtracting from
+    n_samples. Sites that store invalid_count are passed through by the caller
+    without invoking this function.
     """
 
-    if from_units == 'invalid_count':
+    if from_units == 'valid_count':
         return n_samples - data
 
 
