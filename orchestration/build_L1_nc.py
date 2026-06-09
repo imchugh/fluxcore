@@ -36,6 +36,12 @@ from services import config_loader
 STD_METADATA = config_loader.load_config_file_from_name(name='nc_metadata')
 CRS_METADATA = config_loader.load_config_file_from_name(name='nc_dim_attrs')
 
+VARIABLE_NC_ATTRS = {
+    'units', 'long_name', 'standard_name',
+    'height', 'height_range', 'instrument', 'instrument_history',
+    'statistic_type',
+    }
+
 ###############################################################################
 ### END INITS ###
 ###############################################################################
@@ -129,6 +135,7 @@ def build_L1_ds_by_year(ds, year):
     year_ds = ds.sel(time=slice(*time_bounds))
     year_ds = assign_variable_flags(year_ds)
     year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
+    year_ds = filter_variable_attrs(ds=year_ds)
     year_ds = serialize_inst_history(ds=year_ds, year=year)
     year_ds = serialize_units(ds=year_ds)
 
@@ -265,6 +272,17 @@ def assign_variable_flags(ds):
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
+def filter_variable_attrs(ds):
+
+    for var in ds.variables:
+        ds[var].attrs = {
+            k: v for k, v in ds[var].attrs.items()
+            if k in VARIABLE_NC_ATTRS
+            }
+
+    return ds
+
+
 def serialize_units(ds):
 
     for var in ds.variables:
