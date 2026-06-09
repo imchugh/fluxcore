@@ -116,14 +116,14 @@ class CanonicalQuantityRegistry:
 
         # ---------------------------------------------------------------------
         # COUNTERS
-        # Counter variables (diagnostic sample counts) are always expressed as
-        # a count of valid samples.  Raw data may arrive as either valid_count
-        # or invalid_count; conversion to valid_count is handled downstream.
+        # Counter variables (diagnostic sample counts) are dimensionless.
+        # Raw data may arrive as either valid_count or invalid_count; the
+        # pipeline standardises to invalid_count based on diag_type.
         # ---------------------------------------------------------------------
 
         elif variable_type == VariableType.COUNTER:
 
-            attrs["standard_units"] = "valid_count"
+            attrs["standard_units"] = "dimensionless"
             attrs["valid_input_units"] = ["valid_count", "invalid_count"]
 
             attrs["plausible_min"] = 0

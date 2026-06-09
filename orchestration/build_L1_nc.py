@@ -130,6 +130,7 @@ def build_L1_ds_by_year(ds, year):
     year_ds = assign_variable_flags(year_ds)
     year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
     year_ds = serialize_inst_history(ds=year_ds, year=year)
+    year_ds = serialize_units(ds=year_ds)
 
     return year_ds
 # -----------------------------------------------------------------------------
@@ -264,6 +265,15 @@ def assign_variable_flags(ds):
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
+def serialize_units(ds):
+
+    for var in ds.variables:
+        if ds[var].attrs.get('units') == 'dimensionless':
+            ds[var].attrs['units'] = '1'
+
+    return ds
+
+
 def serialize_inst_history(ds, year):
 
     year_start, year_end = time_utils.get_data_year_bounds(
