@@ -8,19 +8,48 @@ Created on Tue Mar 17 09:13:20 2026
 
 import pandas as pd
 
-from infrastructure import data_conditioning
+
+def validate_dataframe(df: pd.DataFrame) -> None:
+    """
+    Assert that a DataFrame is fit for analysis.
+
+    Raises
+    ------
+    TypeError
+        If the index is not a DatetimeIndex.
+    ValueError
+        If the DataFrame contains no rows.
+    """
+
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise TypeError('DataFrame must have a DatetimeIndex.')
+    if df.empty:
+        raise ValueError('DataFrame must contain data.')
 
 
-def analyse_data_gaps(df: pd.DataFrame, interval_minutes: int) -> dict:
+def analyse_data_gaps(
+        df: pd.DataFrame,
+        interval_minutes: int,
+        start: pd.Timestamp | None = None,
+        end: pd.Timestamp | None = None,
+        ) -> dict:
     """
     Analyse timestamp gaps in a dataframe.
 
     Parameters
     ----------
     df : DataFrame
-        Dataframe with DatetimeIndex
+        Dataframe with DatetimeIndex.
     interval_minutes : int
-        Expected sampling interval
+        Expected sampling interval in minutes.
+    start : pd.Timestamp, optional
+        Start of the reference window. Defaults to ``df.index.min()``.
+        Supply this (together with ``end``) when the window of interest
+        extends beyond the available data — e.g. when the trailing portion
+        of the window has no records at all and ``df`` would otherwise
+        understate the missing percentage.
+    end : pd.Timestamp, optional
+        End of the reference window. Defaults to ``df.index.max()``.
 
     Returns
     -------
@@ -33,10 +62,26 @@ def analyse_data_gaps(df: pd.DataFrame, interval_minutes: int) -> dict:
         }
     """
 
-    data_conditioning.check_datetime_index(df)
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise TypeError('DataFrame must have a DatetimeIndex.')
+
+    full_index = pd.date_range(
+        start=start if start is not None else df.index.min() if not df.empty else None,
+        end=end if end is not None else df.index.max() if not df.empty else None,
+        freq=f"{interval_minutes}min",
+    )
 
     if df.empty:
-        raise ValueError('DataFrame must contain data!')
+        if not full_index.size:
+            raise ValueError('DataFrame is empty and no start/end window provided.')
+        return {
+            "n_missing": len(full_index),
+            "pct_missing": 100.0,
+            "gap_distribution": pd.Series(dtype=int),
+            "gap_table": pd.DataFrame(
+                columns=["gap_start", "gap_end", "missing_records"]
+                ),
+            }
 
     # ensure clean index
     df = df.sort_index()
@@ -71,15 +116,7 @@ def analyse_data_gaps(df: pd.DataFrame, interval_minutes: int) -> dict:
     # gap size distribution
     gap_distribution = gap_sizes.value_counts().sort_index()
 
-    # total missing records
-    full_index = pd.date_range(
-        start=df.index.min(),
-        end=df.index.max(),
-        freq=f"{interval_minutes}min"
-    )
-
     n_missing = len(full_index) - len(df)
-
     pct_missing = round(n_missing / len(full_index) * 100, 2)
 
     return {
