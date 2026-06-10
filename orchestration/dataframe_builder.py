@@ -5,8 +5,10 @@ Build canonical DataFrames from raw instrument file groups.
 
 Public API
 ----------
-build_dataframe(file_groups, registry, n_samples, start_date, flux_file,
-                time_step, quantities) -> pd.DataFrame
+build_dataframe_from_site_name(site_name, quantities, n_samples, start_date) -> pd.DataFrame
+build_dataframe_from_context(ctx, quantities, n_samples, start_date)         -> pd.DataFrame
+build_dataframe(file_groups, registry, quantities, n_samples, start_date,
+                flux_file, time_step)                                         -> pd.DataFrame
 """
 
 from typing import Callable
@@ -14,11 +16,67 @@ from typing import Callable
 import pandas as pd
 
 from domain.enums import DiagnosticType, StatisticType, VariableType
-from services.metadata.file_group_builder import FileGroup
+from services.metadata.file_group_builder import FileGroup, build_file_groups
 from services.metadata.canonical_quantity_registry import resolve_variance_units
-from services.metadata.variable_registry import VariableSpec
+from services.metadata.variable_registry import VariableSpec, build_variable_registry
+from services.metadata.site_registry import SiteRegistry, SiteContext
 from services.data import raw_data_loader, transform_service
 from infrastructure.data_conditioning import condition_dataframe
+
+
+SITE_REGISTRY = SiteRegistry()
+
+
+def build_dataframe_from_site_name(
+        site_name: str,
+        quantities: set[str] | None = None,
+        start_date: pd.Timestamp | None = None,
+        ) -> pd.DataFrame:
+    """Convenience wrapper — resolves site name to context via registry."""
+
+    ctx = SITE_REGISTRY.get_context(site=site_name)
+    return build_dataframe_from_context(
+        ctx=ctx,
+        quantities=quantities,
+        start_date=start_date,
+        )
+
+
+def build_dataframe_from_context(
+        ctx: SiteContext,
+        quantities: set[str] | None = None,
+        start_date: pd.Timestamp | None = None,
+        ) -> pd.DataFrame:
+    """
+    Build a canonical DataFrame from a fully-assembled site context.
+
+    Assembles file_groups and registry from the context, then delegates to
+    build_dataframe. All site-specific parameters (n_samples, flux_file,
+    time_step) are sourced from the context.
+
+    Args:
+        ctx: Site runtime config and metadata.
+        quantities: Optional set of base quantity names to load (e.g.
+            ``{'Fco2', 'Fh'}``). When None, all configured variables are built.
+        start_date: If provided, records before this timestamp are discarded.
+
+    Returns:
+        Canonical DataFrame with DatetimeIndex.
+    """
+
+    runtime_cfg = ctx.runtime_config
+    file_groups = build_file_groups(runtime_cfg)
+    registry = build_variable_registry(runtime_cfg=runtime_cfg, file_groups=file_groups)
+
+    return build_dataframe(
+        file_groups=file_groups,
+        registry=registry,
+        quantities=quantities,
+        n_samples=ctx.metadata.n_samples,
+        start_date=start_date,
+        flux_file=runtime_cfg.flux_file,
+        time_step=ctx.metadata.time_step,
+        )
 
 
 def build_dataframe(
