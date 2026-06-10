@@ -20,7 +20,7 @@ import numpy as np
 from domain import time_utils
 from domain.constants import SITE_PLACEHOLDER, DATA_TIME_FORMAT, NC_ENCODING
 from infrastructure import file_io, paths
-from orchestration import L1_constructor
+from orchestration import dataset_builder
 from services import config_loader
 
 ###############################################################################
@@ -92,7 +92,7 @@ def build(
     output_dir = pathlib.Path(output_dir)
 
     start_date = pd.Timestamp(year, 1, 1) if year is not None else None
-    ds = L1_constructor.build_dataset_from_site_name(site_name, start_date=start_date)
+    ds = dataset_builder.build_dataset_from_site_name(site_name, start_date=start_date)
     ds = build_L1_ds_complete(ds)
 
     written = []

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Derive and pad missing quantities in a DataframeBuildResult.
+Derive and pad missing quantities in a DatasetBuildIntermediate.
 
 pad_humidity: for each (instrument, height) group with Ta and exactly one of
 {RH, AH}, derives the missing variable from the other plus Ta and ps.
@@ -12,14 +12,14 @@ period-representative inputs for both Av and Sd derivations.
 
 Public API
 ----------
-pad_humidity(result) -> DataframeBuildResult
-pad_co2(result)      -> DataframeBuildResult
+pad_humidity(result) -> DatasetBuildIntermediate
+pad_co2(result)      -> DatasetBuildIntermediate
 """
 
 import pandas as pd
 
 from domain.enums import StatisticType
-from orchestration.L1_constructor import DataframeBuildResult
+from orchestration.dataset_builder import DatasetBuildIntermediate
 from services.data.transform_service import get_calculation
 from services.metadata.canonical_quantity_registry import build_canonical_quantity_registry
 
@@ -27,7 +27,7 @@ from services.metadata.canonical_quantity_registry import build_canonical_quanti
 _HUMIDITY_QUANTITIES = frozenset({'Ta', 'RH', 'AH'})
 
 
-def pad_humidity(result: DataframeBuildResult) -> DataframeBuildResult:
+def pad_humidity(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:
     """
     Derive and add the missing humidity variable (RH or AH) for each
     instrument+height group that has Ta and exactly one of {RH, AH}.
@@ -69,10 +69,10 @@ def pad_humidity(result: DataframeBuildResult) -> DataframeBuildResult:
             )
             var_attrs[new_col] = _build_attrs(source_attrs=var_attrs[ah_col], quantity='RH')
 
-    return DataframeBuildResult(df=df, var_attrs=var_attrs)
+    return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
 
-def pad_co2(result: DataframeBuildResult) -> DataframeBuildResult:
+def pad_co2(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:
     """
     Derive CO2 dry mole fraction (umol/mol) from CO2c for all sites.
 
@@ -107,7 +107,7 @@ def pad_co2(result: DataframeBuildResult) -> DataframeBuildResult:
         )
         var_attrs[new_col] = _build_attrs(source_attrs=attrs, quantity='CO2')
 
-    return DataframeBuildResult(df=df, var_attrs=var_attrs)
+    return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
 
 def _find_quantity_av(
