@@ -58,28 +58,25 @@ _FILE_FORMATS = {
 # -----------------------------------------------------------------------------
 
 def load_raw_data(
-        file_path: pathlib.Path, file_format: str, drop_non_numeric=True
+        file_path: pathlib.Path, file_format: str, drop_non_numeric: bool = False
         ) -> pd.DataFrame:
 
-    # Initialise dispatcher and get formatter
     DATE_FORMATTERS = {
         'TOA5': _TOA5_date_formatter,
         'EddyPro': _EddyPro_date_formatter,
         }
-    formatter = DATE_FORMATTERS.get(file_format)
-    
-    # Get data
+
     df = file_io.read_csv_data(
-        file_path=file_path, 
+        file_path=file_path,
         file_format=_FILE_FORMATS[file_format],
         on_bad_lines='skip'
         )
-    
-    # Apply formatting
-    df = formatter(df)
+    df = DATE_FORMATTERS[file_format](df)
 
-    # Drop non-numeric and return
-    return _drop_non_numeric(df=df, file_format=file_format)
+    if drop_non_numeric:
+        df = _drop_non_numeric(df=df, file_format=file_format)
+
+    return df
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------    
@@ -122,7 +119,7 @@ def get_data_adapter(system_type: str):
     file_format = format_map[system_type]
 
     def load(file_path):
-        df = load_raw_data(file_path=file_path, file_format=file_format)
+        df = load_raw_data(file_path=file_path, file_format=file_format, drop_non_numeric=True)
         return df[~df.index.duplicated(keep='last')]
 
     return load
@@ -130,21 +127,25 @@ def get_data_adapter(system_type: str):
 
 # -----------------------------------------------------------------------------
 
-def load_raw_header(file_path, file_format: str) -> list[list]:
-    
+def load_raw_header(file_path, file_format: str) -> dict:
+
     fmt = _FILE_FORMATS[file_format]
     header_dict = fmt.get('header_lines')
     lines = list(header_dict.values())
     keys = list(header_dict.keys())
-    return dict(zip(
+    result = dict(zip(
         keys,
         file_io.read_lines(
-            file_path=file_path, 
-            begin=min(lines), 
+            file_path=file_path,
+            begin=min(lines),
             end=max(lines),
             sep=fmt['separator']
             )
         ))
+    non_numeric = set(fmt.get('non_numeric_cols', []))
+    if 'variable' in result:
+        result['variable'] = [v for v in result['variable'] if v not in non_numeric]
+    return result
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
