@@ -13,9 +13,9 @@ import pandas as pd
 from dataclasses import dataclass
 
 from domain.enums import DiagnosticType, StatisticType, VariableType
-from services.metadata.variable_metadata_service import SiteRuntimeConfig
-from services.metadata.file_mapping_service import FileGroup
-from services.metadata.metadata_conversion_service import resolve_variance_units
+from services.metadata.runtime_config_loader import SiteRuntimeConfig
+from services.metadata.file_group_builder import FileGroup
+from services.metadata.canonical_quantity_registry import resolve_variance_units
 
 
 @dataclass

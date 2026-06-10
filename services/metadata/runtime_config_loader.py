@@ -9,9 +9,9 @@ all information required to build a generic dataset from site data.
 
 Responsibilities:
     - structural validation of the site config YML
-      (via variable_structural_validator)
+      (via site_config_schema)
     - variable name parsing and syntax validation
-      (via variable_syntax_parser)
+      (via variable_name_parser)
     - canonical quantity resolution for each variable
       (via canonical_quantity_registry)
     - assembly of VariableDefinition and SiteRuntimeConfig objects
@@ -28,8 +28,8 @@ from pathlib import Path
 
 # -----------------------------------------------------------------------------
 
-from services.metadata.variable_structural_validator import validate_L1_config_structure
-from services.metadata.variable_syntax_parser import NameParser
+from services.metadata.site_config_schema import validate_L1_config_structure
+from services.metadata.variable_name_parser import NameParser
 from services.metadata.canonical_quantity_registry import build_canonical_quantity_registry
 from domain.data_models.metadata_classes import RawVariableMetadata, VariableDefinition
 from domain.enums import FileType, FluxSystemType, StatisticType, VariableType

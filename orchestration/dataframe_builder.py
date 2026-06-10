@@ -14,8 +14,8 @@ from typing import Callable
 import pandas as pd
 
 from domain.enums import DiagnosticType, StatisticType, VariableType
-from services.metadata.file_mapping_service import FileGroup
-from services.metadata.metadata_conversion_service import resolve_variance_units
+from services.metadata.file_group_builder import FileGroup
+from services.metadata.canonical_quantity_registry import resolve_variance_units
 from services.metadata.variable_registry import VariableSpec
 from services.data import raw_data_loader, transform_service
 from infrastructure.data_conditioning import condition_dataframe

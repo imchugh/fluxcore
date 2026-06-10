@@ -16,7 +16,26 @@ from functools import lru_cache
 from domain.data_models.metadata_classes import CanonicalQuantityMetadata
 from domain.enums import StatisticType, VariableType
 from services import config_loader
-from services.metadata.metadata_conversion_service import resolve_variance_units
+
+_VARIANCE_UNIT_MAP: dict[str, str] = {
+    'g^2/m^6':    'g/m^3',
+    'umol/mol':   'umol/mol',
+    'mg^2/m^6':   'mg/m^3',
+    'degC^2':     'degC',
+    'm^2/s^2':    'm/s',
+    'mmol^2/m^6': 'mmol/m^3',
+    'mmol/mol':   'mmol/mol',
+    'K^2':        'K',
+}
+
+
+def resolve_variance_units(units: str, to_stdev: bool = True) -> str:
+    """Convert between variance-form and stdev-form unit strings."""
+    mapping = _VARIANCE_UNIT_MAP if to_stdev else {v: k for k, v in _VARIANCE_UNIT_MAP.items()}
+    try:
+        return mapping[units]
+    except KeyError:
+        raise ValueError(f"No unit transform defined for unit '{units}'")
 
 ###############################################################################
 ### END IMPORTS ###

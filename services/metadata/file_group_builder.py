@@ -14,7 +14,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 
 from domain.enums import FileType
-from services.metadata.variable_metadata_service import SiteRuntimeConfig
+from services.metadata.runtime_config_loader import SiteRuntimeConfig
 from services.data import raw_data_loader
 from infrastructure import paths, file_io
 

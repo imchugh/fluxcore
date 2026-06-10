@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 from domain.enums import StatisticType
 from services.metadata.site_registry import SiteRegistry, SiteContext
-from services.metadata import file_mapping_service
+from services.metadata import file_group_builder
 from services.metadata.variable_registry import VariableSpec, build_variable_registry
 from orchestration.dataframe_builder import build_dataframe
 
@@ -184,7 +184,7 @@ def _build_result(
 
     runtime_cfg = ctx.runtime_config
 
-    file_groups = file_mapping_service.build_file_groups(runtime_cfg)
+    file_groups = file_group_builder.build_file_groups(runtime_cfg)
     for group in file_groups.values():
         group.validate()
 
