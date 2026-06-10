@@ -116,14 +116,16 @@ def _drop_non_numeric(df, file_format):
 
 # -----------------------------------------------------------------------------
 
-def get_data_adapter(system_type):
+def get_data_adapter(system_type: str):
 
-    adapters = {
-        "CSI": CSIDataAdapter(),
-        "LICOR": LicorDataAdapter()
-        }
+    format_map = {'CSI': 'TOA5', 'LICOR': 'EddyPro'}
+    file_format = format_map[system_type]
 
-    return adapters[system_type]
+    def load(file_path):
+        df = load_raw_data(file_path=file_path, file_format=file_format)
+        return df[~df.index.duplicated(keep='last')]
+
+    return load
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -147,14 +149,15 @@ def load_raw_header(file_path, file_format: str) -> list[list]:
 
 # -----------------------------------------------------------------------------
 
-def get_header_adapter(system_type):
+def get_header_adapter(system_type: str):
 
-    adapters = {
-        "CSI": CSIHeaderAdapter(),
-        "LICOR": LicorHeaderAdapter()
-        }
+    format_map = {'CSI': 'TOA5', 'LICOR': 'EddyPro'}
+    file_format = format_map[system_type]
 
-    return adapters[system_type]
+    def load(file_path):
+        return load_raw_header(file_path=file_path, file_format=file_format)
+
+    return load
 # -----------------------------------------------------------------------------
 
 ###############################################################################
@@ -162,60 +165,3 @@ def get_header_adapter(system_type):
 ###############################################################################
 
 
-###############################################################################
-### BEGIN CLASSES ###
-###############################################################################
-
-# -----------------------------------------------------------------------------
-
-class BaseAdapter:
-
-    def load(self, file_path):
-        raise NotImplementedError
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-class CSIDataAdapter(BaseAdapter):
-
-    def load(self, file_path):
-
-        df = load_raw_data(file_path=file_path, file_format="TOA5")
-        df = df[~df.index.duplicated(keep="last")]
-
-        return df        
-# -----------------------------------------------------------------------------    
-
-# -----------------------------------------------------------------------------
-    
-class LicorDataAdapter(BaseAdapter):
-
-    def load(self, file_path):
-
-        df = load_raw_data(file_path=file_path, file_format="EddyPro")
-        df = df[~df.index.duplicated(keep="last")]
-
-        return df
-# -----------------------------------------------------------------------------  
-
-# -----------------------------------------------------------------------------  
-
-class CSIHeaderAdapter(BaseAdapter):
-
-    def load(self, file_path):
-
-        return load_raw_header(file_path=file_path, file_format="TOA5")
-# ----------------------------------------------------------------------------- 
-
-# -----------------------------------------------------------------------------  
-
-class LicorHeaderAdapter(BaseAdapter):
-
-    def load(self, file_path):
-
-        return load_raw_header(file_path=file_path, file_format="EddyPro")
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END CLASSES ###
-###############################################################################

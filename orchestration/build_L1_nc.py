@@ -11,7 +11,6 @@ Created on Wed May  6 09:46:11 2026
 ###############################################################################
 
 import datetime
-import gc
 import pathlib
 import pandas as pd
 import numpy as np
@@ -103,9 +102,6 @@ def build(
         file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
         written.append(file_path)
 
-    del ds
-    gc.collect()
-
     return written
 # -----------------------------------------------------------------------------
 
@@ -173,11 +169,7 @@ def assign_crs_variable(ds):
 
     """
 
-    ds['crs'] = (
-        ['time', 'latitude', 'longitude'],
-        np.tile(np.nan, (len(ds.time), 1, 1)),
-        CRS_METADATA['coordinate_reference_system']
-        )
+    ds['crs'] = ([], np.int32(0), CRS_METADATA['coordinate_reference_system'])
     return ds
 # -----------------------------------------------------------------------------
 

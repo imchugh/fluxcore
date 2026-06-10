@@ -142,13 +142,13 @@ class CanonicalQuantityRegistry:
         elif statistic_type == StatisticType.VAR:
 
             attrs["standard_units"] = resolve_variance_units(
-                units=base.standard_units, from_variance=False
+                units=base.standard_units, to_stdev=False
                 )
 
             attrs["valid_input_units"] = [
                 resolve_variance_units(
                     units=units, 
-                    from_variance=False
+                    to_stdev=False
                     )
                 for units in attrs["valid_input_units"]
                 ]

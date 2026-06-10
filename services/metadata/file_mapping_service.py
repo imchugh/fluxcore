@@ -12,7 +12,6 @@ Created on Thu Mar  5 11:09:44 2026
 
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Set, Dict, List
 
 from domain.enums import FileType
 from services.metadata.variable_metadata_service import SiteRuntimeConfig
@@ -38,22 +37,22 @@ class FileGroup:
     """
     group: str
     master: Path
-    backups: List[Path]
+    backups: list[Path]
     file_format: str
-    expected_variables: Set[str] = field(default_factory=set)
-    _variables_by_file_cache: Dict[Path, Set[str]] = field(default_factory=dict, init=False, repr=False)
+    expected_variables: set[str] = field(default_factory=set)
+    _variables_by_file_cache: dict[Path, set[str]] = field(default_factory=dict, init=False, repr=False)
 
     # -------------------------------------------------------------------------
     
     @property
-    def all_files(self) -> List[Path]:
+    def all_files(self) -> list[Path]:
         return [self.master, *self.backups]
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     
     @property
-    def variables_by_file(self) -> Dict[Path, Set[str]]:
+    def variables_by_file(self) -> dict[Path, set[str]]:
         """
         Lazy evaluation: read headers only on first access and cache results.
         """
@@ -68,7 +67,7 @@ class FileGroup:
 
     # -------------------------------------------------------------------------
     
-    def validate(self) -> Dict[str, Set[str]]:
+    def validate(self) -> dict[str, set[str]]:
         """
         Compare expected variables vs discovered variables.
         Returns a dict with 'found' and 'missing' sets.
@@ -80,7 +79,7 @@ class FileGroup:
 
     # -------------------------------------------------------------------------
 
-    def files_for_variable(self, variable: str) -> List[Path]:
+    def files_for_variable(self, variable: str) -> list[Path]:
         """
         Return the list of files in which the variable was found.
         """
@@ -126,7 +125,7 @@ def get_variables_from_file(
     # Iterate over files
     rslt = set()
     for file in file_list:
-        rslt.update(header_adapter.load(file_path=file)['variable'])
+        rslt.update(header_adapter(file)['variable'])
     
     # Return a list
     return sorted(rslt)
@@ -134,7 +133,7 @@ def get_variables_from_file(
 
 # -----------------------------------------------------------------------------
 
-def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
+def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
     """
     Build FileGroup objects for all variable groups in the runtime config.
     """
@@ -143,7 +142,7 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> Dict[str, FileGroup]:
         stream="flux_slow",
         site=runtime_cfg.site_name
         )
-    groups: Dict[str, FileGroup] = {}
+    groups: dict[str, FileGroup] = {}
 
     for var_def in runtime_cfg.variables.values():
         for raw_var in var_def.raw_inputs:
