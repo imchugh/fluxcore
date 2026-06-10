@@ -119,8 +119,7 @@ def get_data_adapter(system_type: str):
     file_format = format_map[system_type]
 
     def load(file_path):
-        df = load_raw_data(file_path=file_path, file_format=file_format, drop_non_numeric=True)
-        return df[~df.index.duplicated(keep='last')]
+        return load_raw_data(file_path=file_path, file_format=file_format)
 
     return load
 # -----------------------------------------------------------------------------
