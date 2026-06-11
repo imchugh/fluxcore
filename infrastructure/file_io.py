@@ -344,7 +344,9 @@ def write_toa5_csv(
                 nan_mask = np.isnan(arr)
                 formatted = np.empty(len(arr), dtype=object)
                 formatted[nan_mask]  = f'"{_NA}"'
-                formatted[~nan_mask] = [_FLOAT_FMT % v for v in arr[~nan_mask]]
+                formatted[~nan_mask] = [
+                    (_FLOAT_FMT % v).replace('e', 'E') for v in arr[~nan_mask]
+                ]
                 col_fmt.append(formatted.tolist())
 
         for row in zip(*col_fmt):

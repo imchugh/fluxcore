@@ -82,13 +82,16 @@ def load_raw_data(
 # -----------------------------------------------------------------------------    
 
 def _TOA5_date_formatter(df):
-    
+
     dttm = pd.to_datetime(
         df['TIMESTAMP'],
         format=DATA_TIME_FORMAT,
         errors="coerce"
         )
-    return df.set_index(keys=pd.Index(data=dttm, name=TIME_INDEX_NAME))
+    return (
+        df.drop(columns=['TIMESTAMP'])
+        .set_index(pd.Index(data=dttm, name=TIME_INDEX_NAME))
+    )
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -142,8 +145,15 @@ def load_raw_header(file_path, file_format: str) -> dict:
             )
         ))
     non_numeric = set(fmt.get('non_numeric_cols', []))
-    if 'variable' in result:
-        result['variable'] = [v for v in result['variable'] if v not in non_numeric]
+    if 'variable' in result and non_numeric:
+        drop_indices = {
+            i for i, v in enumerate(result['variable']) if v in non_numeric
+        }
+        for key in ('variable', 'units', 'sampling'):
+            if key in result:
+                result[key] = [
+                    v for i, v in enumerate(result[key]) if i not in drop_indices
+                ]
     return result
 # -----------------------------------------------------------------------------
 
