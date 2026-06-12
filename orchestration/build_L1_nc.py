@@ -314,8 +314,7 @@ def serialize_inst_history(ds, year):
             use_start = max(year_start, start)
             use_end = min(year_end, end)
             serialised.append(
-                f'{inst}: {use_start.strftime(DATA_TIME_FORMAT)}'
-                f' - {use_end.strftime(DATA_TIME_FORMAT)}'
+                f'({inst},{use_start.isoformat()},{use_end.isoformat()})'
                 )
             if last_end is None or use_end > last_end:
                 last_end = use_end
@@ -325,7 +324,7 @@ def serialize_inst_history(ds, year):
             ds[var].attrs['instrument'] = last_inst
             del ds[var].attrs['instrument_history']
         else:
-            ds[var].attrs['instrument_history'] = ', '.join(serialised)
+            ds[var].attrs['instrument_history'] = '|'.join(serialised)
             if last_inst is not None:
                 ds[var].attrs['instrument'] = last_inst
 
