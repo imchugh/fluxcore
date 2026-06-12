@@ -26,6 +26,8 @@ import pathlib
 
 import pandas as pd
 
+from collections.abc import Callable
+
 from domain.constants import DATA_TIME_FORMAT
 from infrastructure import data_conditioning, file_io
 
@@ -93,6 +95,7 @@ def write_toa5(
     headers: list[list],
     file_path: str | pathlib.Path,
     info: list[str] | None = None,
+    timestamp_formatter: Callable | None = None,
 ) -> None:
     """Write data and headers to a TOA5-format file.
 
@@ -120,6 +123,12 @@ def write_toa5(
             ``DEFAULT_TOA5_INFO`` is used:
                 ['TOA5', 'NoStation', 'CR1000', '9999', 'cr1000.std.99.99',
                  'CPU:noprogram.cr1', '9999', 'default_table']
+        timestamp_formatter:
+            Optional callable applied to each index value to produce the
+            TIMESTAMP string.  Defaults to
+            ``lambda ts: ts.strftime(DATA_TIME_FORMAT)`` (second precision).
+            Pass ``infrastructure.datetime_utils.format_fast_timestamp`` for
+            high-frequency data with sub-second timestamps.
 
     Returns:
         None.
@@ -174,7 +183,11 @@ def write_toa5(
     data = data.copy()
 
     # Insert TIMESTAMP from the DatetimeIndex as the first column.
-    data.insert(0, _TIMESTAMP_COL, data.index.strftime(DATA_TIME_FORMAT))
+    if timestamp_formatter is None:
+        timestamps = data.index.strftime(DATA_TIME_FORMAT)
+    else:
+        timestamps = data.index.map(timestamp_formatter)
+    data.insert(0, _TIMESTAMP_COL, timestamps)
 
     # Float columns whose non-NaN values are all whole numbers should be
     # written as integers (no decimal point), matching the original logger
