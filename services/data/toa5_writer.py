@@ -30,6 +30,7 @@ from collections.abc import Callable
 
 from domain.constants import DATA_TIME_FORMAT
 from infrastructure import data_conditioning, file_io
+from infrastructure.datetime_utils import format_fast_timestamp
 
 ###############################################################################
 ### END IMPORTS ###
@@ -125,10 +126,11 @@ def write_toa5(
                  'CPU:noprogram.cr1', '9999', 'default_table']
         timestamp_formatter:
             Optional callable applied to each index value to produce the
-            TIMESTAMP string.  Defaults to
-            ``lambda ts: ts.strftime(DATA_TIME_FORMAT)`` (second precision).
-            Pass ``infrastructure.datetime_utils.format_fast_timestamp`` for
-            high-frequency data with sub-second timestamps.
+            TIMESTAMP string.  When None (default), sub-second precision is
+            detected automatically: if any index value has a non-zero
+            microsecond component, ``format_fast_timestamp`` is used;
+            otherwise ``strftime(DATA_TIME_FORMAT)`` (second precision).
+            Pass an explicit callable only to override this behaviour.
 
     Returns:
         None.
@@ -183,10 +185,13 @@ def write_toa5(
     data = data.copy()
 
     # Insert TIMESTAMP from the DatetimeIndex as the first column.
-    if timestamp_formatter is None:
-        timestamps = data.index.strftime(DATA_TIME_FORMAT)
-    else:
+    # Auto-detect sub-second precision when no explicit formatter is given.
+    if timestamp_formatter is not None:
         timestamps = data.index.map(timestamp_formatter)
+    elif data.index.microsecond.any():
+        timestamps = data.index.map(format_fast_timestamp)
+    else:
+        timestamps = data.index.strftime(DATA_TIME_FORMAT)
     data.insert(0, _TIMESTAMP_COL, timestamps)
 
     # Float columns whose non-NaN values are all whole numbers should be
