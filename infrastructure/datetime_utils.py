@@ -192,12 +192,12 @@ def get_timezone(lat: float, lon: float) -> str:
 # -----------------------------------------------------------------------------
 
 def get_UTC_offset(
-    tz_name: str, 
-    date: datetime=None, 
-    offset_as_delta: bool=False, 
+    tz_name: str,
+    date: datetime=None,
+    offset_as_delta: bool=False,
     dst: bool=False
     ) -> float | timedelta | None:
-    
+
     if date is None:
         date = datetime.now()
     tz = ZoneInfo(tz_name)
@@ -207,4 +207,27 @@ def get_UTC_offset(
     if offset_as_delta:
         return offset
     return offset.total_seconds() / 3600 if offset else None
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
+def format_fast_timestamp(ts: datetime) -> str:
+    """
+    Format a sub-second datetime as a Campbell TOA5 timestamp string.
+
+    Rounds to the nearest 100 ms and appends tenths of a second when
+    non-zero (e.g. '2025-01-01 00:00:00.1'). Use for high-frequency data
+    where DATA_TIME_FORMAT would lose sub-second precision.
+
+    Args:
+        ts: datetime, typically a pandas Timestamp from a high-frequency index.
+
+    Returns:
+        Formatted string compatible with the Campbell TOA5 timestamp column.
+    """
+    rounded = ts + timedelta(microseconds=500)
+    tenths = rounded.microsecond // 100_000
+    if tenths == 0:
+        return f'{rounded:%Y-%m-%d %H:%M:%S}'
+    return f'{rounded:%Y-%m-%d %H:%M:%S}.{tenths}'
 # -----------------------------------------------------------------------------
