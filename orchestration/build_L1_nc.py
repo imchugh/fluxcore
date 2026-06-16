@@ -296,39 +296,109 @@ def serialize_inst_history(ds, year):
 
     var_list = [var for var in ds.variables if var not in ds.dims]
     for var in var_list:
-        if 'instrument_history' not in ds[var].attrs:
+        attrs = ds[var].attrs
+
+        # Serialize compound instrument dicts to strings for NetCDF
+        if isinstance(attrs.get('instrument'), dict):
+            attrs['instrument'] = ','.join(
+                f'{alias}>{name}' for alias, name in attrs['instrument'].items()
+                )
+
+        if 'instrument_history' not in attrs:
             continue
 
-        serialised = []
-        last_inst = None
-        last_end = None
-        for inst, dates in ds[var].attrs['instrument_history'].items():
+        history = attrs['instrument_history']
+        first_val = next(iter(history.values()))
 
-            dates = dict(dates)
-            start = dates['start_date'] if dates['start_date'] is not None else year_start
-            end = dates['end_date'] if dates['end_date'] is not None else year_end
-
-            if end < year_start or start > year_end:
-                continue
-
-            use_start = max(year_start, start)
-            use_end = min(year_end, end)
-            serialised.append(
-                f'({inst},{use_start.isoformat()},{use_end.isoformat()})'
+        if 'start_date' in first_val:
+            # Simple: {inst_name: {start_date, end_date}}
+            serialised, last_inst = _serialise_simple_history(
+                history, year_start, year_end
                 )
-            if last_end is None or use_end > last_end:
-                last_end = use_end
-                last_inst = inst
-
-        if len(serialised) == 1:
-            ds[var].attrs['instrument'] = last_inst
-            del ds[var].attrs['instrument_history']
         else:
-            ds[var].attrs['instrument_history'] = '|'.join(serialised)
+            # Compound: {alias: {inst_name: {start_date, end_date}}}
+            serialised, last_inst = _serialise_compound_history(
+                history, year_start, year_end
+                )
+
+        if not serialised:
+            del attrs['instrument_history']
+        elif len(serialised) == 1 and 'start_date' in first_val:
+            # Simple history: only one instrument active this year — collapse to attr
+            attrs['instrument'] = last_inst
+            del attrs['instrument_history']
+        elif 'start_date' in first_val:
+            attrs['instrument_history'] = '|'.join(serialised)
             if last_inst is not None:
-                ds[var].attrs['instrument'] = last_inst
+                attrs['instrument'] = last_inst
+        else:
+            # Compound history: aliases separated by ';'
+            attrs['instrument_history'] = ';'.join(serialised)
+            if last_inst is not None:
+                # Merge updated aliases into the existing serialised instrument string
+                current = dict(
+                    item.split('>') for item in attrs.get('instrument', '').split(',')
+                    if '>' in item
+                    )
+                current.update(
+                    dict(item.split('>') for item in last_inst.split(',') if '>' in item)
+                    )
+                attrs['instrument'] = ','.join(f'{a}>{n}' for a, n in current.items())
 
     return ds
+
+
+def _serialise_simple_history(
+        history: dict,
+        year_start,
+        year_end,
+        ) -> tuple[list[str], str | None]:
+    """Serialise a simple instrument history to a list of formatted strings."""
+
+    serialised = []
+    last_inst = None
+    last_end = None
+    for inst, dates in history.items():
+        dates = dict(dates)
+        start = dates['start_date'] if dates['start_date'] is not None else year_start
+        end = dates['end_date'] if dates['end_date'] is not None else year_end
+        if end < year_start or start > year_end:
+            continue
+        use_start = max(year_start, start)
+        use_end = min(year_end, end)
+        serialised.append(f'({inst},{use_start.isoformat()},{use_end.isoformat()})')
+        if last_end is None or use_end > last_end:
+            last_end = use_end
+            last_inst = inst
+    return serialised, last_inst
+
+
+def _serialise_compound_history(
+        history: dict,
+        year_start,
+        year_end,
+        ) -> tuple[list[str], str | None]:
+    """Serialise a compound instrument history keyed by alias.
+
+    Produces one segment per alias: alias:(inst,start,end)|(inst,start,end)
+    Segments joined with ';' by the caller. Returns last_inst as a
+    comma-separated alias:name string for the most recently used instruments.
+    """
+
+    alias_segments = []
+    last_by_alias: dict[str, str] = {}
+    for alias, inst_history in history.items():
+        parts, last_inst = _serialise_simple_history(inst_history, year_start, year_end)
+        if parts:
+            alias_segments.append(f'{alias}>{"|".join(parts)}')
+            if last_inst is not None:
+                last_by_alias[alias] = last_inst
+
+    last_inst_str = (
+        ','.join(f'{a}>{n}' for a, n in last_by_alias.items())
+        if last_by_alias else None
+        )
+    return alias_segments, last_inst_str
 #------------------------------------------------------------------------------
 
 ###############################################################################

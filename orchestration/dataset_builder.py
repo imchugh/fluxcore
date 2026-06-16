@@ -247,11 +247,19 @@ def _history_from_instruments(
         var_specs: list[VariableSpec],
         ) -> dict[str, dict] | None:
     """
-    Return instrument changeover history, or None for single-instrument variables.
+    Return instrument changeover history, or None if no instrument changed.
 
-    Dates are always explicit for multi-instrument variables (required for the
+    For simple (string) instruments: keyed by instrument name.
+    For compound (dict) instruments: keyed by alias, containing per-instrument
+    histories only for aliases where the instrument actually changed. Aliases
+    that were constant across all periods are omitted.
+
+    Dates are always explicit for multi-period variables (required for the
     merge step), so no defaults are needed.
     """
+
+    if isinstance(var_specs[0].instrument, dict):
+        return _history_from_compound_instruments(var_specs)
 
     instruments = {spec.instrument for spec in var_specs}
     if len(instruments) == 1:
@@ -260,6 +268,29 @@ def _history_from_instruments(
         spec.instrument: {'start_date': spec.begin, 'end_date': spec.end}
         for spec in var_specs
         }
+
+
+def _history_from_compound_instruments(
+        var_specs: list[VariableSpec],
+        ) -> dict[str, dict] | None:
+    """
+    Per-alias history for compound quantities. Only aliases where the
+    instrument changed across periods are included.
+    """
+
+    aliases = list(var_specs[0].instrument.keys())
+    result = {}
+    for alias in aliases:
+        alias_instruments = {spec.instrument[alias] for spec in var_specs}
+        if len(alias_instruments) > 1:
+            result[alias] = {
+                spec.instrument[alias]: {
+                    'start_date': spec.begin,
+                    'end_date': spec.end,
+                    }
+                for spec in var_specs
+                }
+    return result if result else None
 
 
 def _canonical_output_name(var_spec: VariableSpec) -> str:
