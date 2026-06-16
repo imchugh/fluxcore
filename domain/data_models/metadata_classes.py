@@ -35,7 +35,7 @@ class RawVariableMetadata:
     raw_name: str
     raw_units: str
     file: str
-    instrument: str
+    instrument: str | dict[str, str]
     begin: Optional[Union[datetime, str]] = None
     end: Optional[Union[datetime, str]] = None
 # -----------------------------------------------------------------------------
@@ -77,7 +77,7 @@ class VariableDefinition:
     variable_type: enums.VariableType
 
     # Physical metadata
-    instrument: str
+    instrument: str | dict[str, str]
     height: float
 
     # Structural metadata

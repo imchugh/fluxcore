@@ -137,14 +137,7 @@ class SiteRuntimeConfig:
 
     # -------------------------------------------------------------------------
     
-    @cached_property
-    def sonic_instrument(self) -> str | None:
-        return compute_sonic_instrument(self.variables)
 
-    @cached_property
-    def irga_instrument(self) -> str | None:
-        return compute_irga_instrument(self.variables)
-    
 # -----------------------------------------------------------------------------
 
 
@@ -157,80 +150,6 @@ class SiteRuntimeConfig:
 ###############################################################################
 ### BEGIN FUNCTIONS ###
 ###############################################################################
-
-# -----------------------------------------------------------------------------
-
-def compute_sonic_instrument(
-        variables: dict[str, VariableDefinition]
-        ) -> str | None:
-    """
-    Get the sonic instrument.
-                                                                    
-    Args:
-        variables: dict collection of variable definitions.
-
-    Returns:
-        name of instrument.
-
-    """
-    
-    return _compute_instrument(
-        variables=variables, 
-        instrument_substring='_SONIC'
-        )
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-def compute_irga_instrument(
-        variables: dict[str, VariableDefinition],
-        ) -> str | None:
-
-    """
-    Get the irga instrument.
-                                                                    
-    Args:
-        variables: dict collection of variable definitions.
-
-    Returns:
-        name of instrument.
-
-    """
-    
-    return _compute_instrument(
-        variables=variables, 
-        instrument_substring='_IRGA'
-        )
-# -----------------------------------------------------------------------------
-    
-# -----------------------------------------------------------------------------
-
-def _compute_instrument(
-        variables: dict[str, VariableDefinition],
-        instrument_substring: str,
-        ) -> str | None:
-    """
-    Get the instrument from the dict of variable definitions (note that
-    validation function has already enforced only a single instrument can be
-    defined for SONIC or IRGA variables - therefore no error raising).
-
-    Args:
-        variables: dict collection of variable definitions.
-
-    Returns:
-        name of instrument.
-
-    """
-    
-    instruments = set()
-    for name, var in variables.items():
-        if instrument_substring in name:
-            for raw_input in var.raw_inputs:
-                instruments.add(raw_input.instrument)
-    return next(iter(instruments), None)
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 
@@ -366,9 +285,6 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
             for raw_name, cfg in raw_cfg.input_variables.items()
         )
 
-        # instrument and diag_type are validated to be consistent across
-        # all inputs (enforced by validate_L1_config_structure), so take
-        # from the first input explicitly rather than relying on loop-scope.
         first_input = next(iter(raw_cfg.input_variables.values()))
 
         site_variables[variable] = VariableDefinition(

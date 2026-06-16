@@ -21,7 +21,6 @@ from infrastructure.file_io import read_yml
 from domain.enums import (
     StatisticType, FileType, FluxSystemType, VariableType, DiagnosticType
     )
-
 ###############################################################################
 ### END IMPORTS ###
 ###############################################################################
@@ -47,7 +46,7 @@ class InputVariableConfig(BaseModel):
     # Define attributes
 
     # Mandatory
-    instrument: str
+    instrument: str | dict[str, str]
     file: str
     units: str
 
@@ -265,8 +264,6 @@ class SiteConfig(BaseModel):
 
     # class-level constants for validation
     diag_prefixes: ClassVar[list[str]] = ["Diag_"]
-    sonic_suffix: ClassVar[str] = "_SONIC"
-    irga_suffix: ClassVar[str] = "_IRGA"
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
@@ -308,32 +305,6 @@ class SiteConfig(BaseModel):
                             f"Counter variable '{var_name}' input "
                             f"'{input_name}' must specify diag_type"
                             )
-        return self
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-    @model_validator(mode="after")
-    def enforce_instrument_consistency(self):
-        
-        sonic_instruments = set()
-        irga_instruments = set()
-
-        for var_name, var_cfg in self.variables.items():
-            for input_cfg in var_cfg.input_variables.values():
-                if self.sonic_suffix in var_name:
-                    sonic_instruments.add(input_cfg.instrument)
-                if self.irga_suffix in var_name:
-                    irga_instruments.add(input_cfg.instrument)
-
-        if len(sonic_instruments) > 1:
-            raise ValueError(
-                f"SONIC variables must use the same instrument; found {sonic_instruments}"
-            )
-        if len(irga_instruments) > 1:
-            raise ValueError(
-                f"IRGA variables must use the same instrument; found {irga_instruments}"
-            )
-
         return self
     # -------------------------------------------------------------------------
 
