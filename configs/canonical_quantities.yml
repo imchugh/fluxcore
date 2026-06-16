@@ -68,7 +68,7 @@ CO2c:
   - mg/m^3
   - mmol/m^3
 CT:
-  long_name: Covariance of H2O and T
+  long_name: Covariance of CO2 and T
   plausible_max: null
   plausible_min: null
   standard_name: null
