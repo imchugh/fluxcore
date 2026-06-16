@@ -323,26 +323,25 @@ def serialize_inst_history(ds, year):
 
         if not serialised:
             del attrs['instrument_history']
-        elif len(serialised) == 1 and 'start_date' in first_val:
-            # Simple history: only one instrument active this year — collapse to attr
-            attrs['instrument'] = last_inst
-            del attrs['instrument_history']
         elif 'start_date' in first_val:
-            attrs['instrument_history'] = '|'.join(serialised)
-            if last_inst is not None:
+            # Simple history
+            if len(serialised) == 1:
                 attrs['instrument'] = last_inst
+                del attrs['instrument_history']
+            else:
+                attrs['instrument_history'] = '|'.join(serialised)
+                if last_inst is not None:
+                    attrs['instrument'] = last_inst
         else:
             # Compound history: aliases separated by ';'
+            # last_inst is a dict {alias: name} — merge into existing instrument string
             attrs['instrument_history'] = ';'.join(serialised)
-            if last_inst is not None:
-                # Merge updated aliases into the existing serialised instrument string
+            if last_inst:
                 current = dict(
                     item.split('>') for item in attrs.get('instrument', '').split(',')
                     if '>' in item
                     )
-                current.update(
-                    dict(item.split('>') for item in last_inst.split(',') if '>' in item)
-                    )
+                current.update(last_inst)
                 attrs['instrument'] = ','.join(f'{a}>{n}' for a, n in current.items())
 
     return ds
@@ -377,12 +376,12 @@ def _serialise_compound_history(
         history: dict,
         year_start,
         year_end,
-        ) -> tuple[list[str], str | None]:
+        ) -> tuple[list[str], dict[str, str]]:
     """Serialise a compound instrument history keyed by alias.
 
-    Produces one segment per alias: alias:(inst,start,end)|(inst,start,end)
-    Segments joined with ';' by the caller. Returns last_inst as a
-    comma-separated alias:name string for the most recently used instruments.
+    Produces one segment per alias: alias>(inst,start,end)|(inst,start,end)
+    Segments joined with ';' by the caller. Returns last_by_alias as a
+    {alias: instrument_name} dict for the most recently used instruments.
     """
 
     alias_segments = []
@@ -394,11 +393,7 @@ def _serialise_compound_history(
             if last_inst is not None:
                 last_by_alias[alias] = last_inst
 
-    last_inst_str = (
-        ','.join(f'{a}>{n}' for a, n in last_by_alias.items())
-        if last_by_alias else None
-        )
-    return alias_segments, last_inst_str
+    return alias_segments, last_by_alias
 #------------------------------------------------------------------------------
 
 ###############################################################################
