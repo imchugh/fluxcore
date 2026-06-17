@@ -17,7 +17,6 @@ import numpy as np
 
 # -----------------------------------------------------------------------------
 
-from domain import time_utils
 from domain.constants import SITE_PLACEHOLDER, DATA_TIME_FORMAT, NC_ENCODING
 from infrastructure import file_io, paths
 from orchestration import dataset_builder
@@ -121,12 +120,13 @@ def build_L1_ds_complete(ds):
 def build_L1_ds_by_year(ds, year):
 
     # Get network-specific valid year data bounds
+    time_step = ds.attrs['time_step']
     time_bounds = [
-        bound.strftime(DATA_TIME_FORMAT) for bound in
-        time_utils.get_data_year_bounds(
-            year=year, time_step=ds.attrs['time_step']
-            )
-        ]
+        bound.strftime(DATA_TIME_FORMAT) for bound in (
+            datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step),
+            datetime.datetime(year + 1, 1, 1),
+        )
+    ]
 
     year_ds = ds.sel(time=slice(*time_bounds))
     year_ds = assign_variable_flags(year_ds)
@@ -288,9 +288,9 @@ def serialize_units(ds):
 
 def serialize_inst_history(ds, year):
 
-    year_start, year_end = time_utils.get_data_year_bounds(
-        year=year, time_step=ds.attrs['time_step']
-        )
+    time_step = ds.attrs['time_step']
+    year_start = datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step)
+    year_end = datetime.datetime(year + 1, 1, 1)
     year_start = max(year_start, pd.Timestamp(ds.time.values[0]).to_pydatetime())
     year_end = min(year_end, pd.Timestamp(ds.time.values[-1]).to_pydatetime())
 
