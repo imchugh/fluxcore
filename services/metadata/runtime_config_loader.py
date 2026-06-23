@@ -10,6 +10,8 @@ all information required to build a generic dataset from site data.
 Responsibilities:
     - structural validation of the site config YML
       (via site_config_schema)
+    - instrument name validation against the TERN instrument registry
+      (via instrument_registry)
     - variable name parsing and syntax validation
       (via variable_name_parser)
     - canonical quantity resolution for each variable
@@ -29,6 +31,7 @@ from pathlib import Path
 # -----------------------------------------------------------------------------
 
 from services.metadata.site_config_schema import validate_L1_config_structure
+from services.metadata.site_config_schema import SiteConfig
 from services.metadata.variable_name_parser import NameParser
 from services.metadata.canonical_quantity_registry import build_canonical_quantity_registry
 from domain.data_models.metadata_classes import RawVariableMetadata, VariableDefinition
@@ -125,18 +128,18 @@ class SiteRuntimeConfig:
 
     @cached_property
     def input_file_groups(self) -> tuple[str, ...]:
-    
+
         rslt = {
             raw_var.file
             for attrs in self.variables.values()
             for raw_var in attrs.raw_inputs
             if raw_var.file
             }
-    
+
         return tuple(sorted(rslt))
 
     # -------------------------------------------------------------------------
-    
+
 
 # -----------------------------------------------------------------------------
 
@@ -196,42 +199,71 @@ def _check_name_config_consistency(
 
 # -----------------------------------------------------------------------------
 
-def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:  
+def _validate_instrument_names(validated_config: SiteConfig) -> None:
     """
-    Assemble the runtime_config class.
+    Check every instrument name in the config against the TERN instrument
+    registry. Collects all failures before raising so the caller sees the
+    complete list of unknown instruments in one pass.
 
     Args:
-        file_path: absolute path to file.
+        validated_config: structurally-validated SiteConfig.
 
     Raises:
-        ValueError: raised if any variable names in the config file are not 
-        found in the canonical variable definitions.
-
-    Returns:
-        the runtime_config class
-
+        ValueError: if any instrument name is not recognised by the registry.
     """
 
-    # Initialise parser
-    name_parser = NameParser()
-    
-    # Load canonical metadata
-    canonical_metadata = build_canonical_quantity_registry()
-    
-    # Validate site-level configuration file
-    validated_config = validate_L1_config_structure(file=file_path)
+    # Deferred to avoid circular import:
+    # instrument_registry → site_metadata_repository → site_registry → here
+    from services.metadata import instrument_registry
 
-    # Load custom metadata
+    errors = []
+    for variable, var_cfg in validated_config.variables.items():
+        for raw_name, input_cfg in var_cfg.input_variables.items():
+            inst = input_cfg.instrument
+            names = list(inst.values()) if isinstance(inst, dict) else [inst]
+            for name in names:
+                if not instrument_registry.is_valid_instrument(name):
+                    errors.append(
+                        f"Variable '{variable}' input '{raw_name}': "
+                        f"unknown instrument '{name}'"
+                        )
+
+    if errors:
+        raise ValueError(
+            f"Instrument validation failed for '{validated_config.site}':\n"
+            + "\n".join(f"  {e}" for e in errors)
+            )
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
+def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
+    """
+    Build a SiteRuntimeConfig from a structurally- and semantically-validated
+    SiteConfig. Performs name-syntax, quantity-existence, and units checks as
+    part of assembly, raising on the first failure found.
+
+    Args:
+        validated_config: structurally-validated SiteConfig (instrument names
+            already verified by _validate_instrument_names).
+
+    Returns:
+        Immutable SiteRuntimeConfig.
+    """
+
+    name_parser = NameParser()
+    canonical_metadata = build_canonical_quantity_registry()
+
     custom_metadata = (
         validated_config.custom_metadata.model_dump()
         if validated_config.custom_metadata
         else None
         )
 
-    # Build VariableDefinitions
     site_variables = {}
     for variable, raw_cfg in validated_config.variables.items():
-        
+
         # Parse the variable name (syntax validation)
         parsed_name_elems = name_parser.parse_variable_name(variable_name=variable)
 
@@ -301,7 +333,6 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
             diag_type=first_input.diag_type,
             )
 
-    # Return immutable SiteRuntimeConfig object
     return SiteRuntimeConfig(
         site_name=validated_config.site,
         file_format_default=validated_config.file_formats.default,
@@ -311,9 +342,33 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
         custom_metadata=custom_metadata,
         variables=site_variables
         )
-# -----------------------------------------------------------------------------    
-    
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
+def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
+    """
+    Assemble a SiteRuntimeConfig from a site YAML config file.
+
+    Three phases:
+        1. Structural validation  — YAML schema (site_config_schema)
+        2. Instrument validation  — all instrument names against TERN registry
+        3. Build                  — name syntax, quantity/units checks, assembly
+
+    Args:
+        file_path: absolute path to the site config YAML.
+
+    Returns:
+        Immutable SiteRuntimeConfig.
+    """
+
+    validated_config = validate_L1_config_structure(file=file_path)
+    _validate_instrument_names(validated_config)
+    return _build_runtime_config(validated_config)
+
+# -----------------------------------------------------------------------------
+
 ###############################################################################
 ### END FUNCTIONS ###
 ###############################################################################
-    
