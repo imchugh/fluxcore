@@ -52,9 +52,8 @@ class SiteRuntimeConfig:
 
     site_name: str
 
-    # Store FILE FORMATS, not extensions
-    file_format_default: str
-    file_format_overrides: dict[str, str]
+    # Store FILE FORMATS, not extensions; keyed by file stem
+    file_formats: dict[str, str]
 
     flux_system: FluxSystemType
     flux_file: str
@@ -75,10 +74,7 @@ class SiteRuntimeConfig:
             e.g. 'CSI'
         """
 
-        return self.file_format_overrides.get(
-            file_group,
-            self.file_format_default
-            )
+        return self.file_formats[file_group]
 
     # -------------------------------------------------------------------------
 
@@ -335,8 +331,7 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
 
     return SiteRuntimeConfig(
         site_name=validated_config.site,
-        file_format_default=validated_config.file_formats.default,
-        file_format_overrides=validated_config.file_formats.overrides,
+        file_formats=validated_config.file_formats,
         flux_system=validated_config.flux_system,
         flux_file=validated_config.flux_file,
         custom_metadata=custom_metadata,

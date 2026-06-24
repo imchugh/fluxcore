@@ -15,7 +15,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator, ValidationError
 
 from infrastructure.file_io import read_yml
 from domain.enums import (
@@ -133,43 +133,6 @@ class CustomMetadataConfig(BaseModel):
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-class FileTypesConfig(BaseModel):
-    """Define the architecture / rules for validation of file_types"""
-
-    # -------------------------------------------------------------------------
-    # Define attributes
-    
-    default: str
-    overrides: dict[str, str] = Field(default_factory=dict)
-    # -------------------------------------------------------------------------
-    
-    # -------------------------------------------------------------------------
-    @field_validator("default")
-    def validate_default(cls, v):
-        """Ensure that passed file type is allowed"""
-        
-        if v not in VALID_FILE_TYPES:
-            raise ValueError(
-                f"default file type must be one of {VALID_FILE_TYPES}")
-        return v
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-    @field_validator("overrides")
-    def validate_overrides(cls, v):
-        """Ensure that passed file type is allowed"""
-        
-        invalid = {
-            k: val for k, val in v.items() if val not in VALID_FILE_TYPES
-            }
-        if invalid:
-            raise ValueError(
-                f"override file type must be one of {VALID_FILE_TYPES}"
-                )
-        return v
-    # -------------------------------------------------------------------------
-    
-# -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 # Output-level variable configuration
@@ -255,7 +218,7 @@ class SiteConfig(BaseModel):
     # Define attributes
 
     site: str
-    file_formats: FileTypesConfig
+    file_formats: dict[str, str]
     flux_system: FluxSystemType
     flux_file: str
     variables: dict[str, VariableConfig]
@@ -267,29 +230,16 @@ class SiteConfig(BaseModel):
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
-    @model_validator(mode="after")
-    def enforce_file_type_consistency(self):
-        """
-        Accumulate file groups and ensure any files referenced in format 
-        overrides occur in input variable declarations
-        """
-        
-        used_files = {
-            input_cfg.file
-            for var_cfg in self.variables.values()
-            for input_cfg in var_cfg.input_variables.values()
-            }
-    
-        overrides = set(self.file_formats.overrides.keys())
-    
-        # overrides must refer to real files
-        invalid = overrides - used_files
+    @field_validator("file_formats")
+    @classmethod
+    def validate_file_formats(cls, v: dict[str, str]) -> dict[str, str]:
+        invalid = {k: val for k, val in v.items() if val not in VALID_FILE_TYPES}
         if invalid:
             raise ValueError(
-                f"Overrides specified for unused files: {invalid}"
+                f"file_formats values must be one of {VALID_FILE_TYPES}; "
+                f"invalid entries: {invalid}"
             )
-    
-        return self
+        return v
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
