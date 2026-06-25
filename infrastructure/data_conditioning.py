@@ -6,7 +6,10 @@ Created on Tue Mar 17 08:43:15 2026
 @author: imchugh
 """
 
+import numpy as np
 import pandas as pd
+from numpy.typing import ArrayLike
+
 
 
 # -----------------------------------------------------------------------------
@@ -90,3 +93,24 @@ def condition_dataframe(
     interval = interval_out or interval_in
     return df.resample(f'{interval}min').asfreq()
 # -----------------------------------------------------------------------------
+
+def apply_linear_correction(
+    series: ArrayLike, slope: float = 1.0, intercept: float = 0.0
+    ) -> ArrayLike:
+
+    index = series.index if isinstance(series, pd.Series) else None
+    result = np.array(series, dtype=float) * slope + intercept
+    return pd.Series(result, index=index) if index is not None else result
+
+
+def apply_range_limits(
+    series: ArrayLike, lower_limit: float = None, upper_limit: float = None
+    ) -> ArrayLike:
+
+    index = series.index if isinstance(series, pd.Series) else None
+    result = np.array(series, dtype=float)
+    if lower_limit is not None:
+        result[result < lower_limit] = np.nan
+    if upper_limit is not None:
+        result[result > upper_limit] = np.nan
+    return pd.Series(result, index=index) if index is not None else result

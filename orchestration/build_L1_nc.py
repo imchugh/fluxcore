@@ -36,8 +36,8 @@ CRS_METADATA = config_loader.load_config_file_from_name(name='nc_dim_attrs')
 
 VARIABLE_NC_ATTRS = {
     'units', 'long_name', 'standard_name',
-    'height', 'height_range', 'instrument', 'instrument_history',
-    'statistic_type',
+    'height', 'height_range', 'instrument', 'instrument_history', 
+    'instrument_uri', 'statistic_type',
     }
 
 ###############################################################################
@@ -132,6 +132,7 @@ def build_L1_ds_by_year(ds, year):
     year_ds = assign_variable_flags(year_ds)
     year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
     year_ds = filter_variable_attrs(ds=year_ds)
+    year_ds = serialize_uri(ds=ds)
     year_ds = serialize_inst_history(ds=year_ds, year=year)
     year_ds = serialize_units(ds=year_ds)
 
@@ -285,6 +286,18 @@ def serialize_units(ds):
 
     return ds
 
+def serialize_uri(ds):
+    
+    var_list = [var for var in ds.variables if var not in ds.dims]
+    for var in var_list:
+        attrs = ds[var].attrs
+        
+        if isinstance(attrs.get('instrument_uri'), dict):
+            attrs['instrument_uri'] = ','.join(
+                f'{alias}>{uri}' for alias, uri in attrs['instrument_uri'].items()
+                )
+        
+    return ds
 
 def serialize_inst_history(ds, year):
 
