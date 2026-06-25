@@ -309,9 +309,9 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
                 file=cfg.file,
                 begin=cfg.begin,
                 end=cfg.end,
-            )
+                )
             for raw_name, cfg in raw_cfg.input_variables.items()
-        )
+            )
 
         first_input = next(iter(raw_cfg.input_variables.values()))
 

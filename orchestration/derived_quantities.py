@@ -167,7 +167,10 @@ def _group_by_instrument_height(
         qty = attrs.get('quantity')
         if qty not in _HUMIDITY_QUANTITIES:
             continue
-        key = (attrs['instrument'], attrs['height'])
+        instrument = attrs['instrument']
+        if isinstance(instrument, dict):
+            instrument = frozenset(instrument.items())
+        key = (instrument, attrs['height'])
         groups.setdefault(key, {})[qty] = var_name
     return groups
 
