@@ -132,7 +132,7 @@ def build_L1_ds_by_year(ds, year):
     year_ds = assign_variable_flags(year_ds)
     year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
     year_ds = filter_variable_attrs(ds=year_ds)
-    year_ds = serialize_uri(ds=ds)
+    year_ds = serialize_uri(ds=year_ds)
     year_ds = serialize_inst_history(ds=year_ds, year=year)
     year_ds = serialize_units(ds=year_ds)
 
@@ -294,7 +294,7 @@ def serialize_uri(ds):
         
         if isinstance(attrs.get('instrument_uri'), dict):
             attrs['instrument_uri'] = ','.join(
-                f'{alias}>{uri}' for alias, uri in attrs['instrument_uri'].items()
+                f'{uri}' for uri in attrs['instrument_uri'].values()
                 )
         
     return ds
@@ -311,13 +311,9 @@ def serialize_inst_history(ds, year):
     for var in var_list:
         attrs = ds[var].attrs
 
-        # Serialize compound instrument dicts to strings for NetCDF
-        if isinstance(attrs.get('instrument'), dict):
-            attrs['instrument'] = ','.join(
-                f'{alias}>{name}' for alias, name in attrs['instrument'].items()
-                )
-
         if 'instrument_history' not in attrs:
+            if isinstance(attrs.get('instrument'), dict):
+                attrs['instrument'] = ','.join(attrs['instrument'].values())
             continue
 
         history = attrs['instrument_history']
@@ -325,6 +321,8 @@ def serialize_inst_history(ds, year):
 
         if 'start_date' in first_val:
             # Simple: {inst_name: {start_date, end_date}}
+            if isinstance(attrs.get('instrument'), dict):
+                attrs['instrument'] = ','.join(attrs['instrument'].values())
             serialised, last_inst = _serialise_simple_history(
                 history, year_start, year_end
                 )
@@ -346,16 +344,13 @@ def serialize_inst_history(ds, year):
                 if last_inst is not None:
                     attrs['instrument'] = last_inst
         else:
-            # Compound history: aliases separated by ';'
-            # last_inst is a dict {alias: name} — merge into existing instrument string
+            # Compound history: last_inst is a dict {alias: name}
             attrs['instrument_history'] = ';'.join(serialised)
+            inst = attrs.get('instrument')
+            current = dict(inst) if isinstance(inst, dict) else {}
             if last_inst:
-                current = dict(
-                    item.split('>') for item in attrs.get('instrument', '').split(',')
-                    if '>' in item
-                    )
                 current.update(last_inst)
-                attrs['instrument'] = ','.join(f'{a}>{n}' for a, n in current.items())
+            attrs['instrument'] = ','.join(current.values())
 
     return ds
 
