@@ -389,8 +389,13 @@ def _serialize_attrs(attrs: dict) -> dict:
     return result
 
 
-def _serialize_dataset_attrs(ds: xr.Dataset) -> xr.Dataset:
-    """Serialize attrs in-place for NetCDF output.
+def serialize_dataset_attrs(ds: xr.Dataset) -> xr.Dataset:
+    """Coerce attrs to NetCDF-writable types (Enum, tuple, None).
+
+    Generic type coercion only — no domain-specific attr rewriting (e.g.
+    URI or instrument-history formatting), which is the caller's
+    responsibility. Callers must run this before `write_netcdf`, which
+    does not serialize attrs itself.
 
     Modifies ds directly — safe to call on a year slice since xarray copies
     attrs on sel(), so the source dataset is not affected.
@@ -400,6 +405,67 @@ def _serialize_dataset_attrs(ds: xr.Dataset) -> xr.Dataset:
         if ds[name].attrs:
             ds[name].attrs = _serialize_attrs(ds[name].attrs)
     return ds
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+def peek_netcdf_variables(file_path: Path) -> list[str]:
+    """
+    List data variable names in a NetCDF file without loading any data.
+
+    xarray's netCDF4 backend reads only variable/coordinate metadata on
+    open; array data is read lazily on first access. This opens and
+    immediately closes the file, so no data is read from disk.
+
+    Args:
+        file_path: Path to the .nc file.
+
+    Returns:
+        Data variable names (excludes coordinates).
+    """
+
+    with xr.open_dataset(file_path) as ds:
+        return list(ds.data_vars)
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+def read_netcdf(
+        file_path: Path, variables: list[str] | None = None
+        ) -> xr.Dataset:
+    """
+    Load a NetCDF file into an in-memory xarray Dataset.
+
+    xarray opens NetCDF files lazily, so restricting `variables` before
+    loading means only those variables' data is read from disk — the rest
+    of the file is never touched. Use this to pull a small subset out of
+    a large file cheaply. Use `peek_netcdf_variables` first if the
+    available variable names aren't already known.
+
+    Args:
+        file_path: Path to the .nc file.
+        variables: Data variable names to load. If None, the whole file
+            is loaded.
+
+    Returns:
+        Dataset fully loaded into memory; the underlying file handle is
+        closed before this function returns.
+    """
+
+    file_path = Path(file_path)
+
+    with xr.open_dataset(file_path) as ds:
+
+        if variables is not None:
+
+            missing = set(variables) - set(ds.data_vars)
+            if missing:
+                raise KeyError(
+                    f"Variable(s) not found in {file_path.name}: "
+                    f"{sorted(missing)}"
+                    )
+
+            ds = ds[variables]
+
+        return ds.load()
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -413,6 +479,9 @@ def write_netcdf(
     """
     Write an xarray Dataset to NetCDF.
 
+    Does not serialize attrs — callers must ensure `ds` is already
+    NetCDF-writable (see `serialize_dataset_attrs`) before calling this.
+
     Args:
         ds: Dataset to write.
         file_path: Destination path. Parent directories created automatically.
@@ -425,7 +494,6 @@ def write_netcdf(
     file_path = Path(file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    ds = _serialize_dataset_attrs(ds)
     encoding = {'time': {'units': time_units}} if time_units else {}
 
     if atomic:
