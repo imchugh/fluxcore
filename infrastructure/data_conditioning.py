@@ -97,6 +97,7 @@ def condition_dataframe(
 def apply_linear_correction(
     series: ArrayLike, slope: float = 1.0, intercept: float = 0.0
     ) -> ArrayLike:
+    """Simple linear correction"""
 
     index = series.index if isinstance(series, pd.Series) else None
     result = np.array(series, dtype=float) * slope + intercept
@@ -106,7 +107,8 @@ def apply_linear_correction(
 def apply_range_limits(
     series: ArrayLike, lower_limit: float = None, upper_limit: float = None
     ) -> ArrayLike:
-
+    """Apply upper and / or lower range limits"""
+    
     index = series.index if isinstance(series, pd.Series) else None
     result = np.array(series, dtype=float)
     if lower_limit is not None:
