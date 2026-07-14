@@ -128,7 +128,7 @@ def concatenate_toa5(
     combined = raw_data_loader.load_raw_data(
         file_path=master, file_format='TOA5'
     )
-    combined = combined.sort_index()
+    combined = combined.sort_index(kind='stable')
     combined = combined[~combined.index.duplicated(keep='first')]
 
     report = {'master_records': len(combined), 'slave_contributions': {}}
@@ -147,7 +147,7 @@ def concatenate_toa5(
         before = len(combined)
         combined = (
             pd.concat([combined, slave_df])
-            .sort_index()
+            .sort_index(kind='stable')
             .loc[lambda df: ~df.index.duplicated(keep='first')]
             )
         added = len(combined) - before

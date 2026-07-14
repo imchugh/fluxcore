@@ -158,7 +158,7 @@ def write_toa5(
             )
         data = (
             pd.concat(data)
-            .sort_index()
+            .sort_index(kind='stable')
             .loc[lambda df: ~df.index.duplicated(keep='first')]
         )
     else:
