@@ -82,3 +82,4 @@ class FluxSystemType(str, Enum):
     TERNFLUX = 'TERNFLUX'
     EASYFLUX = 'EASYFLUX'
     SMARTFLUX = 'SMARTFLUX'
+    LEGACY = 'LEGACY'
