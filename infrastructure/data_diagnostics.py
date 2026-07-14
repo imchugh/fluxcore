@@ -58,7 +58,8 @@ def analyse_data_gaps(
             'n_missing': int,
             'pct_missing': float,
             'gap_distribution': pd.Series,
-            'gap_table': pd.DataFrame
+            'gap_table': pd.DataFrame,
+            'missing_timestamps': pd.DatetimeIndex
         }
     """
 
@@ -81,11 +82,14 @@ def analyse_data_gaps(
             "gap_table": pd.DataFrame(
                 columns=["gap_start", "gap_end", "missing_records"]
                 ),
+            "missing_timestamps": full_index,
             }
 
     # ensure clean index
     df = df.sort_index()
     df = df[~df.index.duplicated(keep='first')]
+
+    missing_timestamps = full_index.difference(df.index)
 
     expected = pd.Timedelta(minutes=interval_minutes)
 
@@ -123,5 +127,55 @@ def analyse_data_gaps(
         "n_missing": n_missing,
         "pct_missing": pct_missing,
         "gap_distribution": gap_distribution,
-        "gap_table": gap_table
+        "gap_table": gap_table,
+        "missing_timestamps": missing_timestamps,
+        }
+
+def analyse_data_duplicates(df: pd.DataFrame) -> dict:
+    """
+    Analyse duplicate timestamps in a dataframe.
+
+    Checks the index only, not row content: a duplicate is any timestamp
+    that appears more than once, regardless of whether the associated data
+    differs between occurrences.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Dataframe with DatetimeIndex.
+
+    Returns
+    -------
+    dict
+        {
+            'n_duplicates': int,
+            'pct_duplicates': float,
+            'duplicate_timestamps': pd.DatetimeIndex,
+            'duplicate_counts': pd.Series
+        }
+    """
+
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise TypeError('DataFrame must have a DatetimeIndex.')
+
+    if df.empty:
+        return {
+            'n_duplicates': 0,
+            'pct_duplicates': 0.0,
+            'duplicate_timestamps': pd.DatetimeIndex([]),
+            'duplicate_counts': pd.Series(dtype=int),
+            }
+
+    is_dupe = df.index.duplicated(keep='first')
+    n_duplicates = int(is_dupe.sum())
+    pct_duplicates = round(n_duplicates / len(df) * 100, 2)
+
+    counts = df.index.value_counts()
+    duplicate_counts = counts[counts > 1].sort_index()
+
+    return {
+        'n_duplicates': n_duplicates,
+        'pct_duplicates': pct_duplicates,
+        'duplicate_timestamps': duplicate_counts.index,
+        'duplicate_counts': duplicate_counts,
         }
