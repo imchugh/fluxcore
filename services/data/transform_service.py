@@ -165,8 +165,27 @@ def calculate_e(Ta: ArrayLike, RH: ArrayLike) -> ArrayLike:
     return calculate_es(Ta=Ta) * RH / 100
 
 
+@register_calculation('VPD')
+def calculate_vpd(Ta: ArrayLike, RH: ArrayLike) -> ArrayLike:
+    """Vapour pressure deficit (kPa) from air temperature (degC) and RH (percent)."""
+    
+    es = calculate_es(Ta=Ta)
+    e = calculate_e(Ta=Ta, RH=RH)
+    return es - e
+
+
 @register_calculation('rho_mol')
 def calculate_molar_density(ps: ArrayLike, Ta: ArrayLike) -> ArrayLike:
     """Molar density (mol/m^3) from air pressure (kPa) and air temperature (degC)."""
 
     return ps * 1000 / ((Ta + K) * R)
+
+
+@register_calculation('Td')
+def calculate_dew_point(Ta: ArrayLike, RH: ArrayLike) -> ArrayLike:
+    """Dew point temperature (degC) from air temperature (degC) and RH (percent)."""
+
+    e = calculate_e(Ta=Ta, RH=RH)
+    ln_ratio = np.log(e / 0.61121)
+    return (243.5 * ln_ratio) / (17.502 - ln_ratio)
+
