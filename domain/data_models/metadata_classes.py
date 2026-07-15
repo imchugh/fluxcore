@@ -62,8 +62,8 @@ class CanonicalQuantityMetadata:
     standard_name: Optional[str]
     standard_units: str
     valid_input_units: list[str]
-    plausible_min: Optional[float] = None
-    plausible_max: Optional[float] = None
+    valid_min: Optional[float] = None
+    valid_max: Optional[float] = None
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------

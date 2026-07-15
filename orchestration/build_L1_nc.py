@@ -32,12 +32,12 @@ from services import config_loader
 ###############################################################################
 
 STD_METADATA = config_loader.load_config_file_from_name(name='nc_metadata')
-CRS_METADATA = config_loader.load_config_file_from_name(name='nc_dim_attrs')
+NC_DIM_ATTRS = config_loader.load_config_file_from_name(name='nc_dim_attrs')
 
 VARIABLE_NC_ATTRS = {
     'units', 'long_name', 'standard_name',
-    'height', 'height_range', 'instrument', 'instrument_history', 
-    'instrument_uri', 'statistic_type',
+    'height', 'height_range', 'instrument', 'instrument_history',
+    'instrument_uri', 'statistic_type', 'valid_range',
     }
 
 ###############################################################################
@@ -130,6 +130,7 @@ def build_L1_ds_by_year(ds, year):
 
     year_ds = ds.sel(time=slice(*time_bounds))
     year_ds = assign_variable_flags(year_ds)
+    year_ds = assign_valid_range(year_ds)
     year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
     year_ds = filter_variable_attrs(ds=year_ds)
     year_ds = serialize_uri(ds=year_ds)
@@ -153,6 +154,11 @@ def do_dim_ops(ds):
         .expand_dims(['latitude', 'longitude'])
         )
     ds = ds.transpose('time', 'latitude', 'longitude')
+
+    # Attach CF attrs to dimension coordinates
+    for dim in ('time', 'latitude', 'longitude'):
+        ds[dim].attrs.update(NC_DIM_ATTRS[dim])
+
     return ds
 # -----------------------------------------------------------------------------
 
@@ -171,7 +177,7 @@ def assign_crs_variable(ds):
 
     """
 
-    ds['crs'] = ([], np.int32(0), CRS_METADATA['coordinate_reference_system'])
+    ds['crs'] = ([], np.int32(0), NC_DIM_ATTRS['coordinate_reference_system'])
     return ds
 # -----------------------------------------------------------------------------
 
@@ -262,6 +268,31 @@ def assign_variable_flags(ds):
             pd.isnull(ds[var]).astype(int),
             {'long_name': f'{var} QC flag', 'units': '1'}
             )
+    return ds
+#------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+def assign_valid_range(ds):
+    """
+    Assign the CF `valid_range` attribute to variables carrying valid
+    bounds, cast to the variable's own dtype so it matches what is written
+    to disk.
+
+    Args:
+        ds: xarray dataset.
+
+    Returns:
+        ds.
+
+    """
+
+    for var in ds.variables:
+        attrs = ds[var].attrs
+        vmin = attrs.get('valid_min')
+        vmax = attrs.get('valid_max')
+        if vmin is None or vmax is None:
+            continue
+        ds[var].attrs['valid_range'] = np.array([vmin, vmax], dtype=ds[var].dtype)
     return ds
 #------------------------------------------------------------------------------
 

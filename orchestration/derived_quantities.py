@@ -196,4 +196,6 @@ def _build_attrs(source_attrs: dict, quantity: str) -> dict:
         'standard_name':      canonical.standard_name,
         'statistic_type':     source_attrs['statistic_type'],
         'units':              canonical.standard_units,
+        'valid_min':          canonical.valid_min,
+        'valid_max':          canonical.valid_max,
     }

@@ -9,8 +9,8 @@ VariableSpec          — flat specification for a single raw-to-canonical mappi
 build_variable_registry(runtime_cfg, file_groups) -> dict[str, VariableSpec]
 """
 
-import pandas as pd
-from dataclasses import dataclass
+from datetime import datetime
+from pydantic.dataclasses import dataclass
 
 from domain.enums import DiagnosticType, StatisticType, VariableType
 from services.metadata.runtime_config_loader import SiteRuntimeConfig
@@ -18,7 +18,7 @@ from services.metadata.file_group_builder import FileGroup
 from services.metadata.canonical_quantity_registry import resolve_variance_units
 
 
-@dataclass
+@dataclass(frozen=True)
 class VariableSpec:
     """Flat specification for a single raw-to-canonical variable mapping."""
 
@@ -41,17 +41,19 @@ class VariableSpec:
     # xarray variable attrs
     height: float
     height_range: tuple[float, float] | None
-    instrument: str
+    instrument: str | dict[str, str]
     long_name: str
     standard_name: str | None
+    valid_min: float | None
+    valid_max: float | None
 
     # Grouping / aliasing
     alias: str
     file_group: str
 
     # Temporal validity (instrument changeover merge)
-    begin: pd.Timestamp | None
-    end: pd.Timestamp | None
+    begin: datetime | str | None
+    end: datetime | str | None
 
     # Diagnostic counter direction (Diag variables only)
     diag_type: DiagnosticType | None = None
@@ -99,6 +101,8 @@ def build_variable_registry(
                     quantity=var_cfg.quantity,
                     long_name=var_cfg.canonical.long_name,
                     standard_name=var_cfg.canonical.standard_name,
+                    valid_min=var_cfg.canonical.valid_min,
+                    valid_max=var_cfg.canonical.valid_max,
                     canonical_units=canonical_units,
                     site_units=site_units,
                     statistic_type=var_cfg.statistic_type,

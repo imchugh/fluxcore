@@ -120,8 +120,8 @@ class CanonicalQuantityRegistry:
             attrs["standard_units"] = "dimensionless"
             attrs["valid_input_units"] = ["dimensionless"]
 
-            attrs["plausible_max"] = None
-            attrs["plausible_min"] = None
+            attrs["valid_max"] = None
+            attrs["valid_min"] = None
 
             if attrs["long_name"]:
                 attrs["long_name"] = (
@@ -145,8 +145,8 @@ class CanonicalQuantityRegistry:
             attrs["standard_units"] = "dimensionless"
             attrs["valid_input_units"] = ["valid_count", "invalid_count"]
 
-            attrs["plausible_min"] = 0
-            attrs["plausible_max"] = None
+            attrs["valid_min"] = 0
+            attrs["valid_max"] = None
             attrs["standard_name"] = None
 
             if attrs["long_name"]:
@@ -172,10 +172,10 @@ class CanonicalQuantityRegistry:
                 for units in attrs["valid_input_units"]
                 ]
 
-            if base.plausible_min is not None:
-                attrs["plausible_min"] = 0
-            if base.plausible_max is not None:
-                attrs["plausible_max"] = base.plausible_max ** 2
+            if base.valid_min is not None:
+                attrs["valid_min"] = 0
+            if base.valid_max is not None:
+                attrs["valid_max"] = base.valid_max ** 2
 
         # ---------------------------------------------------------------------
 
