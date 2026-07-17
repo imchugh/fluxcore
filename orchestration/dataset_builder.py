@@ -66,10 +66,18 @@ def build_dataset_from_site_name(
         pad_humidity: bool = True,
         pad_co2: bool = True,
         start_date: pd.Timestamp | None = None,
+        legacy: bool = False,
         ) -> xr.Dataset:
-    """Convenience wrapper — resolves site name to context via registry."""
+    """
+    Convenience wrapper — resolves site name to context via registry.
 
-    ctx = SITE_REGISTRY.get_context(site=site_name)
+    legacy: if True, build from the site's legacy config snapshot
+        (site_configs/legacy) instead of its operational config. Use for
+        one-off rebuilds of L1 output under an earlier generation of
+        instruments/variables/files.
+    """
+
+    ctx = SITE_REGISTRY.get_context(site=site_name, legacy=legacy)
     return build_dataset_from_context(
         ctx=ctx, pad_humidity=pad_humidity, pad_co2=pad_co2, start_date=start_date
         )

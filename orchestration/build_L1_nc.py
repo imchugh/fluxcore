@@ -62,6 +62,7 @@ def build(
         site_name: str,
         output_dir: pathlib.Path | str | None = None,
         year: int | None = None,
+        legacy: bool = False,
         ) -> list[pathlib.Path]:
     """
     Build L1 NetCDF files for all data years at a site.
@@ -81,6 +82,12 @@ def build(
         year: if provided, only build that calendar year and discard all
             earlier records during data loading.  Use for the 30-min
             operational update cycle to avoid reading full site history.
+        legacy: if True, build from the site's legacy config snapshot
+            (site_configs/legacy) instead of its operational config. Use
+            for one-off rebuilds of a site under an earlier generation of
+            instruments/variables/files. Not wired into scheduled tasks —
+            callers should pass an explicit output_dir to avoid overwriting
+            the operational L1 output for the site.
 
     Returns:
         List of paths to files written.
@@ -91,7 +98,9 @@ def build(
     output_dir = pathlib.Path(output_dir)
 
     start_date = pd.Timestamp(year, 1, 1) if year is not None else None
-    ds = dataset_builder.build_dataset_from_site_name(site_name, start_date=start_date)
+    ds = dataset_builder.build_dataset_from_site_name(
+        site_name, start_date=start_date, legacy=legacy
+        )
     ds = build_L1_ds_complete(ds)
 
     written = []
