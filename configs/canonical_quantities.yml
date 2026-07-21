@@ -733,7 +733,7 @@ ustar:
   long_name: Friction velocity
   valid_max: 5.0
   valid_min: 0.0
-  standard_name: null
+  standard_name: magnitude_of_surface_friction_velocity_in_air
   standard_units: m/s
   valid_input_units:
   - m/s
