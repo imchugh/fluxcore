@@ -191,7 +191,7 @@ def _build_result(
 
     file_groups = file_group_builder.build_file_groups(runtime_cfg)
     for group in file_groups.values():
-        group.validate()
+        group.validate_or_raise()
 
     registry = build_variable_registry(
         runtime_cfg=runtime_cfg, 

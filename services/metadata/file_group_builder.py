@@ -79,6 +79,21 @@ class FileGroup:
 
     # -------------------------------------------------------------------------
 
+    def validate_or_raise(self) -> None:
+        """
+        Raise if any expected variable is missing from the file group's
+        discovered headers.
+        """
+        missing = self.validate()["missing"]
+        if missing:
+            raise ValueError(
+                f"File group '{self.group}': expected variable(s) "
+                f"{sorted(missing)} not found in {[str(f) for f in self.all_files]}"
+                )
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+
     def files_for_variable(self, variable: str) -> list[Path]:
         """
         Return the list of files in which the variable was found.

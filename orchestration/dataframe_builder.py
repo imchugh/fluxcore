@@ -66,6 +66,8 @@ def build_dataframe_from_context(
 
     runtime_cfg = ctx.runtime_config
     file_groups = build_file_groups(runtime_cfg)
+    for group in file_groups.values():
+        group.validate_or_raise()
     registry = build_variable_registry(runtime_cfg=runtime_cfg, file_groups=file_groups)
 
     return build_dataframe(
