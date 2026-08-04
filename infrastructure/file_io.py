@@ -371,6 +371,75 @@ def write_toa5_csv(
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+def write_eddypro_csv(
+        *,
+        file_path: Path,
+        headers: list[list],
+        data: pd.DataFrame,
+        atomic: bool = True,
+        ) -> None:
+    """
+    Write headers and data to an EddyPro-format (tab-separated) CSV file.
+
+    Handles raw I/O mechanics only: EddyPro's tab-delimited, minimally-quoted
+    convention, atomic write via a temporary file, and fsync. All domain
+    concerns (building the header rows, validating column counts) are the
+    caller's responsibility. Unlike ``write_toa5_csv``, there is no legacy
+    logger format to replicate byte-for-bit, so data rows are written with
+    plain ``DataFrame.to_csv`` rather than manual per-column formatting.
+
+    Args:
+        file_path:
+            Destination path. Parent directories are created automatically.
+        headers:
+            Ordered list of rows to write before the data. For a standard
+            EddyPro file this is two lists: variable-names and units.
+        data:
+            DataFrame to write. Written without its index; the caller must
+            include the DATAH/filename/date/time columns explicitly as data
+            columns.
+        atomic:
+            If True (default), write via a temporary file that is
+            atomically renamed to ``file_path`` on success. The temporary
+            file is removed on failure. Set False only when atomicity is
+            guaranteed by the caller.
+    """
+
+    _SEP = '\t'
+    _NA = 'NaN'
+
+    file_path = Path(file_path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _write(f) -> None:
+        writer = csv.writer(f, delimiter=_SEP, quoting=csv.QUOTE_MINIMAL)
+        for row in headers:
+            writer.writerow(row)
+
+        data.to_csv(
+            f, header=False, index=False, na_rep=_NA,
+            sep=_SEP, quoting=csv.QUOTE_MINIMAL, lineterminator='\n',
+            )
+
+    if atomic:
+        tmp_path = file_path.with_suffix(file_path.suffix + '.tmp')
+        try:
+            with open(tmp_path, 'w', newline='\n') as f:
+                _write(f)
+                f.flush()
+                os.fsync(f.fileno())
+            tmp_path.replace(file_path)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+    else:
+        with open(file_path, 'w', newline='\n') as f:
+            _write(f)
+
+    logger.info('Wrote EddyPro file: %s', file_path.name)
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 def _serialize_attrs(attrs: dict) -> dict:
     """Convert attr values to NetCDF-compatible types.
 
