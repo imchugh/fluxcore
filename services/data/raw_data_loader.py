@@ -58,8 +58,18 @@ _FILE_FORMATS = {
 # -----------------------------------------------------------------------------
 
 def load_raw_data(
-        file_path: pathlib.Path, file_format: str, drop_non_numeric: bool = False
+        file_path: pathlib.Path, file_format: str, drop_non_numeric: bool = False,
+        **read_csv_kwargs,
         ) -> pd.DataFrame:
+    """
+    Load a raw TOA5/EddyPro file into a time-indexed DataFrame.
+
+    **read_csv_kwargs are forwarded to pd.read_csv (via file_io.read_csv_data)
+    — e.g. usecols=[...] to restrict which columns are parsed out of a wide
+    file. If usecols is given, it must include the file format's timestamp
+    column(s) ('TIMESTAMP' for TOA5; 'date' and 'time' for EddyPro), since
+    the date formatter below depends on them.
+    """
 
     DATE_FORMATTERS = {
         'TOA5': _TOA5_date_formatter,
@@ -69,7 +79,8 @@ def load_raw_data(
     df = file_io.read_csv_data(
         file_path=file_path,
         file_format=_FILE_FORMATS[file_format],
-        on_bad_lines='skip'
+        on_bad_lines='skip',
+        **read_csv_kwargs,
         )
     df = DATE_FORMATTERS[file_format](df)
 
