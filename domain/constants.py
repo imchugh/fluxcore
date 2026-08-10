@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Created on Tue Apr 28 10:34:15 2026
-
-@author: imchugh
-"""
+"""Physical, temporal, and formatting constants shared across the pipeline."""
 
 # Domain constants
 SITE_PLACEHOLDER = "<site>"

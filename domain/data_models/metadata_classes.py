@@ -1,37 +1,20 @@
 #!/usr/bin/env python3
-"""Created on Thu Mar  5 12:12:51 2026
-
-@author: imchugh
-"""
-
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
+"""Pydantic-dataclass metadata models used across the pipeline."""
 
 import logging
 from datetime import datetime
 
 from pydantic.dataclasses import ConfigDict, dataclass
 
-# -----------------------------------------------------------------------------
 from domain import enums
 
 logger = logging.getLogger(__name__)
 
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN CLASSES ###
-###############################################################################
-
-# -----------------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class RawVariableMetadata:
+    """Metadata for one raw instrument-file input that feeds a canonical variable."""
+
     raw_name: str
     raw_units: str
     file: str
@@ -40,12 +23,10 @@ class RawVariableMetadata:
     end: datetime | str | None = None
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ParsedVariableName:
+    """Components parsed out of a canonical variable name string."""
+
     quantity: str
     qualifier: str | None = None
     vertical_location: str | None = None
@@ -54,18 +35,13 @@ class ParsedVariableName:
     statistic_id: str | None = (
         None  # set when suffix is a StatisticType (Av, Sd, Vr ...)
     )
-    variable_type_id: str | None = (
-        None  # set when suffix is a VariableType  (QC, Ct)
-    )
-
-
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
+    variable_type_id: str | None = None  # set when suffix is a VariableType  (QC, Ct)
 
 
 @dataclass(frozen=True, config=ConfigDict(extra="forbid"))
 class CanonicalQuantityMetadata:
+    """Registry metadata for one canonical quantity: units, naming, and valid range."""
+
     long_name: str
     standard_name: str | None
     standard_units: str
@@ -74,13 +50,15 @@ class CanonicalQuantityMetadata:
     valid_max: float | None = None
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class VariableDefinition:
+    """Complete definition of one canonical variable.
+
+    Assembled from its raw inputs, canonical quantity metadata, and parsed
+    name — the unit that `services/metadata/variable_registry.py` builds
+    per raw-to-canonical mapping.
+    """
+
     # Core identity
     variable_name: str
     quantity: str
@@ -99,11 +77,6 @@ class VariableDefinition:
     height_range: tuple[float, float] | None = None
     statistic_type: enums.StatisticType | None = None
     diag_type: enums.DiagnosticType | None = None
-
-
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
 
 
 class SiteMetadata(dict):
@@ -133,10 +106,14 @@ class SiteMetadata(dict):
         "UTC_offset": float,
     }
 
-    # -------------------------------------------------------------------------
-
     def __init__(self, data: dict):
+        """Coerce `data` values to their expected types per `DATA_DTYPES`.
 
+        Values that are `None`, `""`, or `"nan"` become `None`. Values that
+        fail coercion keep their raw, uncoerced form (logged as a warning)
+        rather than raising, so one bad field doesn't block loading the rest
+        of a site's metadata.
+        """
         formatted = {}
 
         for key, value in data.items():
@@ -175,35 +152,24 @@ class SiteMetadata(dict):
 
         super().__init__(formatted)
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-
     def __getattr__(self, key):
-
+        """Return `self[key]`, enabling attribute-style access to metadata fields."""
         try:
             return self[key]
         except KeyError:
-            raise AttributeError(key)
-
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
+            raise AttributeError(key) from None
 
     def __setattr__(self, key, value):
+        """Reject attribute assignment; SiteMetadata is immutable after construction.
 
+        Raises:
+            AttributeError: Always.
+        """
         raise AttributeError("SiteMetadata is immutable")
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
     def __dir__(self):
-
+        """Include metadata keys alongside normal dict attributes in `dir()` output."""
         return sorted(set(super().__dir__()) | set(self.keys()))
-
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
 
     @property
     def n_samples(self) -> int | None:
@@ -218,32 +184,14 @@ class SiteMetadata(dict):
             return None
         return time_step * 60 * freq_hz
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
     def __repr__(self):
-
-        label = self.get("site_name", None)
-        if label:
-            return f"<SiteMetadata {label}>"
-        return f"<SiteMetadata {self.get('site_name', 'unknown')}>"
-
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
+        """Return a short repr showing the site name, or 'unknown' if absent."""
+        label = self.get("site_name", "unknown")
+        return f"<SiteMetadata {label}>"
 
     def to_yaml_dict(self):
-
+        """Return a plain dict with datetime values ISO-formatted, ready for YAML."""
         return {
             k: (v.isoformat() if isinstance(v, datetime) else v)
             for k, v in self.items()
         }
-
-    # -------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END CLASSES ###
-###############################################################################
