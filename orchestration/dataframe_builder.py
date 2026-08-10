@@ -3,10 +3,13 @@
 
 Public API
 ----------
-build_dataframe_from_site_name(site_name, quantities, n_samples, start_date) -> pd.DataFrame
-build_dataframe_from_context(ctx, quantities, n_samples, start_date)         -> pd.DataFrame
+build_dataframe_from_site_name(site_name, quantities, n_samples, start_date)
+    -> pd.DataFrame
+build_dataframe_from_context(ctx, quantities, n_samples, start_date)
+    -> pd.DataFrame
 build_dataframe(file_groups, registry, quantities, n_samples, start_date,
-                flux_file, time_step)                                         -> pd.DataFrame
+                flux_file, time_step)
+    -> pd.DataFrame
 """
 
 from collections.abc import Callable
@@ -271,8 +274,9 @@ def _apply_conversions(
 
 
 def _get_merge_blocks(registry: dict[str, VariableSpec]) -> dict:
-    """Identify canonical variables constructed from multiple raw inputs
-    (instrument changeovers).
+    """Identify canonical variables constructed from multiple raw inputs.
+
+    These are instrument changeovers.
 
     Returns:
         dict keyed by canonical name; values are alias → {begin, end} dicts.

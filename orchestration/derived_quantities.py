@@ -27,11 +27,11 @@ _HUMIDITY_QUANTITIES = frozenset({"Ta", "RH", "AH"})
 
 
 def pad_humidity(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:
-    """Derive and add the missing humidity variable (RH or AH) for each
-    instrument+height group that has Ta and exactly one of {RH, AH}.
+    """Derive and add the missing humidity variable (RH or AH) for each group.
 
-    Returns the result unchanged if no pressure variable is found or there is
-    nothing to derive.
+    A group is an instrument+height combination that has Ta and exactly one
+    of {RH, AH}. Returns the result unchanged if no pressure variable is
+    found or there is nothing to derive.
     """
     df = result.df.copy()
     var_attrs = dict(result.var_attrs)

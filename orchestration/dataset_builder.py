@@ -27,10 +27,6 @@ from services.metadata.variable_registry import (
     group_by_canonical_name,
 )
 
-###############################################################################
-### BEGIN TYPES ###
-###############################################################################
-
 
 @dataclass
 class DatasetBuildIntermediate:
@@ -39,15 +35,6 @@ class DatasetBuildIntermediate:
     df: pd.DataFrame
     var_attrs: dict[str, dict]
 
-
-###############################################################################
-### END TYPES ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN INITS ###
-###############################################################################
 
 ATTRS_SUBSET = [
     "site_name",
@@ -65,15 +52,6 @@ ATTRS_SUBSET = [
 ]
 
 SITE_REGISTRY = SiteRegistry()
-
-###############################################################################
-### END INITS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN PUBLIC FUNCTIONS ###
-###############################################################################
 
 
 def build_dataset_from_site_name(
@@ -111,16 +89,6 @@ def build_dataset_from_context(
     ds = _apply_global_metadata(ds, ctx)
 
     return ds
-
-
-###############################################################################
-### END PUBLIC FUNCTIONS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN PRIVATE FUNCTIONS — metadata application ###
-###############################################################################
 
 
 def _apply_padding(
@@ -177,22 +145,11 @@ def _apply_global_metadata(
     return ds
 
 
-###############################################################################
-### END PRIVATE FUNCTIONS — metadata application ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN PRIVATE FUNCTIONS — dataset build ###
-###############################################################################
-
-
 def _build_result(
     ctx: SiteContext,
     start_date: pd.Timestamp | None = None,
 ) -> DatasetBuildIntermediate:
-    """Build a canonical dataframe and per-variable xarray attrs from a site
-    context.
+    """Build a canonical dataframe and per-variable xarray attrs from a site context.
 
     Args:
         ctx: fully-assembled site context (runtime config + site metadata).
@@ -228,9 +185,7 @@ def _build_result(
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
 
-# -----------------------------------------------------------------------------
 # Variable attribute construction
-# -----------------------------------------------------------------------------
 
 
 def _instrument_uri(instrument: str | dict) -> str | dict | None:
@@ -317,8 +272,9 @@ def _history_from_instruments(
 def _history_from_compound_instruments(
     var_specs: list[VariableSpec],
 ) -> dict[str, dict] | None:
-    """Per-alias history for compound quantities. Only aliases where the
-    instrument changed across periods are included.
+    """Per-alias history for compound quantities.
+
+    Only aliases where the instrument changed across periods are included.
     """
     aliases = list(var_specs[0].instrument.keys())
     result = {}
@@ -344,8 +300,3 @@ def _output_statistic(var_spec: VariableSpec) -> StatisticType | None:
     if var_spec.statistic_type == StatisticType.VAR:
         return StatisticType.STDEV
     return var_spec.statistic_type
-
-
-###############################################################################
-### END PRIVATE FUNCTIONS — dataset build ###
-###############################################################################

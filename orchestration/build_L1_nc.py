@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Created on Wed May  6 09:46:11 2026
+"""Export step: convert an L1 xarray Dataset into annual NetCDF files.
 
-@author: imchugh
+Adds spatial dims, QC flags, global/variable metadata, then splits by
+calendar year and writes one NetCDF file per year.
 """
-
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
 
 import datetime
 import pathlib
@@ -14,20 +11,10 @@ import pathlib
 import numpy as np
 import pandas as pd
 
-# -----------------------------------------------------------------------------
 from domain.constants import DATA_TIME_FORMAT, NC_ENCODING, SITE_PLACEHOLDER
 from infrastructure import file_io, paths
 from orchestration import dataset_builder
 from services import config_loader
-
-###############################################################################
-### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN INITS ###
-###############################################################################
 
 STD_METADATA = config_loader.load_config_file_from_name(name="nc_metadata")
 NC_DIM_ATTRS = config_loader.load_config_file_from_name(name="nc_dim_attrs")
@@ -45,26 +32,10 @@ VARIABLE_NC_ATTRS = {
     "valid_range",
 }
 
-###############################################################################
-### END INITS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-# -----------------------------------------------------------------------------
-
 
 def get_ds_years(ds):
-
+    """Return the sorted list of distinct calendar years present in ds.time."""
     return np.unique(ds.time.dt.year).tolist()
-
-
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
 
 
 def build(
@@ -120,13 +91,8 @@ def build(
     return written
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def build_L1_ds_complete(ds):
-
+    """Apply spatial dims, CRS variable, and generic global attrs to the dataset."""
     ds = do_dim_ops(ds=ds)
     ds = assign_crs_variable(ds=ds)
     ds = assign_L1_global_generic_attrs(ds=ds)
@@ -134,13 +100,16 @@ def build_L1_ds_complete(ds):
     return ds
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def build_L1_ds_by_year(ds, year):
+    """Slice ds to one calendar year and apply the per-year attrs/serialization steps.
 
+    Args:
+        ds: xarray dataset already assembled for the full site history.
+        year: calendar year to slice out.
+
+    Returns:
+        Sliced, fully attributed and serialized single-year dataset.
+    """
     # Get network-specific valid year data bounds
     time_step = ds.attrs["time_step"]
     time_bounds = [
@@ -164,13 +133,8 @@ def build_L1_ds_by_year(ds, year):
     return year_ds
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def do_dim_ops(ds):
-
+    """Add latitude/longitude dims and attach CF attrs to the dimension coordinates."""
     # Add spatial coordinates
     ds = ds.assign_coords(
         latitude=ds.attrs["latitude"],
@@ -185,45 +149,35 @@ def do_dim_ops(ds):
     return ds
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def assign_crs_variable(ds):
-    """Assign coordinate reference system variable.
+    """Add a scalar 'crs' coordinate-reference-system variable to ds.
 
     Args:
         ds: xarray dataset.
 
     Returns:
-        None.
-
+        ds, with the 'crs' variable added.
     """
     ds["crs"] = ([], np.int32(0), NC_DIM_ATTRS["coordinate_reference_system"])
     return ds
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def assign_L1_data_year_attrs(ds, year):
-    """Augment global attributes.
+    """Add per-year global attrs (title, record count, time coverage) to ds.
 
     Args:
-        df: pandas dataframe containing merged data.
-        md_mngr: VariableManager class used to access variable attributes.
+        ds: xarray dataset, already sliced to one calendar year.
+        year: calendar year, used to build the title string.
 
     Returns:
-        Dict containing global attributes.
-
+        ds, with the year-specific global attrs added.
     """
-    # Conversion function for dataset start and end times
-    func = lambda x: pd.to_datetime(x).strftime(DATA_TIME_FORMAT)
-    begin = func(ds.time.values[0])
-    end = func(ds.time.values[-1])
+
+    def _format_time(x):
+        return pd.to_datetime(x).strftime(DATA_TIME_FORMAT)
+
+    begin = _format_time(ds.time.values[0])
+    end = _format_time(ds.time.values[-1])
 
     # Make title string
     title_str = f"Flux tower data set from the {ds.site_name} site {year}"
@@ -241,13 +195,8 @@ def assign_L1_data_year_attrs(ds, year):
     return ds
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def assign_L1_global_generic_attrs(ds):
-
+    """Add the site-agnostic global attrs from nc_metadata config, plus date/history."""
     # Get and edit the generic global attribute fields
     site_metadata = STD_METADATA.copy()
     site_metadata["metadata_link"] = site_metadata["metadata_link"].replace(
@@ -271,11 +220,6 @@ def assign_L1_global_generic_attrs(ds):
     return ds
 
 
-# -----------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
-
-
 def assign_variable_flags(ds):
     """Assign the variable QC flags to the existing dataset.
 
@@ -283,8 +227,7 @@ def assign_variable_flags(ds):
         ds: xarray dataset.
 
     Returns:
-        None.
-
+        ds, with a '{var}_QCFlag' variable added for every data variable.
     """
     var_list = [var for var in ds.variables if var not in ds.dims and var != "crs"]
     for var in var_list:
@@ -296,14 +239,10 @@ def assign_variable_flags(ds):
     return ds
 
 
-# ------------------------------------------------------------------------------
-
-
-# ------------------------------------------------------------------------------
 def assign_valid_range(ds):
-    """Assign the CF `valid_range` attribute to variables carrying valid
-    bounds, cast to the variable's own dtype so it matches what is written
-    to disk.
+    """Assign the CF `valid_range` attribute to variables carrying valid bounds.
+
+    Cast to the variable's own dtype so it matches what is written to disk.
 
     Args:
         ds: xarray dataset.
@@ -322,12 +261,8 @@ def assign_valid_range(ds):
     return ds
 
 
-# ------------------------------------------------------------------------------
-
-
-# ------------------------------------------------------------------------------
 def filter_variable_attrs(ds):
-
+    """Drop every variable attr not in VARIABLE_NC_ATTRS (crs is left untouched)."""
     for var in ds.variables:
         if var == "crs":
             continue
@@ -339,7 +274,7 @@ def filter_variable_attrs(ds):
 
 
 def serialize_units(ds):
-
+    """Rewrite 'dimensionless' units to '1', the CF-compliant form."""
     for var in ds.variables:
         if ds[var].attrs.get("units") == "dimensionless":
             ds[var].attrs["units"] = "1"
@@ -348,7 +283,7 @@ def serialize_units(ds):
 
 
 def serialize_uri(ds):
-
+    """Flatten a compound-instrument instrument_uri dict to a comma-joined string."""
     var_list = [var for var in ds.variables if var not in ds.dims]
     for var in var_list:
         attrs = ds[var].attrs
@@ -362,7 +297,12 @@ def serialize_uri(ds):
 
 
 def serialize_inst_history(ds, year):
+    """Serialize per-year instrument-changeover history into compact attr strings.
 
+    Collapses the instrument_history dict (simple or compound) built during
+    dataset assembly into '|'- and ';'-joined strings clipped to this year's
+    date range, and sets 'instrument' to the last instrument used in the year.
+    """
     time_step = ds.attrs["time_step"]
     year_start = datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step)
     year_end = datetime.datetime(year + 1, 1, 1)
@@ -462,10 +402,3 @@ def _serialise_compound_history(
                 last_by_alias[alias] = last_inst
 
     return alias_segments, last_by_alias
-
-
-# ------------------------------------------------------------------------------
-
-###############################################################################
-### END FUNCTIONS ###
-###############################################################################
