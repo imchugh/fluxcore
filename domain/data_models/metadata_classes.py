@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Mar  5 12:12:51 2026
+"""Created on Thu Mar  5 12:12:51 2026
 
 @author: imchugh
 """
@@ -12,11 +10,10 @@ Created on Thu Mar  5 12:12:51 2026
 
 import logging
 from datetime import datetime
-from pydantic.dataclasses import dataclass, ConfigDict
-from typing import Optional, Union
+
+from pydantic.dataclasses import ConfigDict, dataclass
 
 # -----------------------------------------------------------------------------
-
 from domain import enums
 
 logger = logging.getLogger(__name__)
@@ -32,48 +29,58 @@ logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class RawVariableMetadata:
-    
     raw_name: str
     raw_units: str
     file: str
     instrument: str | dict[str, str]
-    begin: Optional[Union[datetime, str]] = None
-    end: Optional[Union[datetime, str]] = None
+    begin: datetime | str | None = None
+    end: datetime | str | None = None
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ParsedVariableName:
-
     quantity: str
-    qualifier: Optional[str] = None
-    vertical_location: Optional[str] = None
-    horizontal_location: Optional[str] = None
-    replicate: Optional[str] = None
-    statistic_id: Optional[str] = None      # set when suffix is a StatisticType (Av, Sd, Vr ...)
-    variable_type_id: Optional[str] = None  # set when suffix is a VariableType  (QC, Ct)
+    qualifier: str | None = None
+    vertical_location: str | None = None
+    horizontal_location: str | None = None
+    replicate: str | None = None
+    statistic_id: str | None = (
+        None  # set when suffix is a StatisticType (Av, Sd, Vr ...)
+    )
+    variable_type_id: str | None = (
+        None  # set when suffix is a VariableType  (QC, Ct)
+    )
+
+
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 
 @dataclass(frozen=True, config=ConfigDict(extra="forbid"))
 class CanonicalQuantityMetadata:
-
     long_name: str
-    standard_name: Optional[str]
+    standard_name: str | None
     standard_units: str
     valid_input_units: list[str]
-    valid_min: Optional[float] = None
-    valid_max: Optional[float] = None
+    valid_min: float | None = None
+    valid_max: float | None = None
+
+
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class VariableDefinition:
-
     # Core identity
     variable_name: str
     quantity: str
@@ -87,18 +94,20 @@ class VariableDefinition:
     raw_inputs: tuple[RawVariableMetadata, ...]
     canonical: CanonicalQuantityMetadata
     parsed_name_elems: ParsedVariableName
-    
-    # Optionals    
-    height_range: Optional[tuple[float, float]] = None
-    statistic_type: Optional[enums.StatisticType] = None
-    diag_type: Optional[enums.DiagnosticType] = None
+
+    # Optionals
+    height_range: tuple[float, float] | None = None
+    statistic_type: enums.StatisticType | None = None
+    diag_type: enums.DiagnosticType | None = None
+
+
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 
 class SiteMetadata(dict):
-    """
-    Lightweight metadata container.
+    """Lightweight metadata container.
 
     Provides:
     - automatic type formatting
@@ -107,22 +116,22 @@ class SiteMetadata(dict):
     """
 
     DATA_DTYPES = {
-        'id': str,
-        'fluxnet_id': str,
-        'date_commissioned': datetime,
-        'date_decommissioned': datetime,
-        'latitude': float,
-        'longitude': float,
-        'elevation': float,
-        'time_step': int,
-        'freq_hz': int,
-        'soil': str,
-        'tower_height': float,
-        'vegetation': str,
-        'canopy_height': float,
-        'time_zone': str,
-        'UTC_offset': float,
-        }
+        "id": str,
+        "fluxnet_id": str,
+        "date_commissioned": datetime,
+        "date_decommissioned": datetime,
+        "latitude": float,
+        "longitude": float,
+        "elevation": float,
+        "time_step": int,
+        "freq_hz": int,
+        "soil": str,
+        "tower_height": float,
+        "vegetation": str,
+        "canopy_height": float,
+        "time_zone": str,
+        "UTC_offset": float,
+    }
 
     # -------------------------------------------------------------------------
 
@@ -131,7 +140,6 @@ class SiteMetadata(dict):
         formatted = {}
 
         for key, value in data.items():
-
             if value in (None, "", "nan"):
                 formatted[key] = None
                 continue
@@ -139,7 +147,6 @@ class SiteMetadata(dict):
             dtype = self.DATA_DTYPES.get(key)
 
             try:
-
                 if dtype is float:
                     formatted[key] = float(value)
 
@@ -158,49 +165,55 @@ class SiteMetadata(dict):
             except Exception as exc:
                 logger.warning(
                     "Could not coerce %s=%r to %s for site metadata; "
-                    "keeping raw value (%s)", key, value, dtype, exc,
-                    )
+                    "keeping raw value (%s)",
+                    key,
+                    value,
+                    dtype,
+                    exc,
+                )
                 formatted[key] = value
 
         super().__init__(formatted)
+
     # -------------------------------------------------------------------------
-    
-    # -------------------------------------------------------------------------    
-    
+
+    # -------------------------------------------------------------------------
+
     def __getattr__(self, key):
-        
+
         try:
             return self[key]
         except KeyError:
             raise AttributeError(key)
+
     # -------------------------------------------------------------------------
-    
+
     # -------------------------------------------------------------------------
-    
+
     def __setattr__(self, key, value):
-        
+
         raise AttributeError("SiteMetadata is immutable")
-    # -------------------------------------------------------------------------        
+
+    # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     def __dir__(self):
-        
+
         return sorted(set(super().__dir__()) | set(self.keys()))
-    # -------------------------------------------------------------------------    
+
+    # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
 
     @property
     def n_samples(self) -> int | None:
-        """
-        Expected number of high-frequency samples in one averaging period.
+        """Expected number of high-frequency samples in one averaging period.
 
         Calculated from time_step (minutes) and freq_hz (Hz).  Returns None
         if either field is absent or not yet populated.
         """
-
-        time_step = self.get('time_step')
-        freq_hz = self.get('freq_hz')
+        time_step = self.get("time_step")
+        freq_hz = self.get("freq_hz")
         if time_step is None or freq_hz is None:
             return None
         return time_step * 60 * freq_hz
@@ -213,22 +226,24 @@ class SiteMetadata(dict):
         label = self.get("site_name", None)
         if label:
             return f"<SiteMetadata {label}>"
-        return f"<SiteMetadata {self.get('site_name','unknown')}>"
+        return f"<SiteMetadata {self.get('site_name', 'unknown')}>"
+
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
-    
+
     def to_yaml_dict(self):
 
         return {
             k: (v.isoformat() if isinstance(v, datetime) else v)
             for k, v in self.items()
-            }
-    # -------------------------------------------------------------------------    
+        }
+
+    # -------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 
 ###############################################################################
 ### END CLASSES ###
 ###############################################################################
-

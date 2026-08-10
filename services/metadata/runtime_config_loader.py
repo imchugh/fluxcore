@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Mar  3 06:59:42 2026
+"""Created on Tue Mar  3 06:59:42 2026
 @author: imchugh
 
 Assembles SiteRuntimeConfig — the runtime variable metadata object containing
@@ -28,14 +26,18 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-# -----------------------------------------------------------------------------
-
-from services.metadata.site_config_schema import validate_L1_config_structure
-from services.metadata.site_config_schema import SiteConfig
-from services.metadata.variable_name_parser import NameParser
-from services.metadata.canonical_quantity_registry import build_canonical_quantity_registry
 from domain.data_models.metadata_classes import RawVariableMetadata, VariableDefinition
 from domain.enums import FileType, FluxSystemType, StatisticType, VariableType
+from services.metadata.canonical_quantity_registry import (
+    build_canonical_quantity_registry,
+)
+
+# -----------------------------------------------------------------------------
+from services.metadata.site_config_schema import (
+    SiteConfig,
+    validate_L1_config_structure,
+)
+from services.metadata.variable_name_parser import NameParser
 
 ###############################################################################
 ### END IMPORTS ###
@@ -46,10 +48,10 @@ from domain.enums import FileType, FluxSystemType, StatisticType, VariableType
 ### BEGIN CLASSES ###
 ###############################################################################
 
+
 # -----------------------------------------------------------------------------
 @dataclass(frozen=True)
 class SiteRuntimeConfig:
-
     site_name: str
 
     # Store FILE FORMATS, not extensions; keyed by file stem
@@ -67,22 +69,18 @@ class SiteRuntimeConfig:
     # -------------------------------------------------------------------------
 
     def get_file_format(self, file_group: str) -> str:
-        """
-        Resolve file format name for file group.
+        """Resolve file format name for file group.
 
         Returns:
             e.g. 'CSI'
         """
-
         return self.file_formats[file_group]
 
     # -------------------------------------------------------------------------
 
     def get_file_type(self, file_group: str) -> FileType:
+        """Resolve FileType enum for file group.
         """
-        Resolve FileType enum for file group.
-        """
-
         format_name = self.get_file_format(file_group)
 
         return FileType[format_name]
@@ -90,22 +88,18 @@ class SiteRuntimeConfig:
     # -------------------------------------------------------------------------
 
     def get_file_extension(self, file_group: str) -> str:
-        """
-        Resolve extension for file group.
+        """Resolve extension for file group.
 
         Returns:
             e.g. 'dat'
         """
-
         return self.get_file_type(file_group).extension
 
     # -------------------------------------------------------------------------
 
     def get_filename(self, file_group: str) -> str:
+        """Construct canonical filename.
         """
-        Construct canonical filename.
-        """
-
         ext = self.get_file_extension(file_group)
 
         return f"{file_group}.{ext}"
@@ -114,10 +108,8 @@ class SiteRuntimeConfig:
 
     @property
     def flux_filename(self) -> str:
+        """Canonical flux filename.
         """
-        Canonical flux filename.
-        """
-
         return self.get_filename(self.flux_file)
 
     # -------------------------------------------------------------------------
@@ -130,7 +122,7 @@ class SiteRuntimeConfig:
             for attrs in self.variables.values()
             for raw_var in attrs.raw_inputs
             if raw_var.file
-            }
+        }
 
         return tuple(sorted(rslt))
 
@@ -138,7 +130,6 @@ class SiteRuntimeConfig:
 
 
 # -----------------------------------------------------------------------------
-
 
 
 ###############################################################################
@@ -152,14 +143,14 @@ class SiteRuntimeConfig:
 
 # -----------------------------------------------------------------------------
 
+
 def _check_name_config_consistency(
-        variable: str,
-        parsed_name,
-        statistic_type,
-        variable_type,
-        ) -> None:
-    """
-    Cross-check parsed name fields against config declarations.
+    variable: str,
+    parsed_name,
+    statistic_type,
+    variable_type,
+) -> None:
+    """Cross-check parsed name fields against config declarations.
 
     The parser resolves the terminal suffix into either statistic_id (a
     StatisticType suffix: Av, Sd, Vr ...) or variable_type_id (a
@@ -172,7 +163,6 @@ def _check_name_config_consistency(
         statistic_type: StatisticType declared in the config, or None.
         variable_type:  VariableType declared in the config.
     """
-
     if parsed_name.statistic_id is not None:
         stat_from_name = StatisticType.from_suffix(parsed_name.statistic_id)
         if statistic_type != stat_from_name:
@@ -180,7 +170,7 @@ def _check_name_config_consistency(
                 f"Variable '{variable}': name suffix '{parsed_name.statistic_id}'"
                 f" implies statistic_type={stat_from_name.value!r}, but config"
                 f" declares statistic_type={statistic_type!r}"
-                )
+            )
 
     if parsed_name.variable_type_id is not None:
         vtype_from_name = VariableType.from_suffix(parsed_name.variable_type_id)
@@ -189,15 +179,16 @@ def _check_name_config_consistency(
                 f"Variable '{variable}': name suffix '{parsed_name.variable_type_id}'"
                 f" implies variable_type={vtype_from_name.value!r}, but config"
                 f" declares variable_type={variable_type!r}"
-                )
+            )
+
 
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 
 def _validate_instrument_names(validated_config: SiteConfig) -> None:
-    """
-    Check every instrument name in the config against the TERN instrument
+    """Check every instrument name in the config against the TERN instrument
     registry. Collects all failures before raising so the caller sees the
     complete list of unknown instruments in one pass.
 
@@ -207,7 +198,6 @@ def _validate_instrument_names(validated_config: SiteConfig) -> None:
     Raises:
         ValueError: if any instrument name is not recognised by the registry.
     """
-
     # Deferred to avoid circular import:
     # instrument_registry → site_metadata_repository → site_registry → here
     from services.metadata import instrument_registry
@@ -222,21 +212,22 @@ def _validate_instrument_names(validated_config: SiteConfig) -> None:
                     errors.append(
                         f"Variable '{variable}' input '{raw_name}': "
                         f"unknown instrument '{name}'"
-                        )
+                    )
 
     if errors:
         raise ValueError(
             f"Instrument validation failed for '{validated_config.site}':\n"
             + "\n".join(f"  {e}" for e in errors)
-            )
+        )
+
 
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 
 def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
-    """
-    Build a SiteRuntimeConfig from a structurally- and semantically-validated
+    """Build a SiteRuntimeConfig from a structurally- and semantically-validated
     SiteConfig. Performs name-syntax, quantity-existence, and units checks as
     part of assembly, raising on the first failure found.
 
@@ -247,7 +238,6 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
     Returns:
         Immutable SiteRuntimeConfig.
     """
-
     name_parser = NameParser()
     canonical_metadata = build_canonical_quantity_registry()
 
@@ -255,11 +245,10 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
         validated_config.custom_metadata.model_dump()
         if validated_config.custom_metadata
         else None
-        )
+    )
 
     site_variables = {}
     for variable, raw_cfg in validated_config.variables.items():
-
         # Parse the variable name (syntax validation)
         parsed_name_elems = name_parser.parse_variable_name(variable_name=variable)
 
@@ -269,22 +258,22 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
             parsed_name=parsed_name_elems,
             statistic_type=raw_cfg.statistic_type,
             variable_type=raw_cfg.variable_type,
-            )
+        )
 
         # Ensure the quantity exists in canonical metadata
         quantity = parsed_name_elems.quantity
         if quantity not in canonical_metadata.quantities:
             raise ValueError(
                 f"Variable '{variable}': canonical quantity '{quantity}' not found"
-                )
+            )
 
         # Resolve its output (ensure canonical fields are correct for
         # variances, QC vals etc)
         quantity_canonical_metadata = canonical_metadata.resolve_metadata(
             quantity=quantity,
             variable_type=raw_cfg.variable_type,
-            statistic_type=raw_cfg.statistic_type
-            )
+            statistic_type=raw_cfg.statistic_type,
+        )
 
         # Validate that each input's declared units are acceptable for this
         # quantity. COUNTER variables are skipped — their units field is a
@@ -298,7 +287,7 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
                         f"units '{cfg.units}' is not valid for quantity "
                         f"'{quantity}'. Expected one of: "
                         f"{quantity_canonical_metadata.valid_input_units}"
-                        )
+                    )
 
         # Assemble per-input metadata
         raw_inputs = tuple(
@@ -309,9 +298,9 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
                 file=cfg.file,
                 begin=cfg.begin,
                 end=cfg.end,
-                )
-            for raw_name, cfg in raw_cfg.input_variables.items()
             )
+            for raw_name, cfg in raw_cfg.input_variables.items()
+        )
 
         first_input = next(iter(raw_cfg.input_variables.values()))
 
@@ -327,7 +316,7 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
             canonical=quantity_canonical_metadata,
             parsed_name_elems=parsed_name_elems,
             diag_type=first_input.diag_type,
-            )
+        )
 
     return SiteRuntimeConfig(
         site_name=validated_config.site,
@@ -335,16 +324,17 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
         flux_system=validated_config.flux_system,
         flux_file=validated_config.flux_file,
         custom_metadata=custom_metadata,
-        variables=site_variables
-        )
+        variables=site_variables,
+    )
+
 
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 
 def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
-    """
-    Assemble a SiteRuntimeConfig from a site YAML config file.
+    """Assemble a SiteRuntimeConfig from a site YAML config file.
 
     Three phases:
         1. Structural validation  — YAML schema (site_config_schema)
@@ -357,10 +347,10 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     Returns:
         Immutable SiteRuntimeConfig.
     """
-
     validated_config = validate_L1_config_structure(file=file_path)
     _validate_instrument_names(validated_config)
     return _build_runtime_config(validated_config)
+
 
 # -----------------------------------------------------------------------------
 

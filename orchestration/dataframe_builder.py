@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Build canonical DataFrames from raw instrument file groups.
+"""Build canonical DataFrames from raw instrument file groups.
 
 Public API
 ----------
@@ -11,47 +9,46 @@ build_dataframe(file_groups, registry, quantities, n_samples, start_date,
                 flux_file, time_step)                                         -> pd.DataFrame
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 import pandas as pd
 
 from domain.enums import DiagnosticType, StatisticType, VariableType
-from services.metadata.file_group_builder import FileGroup, build_file_groups
-from services.metadata.canonical_quantity_registry import resolve_variance_units
-from services.metadata.variable_registry import (
-    VariableSpec, build_variable_registry, canonical_output_name,
-    group_by_canonical_name,
-    )
-from services.metadata.site_registry import SiteRegistry, SiteContext
-from services.data import raw_data_loader, transform_service
 from infrastructure.data_conditioning import condition_dataframe
-
+from services.data import raw_data_loader, transform_service
+from services.metadata.canonical_quantity_registry import resolve_variance_units
+from services.metadata.file_group_builder import FileGroup, build_file_groups
+from services.metadata.site_registry import SiteContext, SiteRegistry
+from services.metadata.variable_registry import (
+    VariableSpec,
+    build_variable_registry,
+    canonical_output_name,
+    group_by_canonical_name,
+)
 
 SITE_REGISTRY = SiteRegistry()
 
 
 def build_dataframe_from_site_name(
-        site_name: str,
-        quantities: set[str] | None = None,
-        start_date: pd.Timestamp | None = None,
-        ) -> pd.DataFrame:
+    site_name: str,
+    quantities: set[str] | None = None,
+    start_date: pd.Timestamp | None = None,
+) -> pd.DataFrame:
     """Convenience wrapper — resolves site name to context via registry."""
-
     ctx = SITE_REGISTRY.get_context(site=site_name)
     return build_dataframe_from_context(
         ctx=ctx,
         quantities=quantities,
         start_date=start_date,
-        )
+    )
 
 
 def build_dataframe_from_context(
-        ctx: SiteContext,
-        quantities: set[str] | None = None,
-        start_date: pd.Timestamp | None = None,
-        ) -> pd.DataFrame:
-    """
-    Build a canonical DataFrame from a fully-assembled site context.
+    ctx: SiteContext,
+    quantities: set[str] | None = None,
+    start_date: pd.Timestamp | None = None,
+) -> pd.DataFrame:
+    """Build a canonical DataFrame from a fully-assembled site context.
 
     Assembles file_groups and registry from the context, then delegates to
     build_dataframe. All site-specific parameters (n_samples, flux_file,
@@ -66,7 +63,6 @@ def build_dataframe_from_context(
     Returns:
         Canonical DataFrame with DatetimeIndex.
     """
-
     runtime_cfg = ctx.runtime_config
     file_groups = build_file_groups(runtime_cfg)
     for group in file_groups.values():
@@ -81,20 +77,19 @@ def build_dataframe_from_context(
         start_date=start_date,
         flux_file=runtime_cfg.flux_file,
         time_step=ctx.metadata.time_step,
-        )
+    )
 
 
 def build_dataframe(
-        file_groups: dict[str, FileGroup],
-        registry: dict[str, VariableSpec],
-        n_samples: int | None = None,
-        start_date: pd.Timestamp | None = None,
-        flux_file: str | None = None,
-        time_step: int | None = None,
-        quantities: set[str] | None = None,
-        ) -> pd.DataFrame:
-    """
-    Build the canonical dataframe.
+    file_groups: dict[str, FileGroup],
+    registry: dict[str, VariableSpec],
+    n_samples: int | None = None,
+    start_date: pd.Timestamp | None = None,
+    flux_file: str | None = None,
+    time_step: int | None = None,
+    quantities: set[str] | None = None,
+) -> pd.DataFrame:
+    """Build the canonical dataframe.
 
     When ``quantities`` is supplied, the registry is filtered to only entries
     where ``spec.quantity in quantities``, and ``file_groups`` is further
@@ -109,19 +104,16 @@ def build_dataframe(
     Step 5 — truncate to flux file group's temporal extent, so that ancillary
               data predating the flux system does not produce empty output years.
     """
-
     if quantities is not None:
         registry = {
             alias: spec
             for alias, spec in registry.items()
             if spec.quantity in quantities
-            }
+        }
         active_groups = {spec.file_group for spec in registry.values()}
         file_groups = {
-            name: fg
-            for name, fg in file_groups.items()
-            if name in active_groups
-            }
+            name: fg for name, fg in file_groups.items() if name in active_groups
+        }
 
     # Step 1
     dfs = []
@@ -135,7 +127,7 @@ def build_dataframe(
             n_samples=n_samples,
             start_date=start_date,
             time_step=time_step,
-            )
+        )
         if not group_df.empty:
             if group_name == flux_file:
                 flux_index = group_df.index
@@ -152,37 +144,34 @@ def build_dataframe(
 
     # Step 5
     if flux_index is not None:
-        df = df.loc[flux_index.min():flux_index.max()]
+        df = df.loc[flux_index.min() : flux_index.max()]
 
     return df
 
 
 def _build_file_group_dataframe(
-        mapper: FileGroup,
-        loader: Callable,
-        registry: dict[str, VariableSpec],
-        n_samples: int | None = None,
-        start_date: pd.Timestamp | None = None,
-        time_step: int | None = None,
-        ) -> pd.DataFrame:
-    """
-    Load and process all files in a file group.
+    mapper: FileGroup,
+    loader: Callable,
+    registry: dict[str, VariableSpec],
+    n_samples: int | None = None,
+    start_date: pd.Timestamp | None = None,
+    time_step: int | None = None,
+) -> pd.DataFrame:
+    """Load and process all files in a file group.
 
     For each file: load, filter to expected variables, apply aliasing,
     apply statistical transforms and unit conversions.  Then concatenate
     vertically across master + backup files and condition the time index.
     Files whose latest record predates start_date are skipped entirely.
     """
-
     rename_map = {
         entry.raw_name: entry.alias
         for entry in registry.values()
         if entry.file_group == mapper.group
-        }
+    }
 
     dfs = []
     for file in mapper.variables_by_file:
-
         df = loader(file)
 
         if start_date is not None:
@@ -194,7 +183,7 @@ def _build_file_group_dataframe(
 
         df = df.rename(
             columns={col: rename_map[col] for col in df.columns if col in rename_map}
-            )
+        )
 
         df = _apply_conversions(df=df, registry=registry, n_samples=n_samples)
 
@@ -210,17 +199,15 @@ def _build_file_group_dataframe(
 
 def _filter_variables(df: pd.DataFrame, variables: set) -> pd.DataFrame:
     """Keep only columns present in the expected variable set."""
-
     return df[[c for c in df.columns if c in variables]].copy()
 
 
 def _apply_conversions(
-        df: pd.DataFrame,
-        registry: dict[str, VariableSpec],
-        n_samples: int | None = None,
-        ) -> pd.DataFrame:
-    """
-    Apply statistical transforms and unit conversions in a single pass.
+    df: pd.DataFrame,
+    registry: dict[str, VariableSpec],
+    n_samples: int | None = None,
+) -> pd.DataFrame:
+    """Apply statistical transforms and unit conversions in a single pass.
 
     For variance variables: take the square root (data → stdev), then derive
     the post-transform units and convert further if site stdev-form units
@@ -235,9 +222,7 @@ def _apply_conversions(
 
     QC variables (dimensionless on both sides) pass through unchanged.
     """
-
     for variable in df.columns:
-
         if variable not in registry:
             continue
 
@@ -255,18 +240,18 @@ def _apply_conversions(
                         f"Counter variable {variable!r} has diag_type="
                         f"'valid_count' but n_samples is not available. "
                         f"Ensure site metadata includes time_step and freq_hz."
-                        )
-                converter = transform_service.get_unit_conversion('Diag')
+                    )
+                converter = transform_service.get_unit_conversion("Diag")
                 try:
                     result = converter(
                         data=df[variable],
-                        from_units='valid_count',
+                        from_units="valid_count",
                         n_samples=n_samples,
-                        )
+                    )
                 except Exception as e:
                     raise RuntimeError(
                         f"Diagnostic conversion failed for {variable!r}"
-                        ) from e
+                    ) from e
                 df[variable] = result
             # INVALID_COUNT: pass through unchanged
             continue
@@ -279,42 +264,37 @@ def _apply_conversions(
                 raise RuntimeError(
                     f"Unit conversion failed for {variable!r} "
                     f"({from_units!r} → {spec.canonical_units!r})"
-                    ) from e
+                ) from e
             df[variable] = result
 
     return df
 
 
 def _get_merge_blocks(registry: dict[str, VariableSpec]) -> dict:
-    """
-    Identify canonical variables constructed from multiple raw inputs
+    """Identify canonical variables constructed from multiple raw inputs
     (instrument changeovers).
 
     Returns:
         dict keyed by canonical name; values are alias → {begin, end} dicts.
     """
-
     rslt = {}
 
     for canonical_name, var_specs in group_by_canonical_name(registry).items():
-
         if len(var_specs) <= 1:
             continue
 
         rslt[canonical_name] = {
-            spec.alias: {'begin': spec.begin, 'end': spec.end}
-            for spec in var_specs
-            }
+            spec.alias: {"begin": spec.begin, "end": spec.end} for spec in var_specs
+        }
 
     return rslt
 
 
 def _merge_overlapping_variables(
-        df: pd.DataFrame,
-        registry: dict[str, VariableSpec],
-        ) -> pd.DataFrame:
+    df: pd.DataFrame,
+    registry: dict[str, VariableSpec],
+) -> pd.DataFrame:
     """Merge overlapping instrument periods into single canonical columns."""
-
     merge_blocks = _get_merge_blocks(registry)
 
     if not merge_blocks:
@@ -327,37 +307,32 @@ def _merge_overlapping_variables(
         merged[canonical_name] = _merge_block(df=df, block=block)
         drop_cols.extend(block.keys())
 
-    return (
-        df.drop(columns=drop_cols, errors='ignore')
-        .join(pd.DataFrame(merged))
-        )
+    return df.drop(columns=drop_cols, errors="ignore").join(pd.DataFrame(merged))
 
 
 def _merge_block(
-        df: pd.DataFrame,
-        block: dict[str, dict],
-        ) -> pd.Series:
+    df: pd.DataFrame,
+    block: dict[str, dict],
+) -> pd.Series:
     """Assemble one canonical series from consecutive instrument segments."""
-
     result = pd.Series(index=df.index, dtype=float)
 
     for alias, info in block.items():
-        segment = df.loc[info['begin']: info['end'], alias]
+        segment = df.loc[info["begin"] : info["end"], alias]
         result.loc[segment.index] = segment
 
     return result
 
 
 def _rename_to_canonical(
-        df: pd.DataFrame,
-        registry: dict[str, VariableSpec],
-        ) -> pd.DataFrame:
+    df: pd.DataFrame,
+    registry: dict[str, VariableSpec],
+) -> pd.DataFrame:
     """Rename aliased columns to their canonical output names."""
-
     rename_map = {
         alias: canonical_output_name(spec)
         for alias, spec in registry.items()
         if alias in df.columns
-        }
+    }
 
     return df.rename(columns=rename_map)

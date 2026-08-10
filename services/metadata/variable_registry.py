@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Build a registry of VariableSpec objects from a runtime config and file groups.
+"""Build a registry of VariableSpec objects from a runtime config and file groups.
 
 Public API
 ----------
@@ -12,12 +10,13 @@ canonical_output_name(var_spec) -> str
 """
 
 from datetime import datetime
+
 from pydantic.dataclasses import dataclass
 
 from domain.enums import DiagnosticType, StatisticType, VariableType
-from services.metadata.runtime_config_loader import SiteRuntimeConfig
-from services.metadata.file_group_builder import FileGroup
 from services.metadata.canonical_quantity_registry import resolve_variance_units
+from services.metadata.file_group_builder import FileGroup
+from services.metadata.runtime_config_loader import SiteRuntimeConfig
 
 
 @dataclass(frozen=True)
@@ -62,21 +61,17 @@ class VariableSpec:
 
 
 def build_variable_registry(
-        runtime_cfg: SiteRuntimeConfig,
-        file_groups: dict[str, FileGroup],
-        ) -> dict[str, 'VariableSpec']:
+    runtime_cfg: SiteRuntimeConfig,
+    file_groups: dict[str, FileGroup],
+) -> dict[str, "VariableSpec"]:
     """Build alias-keyed registry of VariableSpec objects."""
-
     registry = {}
 
     for i, (group_name, _) in enumerate(file_groups.items()):
-
-        group_id = f'gp{i}'
+        group_id = f"gp{i}"
 
         for canonical_name, var_cfg in runtime_cfg.variables.items():
-
             for raw_input in var_cfg.raw_inputs:
-
                 if raw_input.file != group_name:
                     continue
 
@@ -85,16 +80,17 @@ def build_variable_registry(
                 if var_cfg.statistic_type == StatisticType.VAR:
                     canonical_units = resolve_variance_units(
                         var_cfg.canonical.standard_units
-                        )
+                    )
                 else:
                     canonical_units = var_cfg.canonical.standard_units
 
-                if var_cfg.variable_type in (VariableType.QUALITY_FLAG, VariableType.COUNTER):
-                    site_units = 'dimensionless'
+                if var_cfg.variable_type in (
+                    VariableType.QUALITY_FLAG,
+                    VariableType.COUNTER,
+                ):
+                    site_units = "dimensionless"
                 else:
-                    site_units = (
-                        raw_input.raw_units or var_cfg.canonical.standard_units
-                        )
+                    site_units = raw_input.raw_units or var_cfg.canonical.standard_units
 
                 registry[alias] = VariableSpec(
                     raw_name=raw_input.raw_name,
@@ -116,16 +112,15 @@ def build_variable_registry(
                     begin=raw_input.begin,
                     end=raw_input.end,
                     diag_type=var_cfg.diag_type,
-                    )
+                )
 
     return registry
 
 
 def group_by_canonical_name(
-        registry: dict[str, VariableSpec],
-        ) -> dict[str, list[VariableSpec]]:
+    registry: dict[str, VariableSpec],
+) -> dict[str, list[VariableSpec]]:
     """Group registry entries by canonical variable name."""
-
     groups: dict[str, list[VariableSpec]] = {}
     for entry in registry.values():
         groups.setdefault(entry.canonical_name, []).append(entry)
@@ -133,14 +128,12 @@ def group_by_canonical_name(
 
 
 def canonical_output_name(var_spec: VariableSpec) -> str:
-    """
-    Return the output variable name.
+    """Return the output variable name.
 
     Variance variables are output as standard deviation, so the _Vr suffix
     is replaced with _Sd.
     """
-
     name = var_spec.canonical_name
-    if var_spec.statistic_type == StatisticType.VAR and name.endswith('_Vr'):
+    if var_spec.statistic_type == StatisticType.VAR and name.endswith("_Vr"):
         return f"{name[:-2]}Sd"
     return name

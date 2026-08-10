@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-TOA5 file writer.
+"""TOA5 file writer.
 
 Provides a single public function, `write_toa5`, for writing data and headers
 to a Campbell Scientific TOA5-format file.  The function accepts either a
@@ -23,10 +21,9 @@ The caller is responsible for ensuring that:
 ###############################################################################
 
 import pathlib
+from collections.abc import Callable
 
 import pandas as pd
-
-from collections.abc import Callable
 
 from domain.constants import DATA_TIME_FORMAT
 from infrastructure import data_conditioning, file_io
@@ -41,20 +38,20 @@ from infrastructure.datetime_utils import format_fast_timestamp
 ### BEGIN CONSTANTS ###
 ###############################################################################
 
-_TIMESTAMP_COL = 'TIMESTAMP'
-_TIMESTAMP_UNITS = 'TS'
-_TIMESTAMP_SAMPLING = ''
+_TIMESTAMP_COL = "TIMESTAMP"
+_TIMESTAMP_UNITS = "TS"
+_TIMESTAMP_SAMPLING = ""
 
 # Default TOA5 info line (line 1) used when no `info` argument is supplied.
 DEFAULT_TOA5_INFO: list[str] = [
-    'TOA5',
-    'NoStation',
-    'CR1000',
-    '9999',
-    'cr1000.std.99.99',
-    'CPU:noprogram.cr1',
-    '9999',
-    'default_table',
+    "TOA5",
+    "NoStation",
+    "CR1000",
+    "9999",
+    "cr1000.std.99.99",
+    "CPU:noprogram.cr1",
+    "9999",
+    "default_table",
 ]
 
 ###############################################################################
@@ -65,6 +62,7 @@ DEFAULT_TOA5_INFO: list[str] = [
 ###############################################################################
 ### BEGIN FUNCTIONS ###
 ###############################################################################
+
 
 # -----------------------------------------------------------------------------
 def _coerce_integer_floats(data: pd.DataFrame) -> pd.DataFrame:
@@ -82,13 +80,15 @@ def _coerce_integer_floats(data: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with qualifying float columns cast to Int64.
     """
-
-    for col in data.select_dtypes(include='float').columns:
+    for col in data.select_dtypes(include="float").columns:
         non_null = data[col].dropna()
         if len(non_null) and (non_null % 1 == 0).all():
-            data[col] = data[col].astype('Int64')
+            data[col] = data[col].astype("Int64")
     return data
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def write_toa5(
@@ -142,7 +142,6 @@ def write_toa5(
             exactly three lists; or if the variable-name list (``headers[0]``)
             length does not equal the number of DataFrame columns.
     """
-
     # --- normalise inputs ----------------------------------------------------
 
     if info is None:
@@ -154,20 +153,20 @@ def write_toa5(
         intervals = [data_conditioning.infer_interval(f) for f in data]
         if len(set(intervals)) > 1:
             raise ValueError(
-                f'DataFrames have inconsistent intervals (minutes): {intervals}.'
+                f"DataFrames have inconsistent intervals (minutes): {intervals}."
             )
         data = (
             pd.concat(data)
-            .sort_index(kind='stable')
-            .loc[lambda df: ~df.index.duplicated(keep='first')]
+            .sort_index(kind="stable")
+            .loc[lambda df: ~df.index.duplicated(keep="first")]
         )
     else:
         data_conditioning.check_datetime_index(data)
 
     if len(headers) != 3:
         raise ValueError(
-            f'`headers` must be a list of exactly 3 lists '
-            f'(variables, units, sampling); got {len(headers)}.'
+            f"`headers` must be a list of exactly 3 lists "
+            f"(variables, units, sampling); got {len(headers)}."
         )
 
     # --- validate header / column consistency --------------------------------
@@ -176,8 +175,8 @@ def write_toa5(
     n_header_cols = len(headers[0])
     if n_header_cols != n_data_cols:
         raise ValueError(
-            f'Variable-name header has {n_header_cols} entries but data has '
-            f'{n_data_cols} columns (TIMESTAMP excluded from both).'
+            f"Variable-name header has {n_header_cols} entries but data has "
+            f"{n_data_cols} columns (TIMESTAMP excluded from both)."
         )
 
     # --- prepare data for output ---------------------------------------------
@@ -214,6 +213,7 @@ def write_toa5(
         headers=[info] + full_headers,
         data=data,
     )
+
 
 # -----------------------------------------------------------------------------
 

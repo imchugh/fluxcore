@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-EddyPro file writer.
+"""EddyPro file writer.
 
 Provides a single public function, `write_eddypro`, for writing data and
 headers to a LI-COR EddyPro-format file (SmartFlux daily/master summary
@@ -45,9 +43,9 @@ from infrastructure import data_conditioning, file_io
 ### BEGIN CONSTANTS ###
 ###############################################################################
 
-_FIXED_COLS = ['DATAH', 'filename', 'date', 'time']
-_FIXED_VARIABLE_HEADER = ['DATAH', 'filename', 'date', 'time']
-_FIXED_UNITS_HEADER = ['DATAU', '', '[yyyy-mm-dd]', '[HH:MM]']
+_FIXED_COLS = ["DATAH", "filename", "date", "time"]
+_FIXED_VARIABLE_HEADER = ["DATAH", "filename", "date", "time"]
+_FIXED_UNITS_HEADER = ["DATAU", "", "[yyyy-mm-dd]", "[HH:MM]"]
 
 ###############################################################################
 ### END CONSTANTS ###
@@ -57,6 +55,7 @@ _FIXED_UNITS_HEADER = ['DATAU', '', '[yyyy-mm-dd]', '[HH:MM]']
 ###############################################################################
 ### BEGIN FUNCTIONS ###
 ###############################################################################
+
 
 # -----------------------------------------------------------------------------
 def write_eddypro(
@@ -96,30 +95,28 @@ def write_eddypro(
             (``headers[0]``) length does not match the number of remaining
             columns.
     """
-
     # --- validate inputs -------------------------------------------------
 
     data_conditioning.check_datetime_index(data)
 
     if len(headers) != 2:
         raise ValueError(
-            f'`headers` must be a list of exactly 2 lists '
-            f'(variables, units); got {len(headers)}.'
+            f"`headers` must be a list of exactly 2 lists "
+            f"(variables, units); got {len(headers)}."
         )
 
     if list(data.columns[:4]) != _FIXED_COLS:
         raise ValueError(
-            f'Expected leading columns {_FIXED_COLS}, got '
-            f'{list(data.columns[:4])}.'
+            f"Expected leading columns {_FIXED_COLS}, got {list(data.columns[:4])}."
         )
 
     n_data_cols = len(data.columns) - 4
     n_header_cols = len(headers[0])
     if n_header_cols != n_data_cols:
         raise ValueError(
-            f'Variable-name header has {n_header_cols} entries but data has '
-            f'{n_data_cols} variable columns (DATAH/filename/date/time '
-            f'excluded from both).'
+            f"Variable-name header has {n_header_cols} entries but data has "
+            f"{n_data_cols} variable columns (DATAH/filename/date/time "
+            f"excluded from both)."
         )
 
     # --- prepend fixed header cells ---------------------------------------
@@ -136,6 +133,7 @@ def write_eddypro(
         headers=full_headers,
         data=data,
     )
+
 
 # -----------------------------------------------------------------------------
 

@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Build L1 xarray Datasets from a site context.
+"""Build L1 xarray Datasets from a site context.
 
 Public API
 ----------
@@ -12,24 +10,27 @@ DatasetBuildIntermediate  — exported for use by derived_quantities
 """
 
 import datetime
-import pandas as pd
-import xarray as xr
 from dataclasses import dataclass
 
+import pandas as pd
+import xarray as xr
+
 from domain.enums import StatisticType, VariableType
-from services.metadata.site_registry import SiteRegistry, SiteContext
+from orchestration.dataframe_builder import build_dataframe
 from services.metadata import file_group_builder
 from services.metadata.instrument_registry import get_instrument_uri
+from services.metadata.site_registry import SiteContext, SiteRegistry
 from services.metadata.variable_registry import (
-    VariableSpec, build_variable_registry, canonical_output_name,
+    VariableSpec,
+    build_variable_registry,
+    canonical_output_name,
     group_by_canonical_name,
-    )
-from orchestration.dataframe_builder import build_dataframe
-
+)
 
 ###############################################################################
 ### BEGIN TYPES ###
 ###############################################################################
+
 
 @dataclass
 class DatasetBuildIntermediate:
@@ -37,6 +38,7 @@ class DatasetBuildIntermediate:
 
     df: pd.DataFrame
     var_attrs: dict[str, dict]
+
 
 ###############################################################################
 ### END TYPES ###
@@ -48,10 +50,19 @@ class DatasetBuildIntermediate:
 ###############################################################################
 
 ATTRS_SUBSET = [
-    'site_name', 'fluxnet_id', 'latitude', 'longitude', 'elevation',
-    'time_step', 'time_zone', 'canopy_height', 'tower_height', 'soil',
-    'vegetation', 'date_commissioned',
-    ]
+    "site_name",
+    "fluxnet_id",
+    "latitude",
+    "longitude",
+    "elevation",
+    "time_step",
+    "time_zone",
+    "canopy_height",
+    "tower_height",
+    "soil",
+    "vegetation",
+    "date_commissioned",
+]
 
 SITE_REGISTRY = SiteRegistry()
 
@@ -64,36 +75,34 @@ SITE_REGISTRY = SiteRegistry()
 ### BEGIN PUBLIC FUNCTIONS ###
 ###############################################################################
 
+
 def build_dataset_from_site_name(
-        site_name: str,
-        pad_humidity: bool = True,
-        pad_co2: bool = True,
-        start_date: pd.Timestamp | None = None,
-        legacy: bool = False,
-        ) -> xr.Dataset:
-    """
-    Convenience wrapper — resolves site name to context via registry.
+    site_name: str,
+    pad_humidity: bool = True,
+    pad_co2: bool = True,
+    start_date: pd.Timestamp | None = None,
+    legacy: bool = False,
+) -> xr.Dataset:
+    """Convenience wrapper — resolves site name to context via registry.
 
     legacy: if True, build from the site's legacy config snapshot
         (site_configs/legacy) instead of its operational config. Use for
         one-off rebuilds of L1 output under an earlier generation of
         instruments/variables/files.
     """
-
     ctx = SITE_REGISTRY.get_context(site=site_name, legacy=legacy)
     return build_dataset_from_context(
         ctx=ctx, pad_humidity=pad_humidity, pad_co2=pad_co2, start_date=start_date
-        )
+    )
 
 
 def build_dataset_from_context(
-        ctx: SiteContext,
-        pad_humidity: bool = True,
-        pad_co2: bool = True,
-        start_date: pd.Timestamp | None = None,
-        ) -> xr.Dataset:
+    ctx: SiteContext,
+    pad_humidity: bool = True,
+    pad_co2: bool = True,
+    start_date: pd.Timestamp | None = None,
+) -> xr.Dataset:
     """Build an L1 xarray dataset from a fully-assembled site context."""
-
     result = _build_result(ctx, start_date=start_date)
     result = _apply_padding(result, pad_humidity=pad_humidity, pad_co2=pad_co2)
 
@@ -102,6 +111,7 @@ def build_dataset_from_context(
     ds = _apply_global_metadata(ds, ctx)
 
     return ds
+
 
 ###############################################################################
 ### END PUBLIC FUNCTIONS ###
@@ -112,39 +122,45 @@ def build_dataset_from_context(
 ### BEGIN PRIVATE FUNCTIONS — metadata application ###
 ###############################################################################
 
+
 def _apply_padding(
-        result: DatasetBuildIntermediate,
-        pad_humidity: bool,
-        pad_co2: bool,
-        ) -> DatasetBuildIntermediate:
+    result: DatasetBuildIntermediate,
+    pad_humidity: bool,
+    pad_co2: bool,
+) -> DatasetBuildIntermediate:
     # Lazy import to avoid circular dependency (derived_quantities imports
     # DatasetBuildIntermediate from this module)
     from orchestration.derived_quantities import (
-        pad_humidity as _pad_humidity,
         pad_co2 as _pad_co2,
-        )
+    )
+    from orchestration.derived_quantities import (
+        pad_humidity as _pad_humidity,
+    )
+
     if pad_humidity:
         result = _pad_humidity(result)
     if pad_co2:
         result = _pad_co2(result)
     return result
 
+
 def _apply_variable_metadata(
-        ds: xr.Dataset,
-        var_attrs: dict[str, dict],
-        ) -> xr.Dataset:
+    ds: xr.Dataset,
+    var_attrs: dict[str, dict],
+) -> xr.Dataset:
 
     for variable in [v for v in ds.variables if v not in ds.dims]:
         ds[variable].attrs = {
             k: v for k, v in var_attrs[variable].items() if v is not None
-            }
+        }
 
     return ds
 
+
 def _apply_global_metadata(
-        ds: xr.Dataset,
-        ctx: SiteContext,
-        ) -> xr.Dataset:
+    ds: xr.Dataset,
+    ctx: SiteContext,
+) -> xr.Dataset:
 
     for attr in ATTRS_SUBSET:
         value = ctx.metadata.get(attr)
@@ -156,9 +172,10 @@ def _apply_global_metadata(
 
     flux_system = ctx.runtime_config.flux_system
     if flux_system is not None:
-        ds.attrs['flux_system'] = flux_system
+        ds.attrs["flux_system"] = flux_system
 
     return ds
+
 
 ###############################################################################
 ### END PRIVATE FUNCTIONS — metadata application ###
@@ -169,12 +186,12 @@ def _apply_global_metadata(
 ### BEGIN PRIVATE FUNCTIONS — dataset build ###
 ###############################################################################
 
+
 def _build_result(
-        ctx: SiteContext,
-        start_date: pd.Timestamp | None = None,
-        ) -> DatasetBuildIntermediate:
-    """
-    Build a canonical dataframe and per-variable xarray attrs from a site
+    ctx: SiteContext,
+    start_date: pd.Timestamp | None = None,
+) -> DatasetBuildIntermediate:
+    """Build a canonical dataframe and per-variable xarray attrs from a site
     context.
 
     Args:
@@ -189,17 +206,13 @@ def _build_result(
         DatasetBuildIntermediate containing the canonical dataframe and a dict
         of per-variable xarray attribute dicts keyed by canonical name.
     """
-
     runtime_cfg = ctx.runtime_config
 
     file_groups = file_group_builder.build_file_groups(runtime_cfg)
     for group in file_groups.values():
         group.validate_or_raise()
 
-    registry = build_variable_registry(
-        runtime_cfg=runtime_cfg, 
-        file_groups=file_groups
-        )
+    registry = build_variable_registry(runtime_cfg=runtime_cfg, file_groups=file_groups)
 
     df = build_dataframe(
         file_groups=file_groups,
@@ -208,7 +221,7 @@ def _build_result(
         start_date=start_date,
         flux_file=runtime_cfg.flux_file,
         time_step=ctx.metadata.time_step,
-        )
+    )
 
     var_attrs = _build_var_attrs(registry=registry, n_samples=ctx.metadata.n_samples)
 
@@ -218,6 +231,7 @@ def _build_result(
 # -----------------------------------------------------------------------------
 # Variable attribute construction
 # -----------------------------------------------------------------------------
+
 
 def _instrument_uri(instrument: str | dict) -> str | dict | None:
     """Return URI(s) for an instrument field — str for simple, dict for compound."""
@@ -234,24 +248,21 @@ def _safe_uri(name: str) -> str | None:
 
 
 def _build_var_attrs(
-        registry: dict[str, VariableSpec],
-        n_samples: int | None = None,
-        ) -> dict[str, dict]:
-    """
-    Build per-variable xarray attribute dicts keyed by canonical output name.
+    registry: dict[str, VariableSpec],
+    n_samples: int | None = None,
+) -> dict[str, dict]:
+    """Build per-variable xarray attribute dicts keyed by canonical output name.
 
     n_samples (expected samples per averaging period, from site time_step and
     freq_hz) fills valid_max for COUNTER variables (diagnostics/sample
     counts), whose upper bound is site-specific and not known to the generic
     canonical quantity registry.
     """
-
     rslt = {}
 
     canonical_groups = group_by_canonical_name(registry)
 
     for _, var_specs in canonical_groups.items():
-
         main_spec = var_specs[-1]
 
         valid_max = main_spec.valid_max
@@ -259,19 +270,19 @@ def _build_var_attrs(
             valid_max = n_samples
 
         attrs = {
-            'height':             main_spec.height,
-            'height_range':       main_spec.height_range,
-            'instrument':         main_spec.instrument,
-            'instrument_uri':     _instrument_uri(main_spec.instrument),
-            'instrument_history': _history_from_instruments(var_specs),
-            'long_name':          main_spec.long_name,
-            'quantity':           main_spec.quantity,
-            'standard_name':      main_spec.standard_name,
-            'valid_min':          main_spec.valid_min,
-            'valid_max':          valid_max,
-            'statistic_type':     _output_statistic(main_spec),
-            'units':              main_spec.canonical_units,
-            }
+            "height": main_spec.height,
+            "height_range": main_spec.height_range,
+            "instrument": main_spec.instrument,
+            "instrument_uri": _instrument_uri(main_spec.instrument),
+            "instrument_history": _history_from_instruments(var_specs),
+            "long_name": main_spec.long_name,
+            "quantity": main_spec.quantity,
+            "standard_name": main_spec.standard_name,
+            "valid_min": main_spec.valid_min,
+            "valid_max": valid_max,
+            "statistic_type": _output_statistic(main_spec),
+            "units": main_spec.canonical_units,
+        }
 
         rslt[canonical_output_name(main_spec)] = attrs
 
@@ -279,10 +290,9 @@ def _build_var_attrs(
 
 
 def _history_from_instruments(
-        var_specs: list[VariableSpec],
-        ) -> dict[str, dict] | None:
-    """
-    Return instrument changeover history, or None if no instrument changed.
+    var_specs: list[VariableSpec],
+) -> dict[str, dict] | None:
+    """Return instrument changeover history, or None if no instrument changed.
 
     For simple (string) instruments: keyed by instrument name.
     For compound (dict) instruments: keyed by alias, containing per-instrument
@@ -292,7 +302,6 @@ def _history_from_instruments(
     Dates are always explicit for multi-period variables (required for the
     merge step), so no defaults are needed.
     """
-
     if isinstance(var_specs[0].instrument, dict):
         return _history_from_compound_instruments(var_specs)
 
@@ -300,19 +309,17 @@ def _history_from_instruments(
     if len(instruments) == 1:
         return None
     return {
-        spec.instrument: {'start_date': spec.begin, 'end_date': spec.end}
+        spec.instrument: {"start_date": spec.begin, "end_date": spec.end}
         for spec in var_specs
-        }
+    }
 
 
 def _history_from_compound_instruments(
-        var_specs: list[VariableSpec],
-        ) -> dict[str, dict] | None:
-    """
-    Per-alias history for compound quantities. Only aliases where the
+    var_specs: list[VariableSpec],
+) -> dict[str, dict] | None:
+    """Per-alias history for compound quantities. Only aliases where the
     instrument changed across periods are included.
     """
-
     aliases = list(var_specs[0].instrument.keys())
     result = {}
     for alias in aliases:
@@ -320,22 +327,20 @@ def _history_from_compound_instruments(
         if len(alias_instruments) > 1:
             result[alias] = {
                 spec.instrument[alias]: {
-                    'start_date': spec.begin,
-                    'end_date': spec.end,
-                    }
-                for spec in var_specs
+                    "start_date": spec.begin,
+                    "end_date": spec.end,
                 }
+                for spec in var_specs
+            }
     return result if result else None
 
 
 def _output_statistic(var_spec: VariableSpec) -> StatisticType | None:
-    """
-    Return the output statistic type.
+    """Return the output statistic type.
 
     VAR is replaced with STDEV because the pipeline always converts variance
     to standard deviation before output.
     """
-
     if var_spec.statistic_type == StatisticType.VAR:
         return StatisticType.STDEV
     return var_spec.statistic_type

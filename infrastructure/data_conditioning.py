@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Mar 17 08:43:15 2026
+"""Created on Tue Mar 17 08:43:15 2026
 
 @author: imchugh
 """
@@ -9,7 +7,6 @@ Created on Tue Mar 17 08:43:15 2026
 import numpy as np
 import pandas as pd
 from numpy.typing import ArrayLike
-
 
 
 # -----------------------------------------------------------------------------
@@ -22,10 +19,12 @@ def check_datetime_index(df: pd.DataFrame) -> None:
     Raises:
         TypeError: if the index is not a DatetimeIndex.
     """
-
     if not isinstance(df.index, pd.DatetimeIndex):
-        raise TypeError('DataFrame must have a DatetimeIndex.')
+        raise TypeError("DataFrame must have a DatetimeIndex.")
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def infer_interval(df: pd.DataFrame) -> int:
@@ -43,24 +42,20 @@ def infer_interval(df: pd.DataFrame) -> int:
     Raises:
         TypeError: if the index is not a DatetimeIndex.
     """
-
     check_datetime_index(df)
-    return int(
-        df.index.to_series()
-        .diff()
-        .median()
-        .total_seconds() / 60
-    )
+    return int(df.index.to_series().diff().median().total_seconds() / 60)
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def condition_dataframe(
     df: pd.DataFrame,
     interval_in: int | None = None,
     interval_out: int | None = None,
-    ) -> pd.DataFrame:
-    """
-    Condition flux dataframe for merge compatibility.
+) -> pd.DataFrame:
+    """Condition flux dataframe for merge compatibility.
 
     Handles:
     - duplicate timestamps
@@ -80,25 +75,26 @@ def condition_dataframe(
     Raises:
         TypeError: if the index is not a DatetimeIndex.
     """
-
     check_datetime_index(df)
 
     df = df.sort_index()
     df = df[df.index.notna()]
-    df = df[~df.index.duplicated(keep='first')]
+    df = df[~df.index.duplicated(keep="first")]
 
     if interval_in is None:
         interval_in = infer_interval(df)
 
     interval = interval_out or interval_in
-    return df.resample(f'{interval}min').asfreq()
+    return df.resample(f"{interval}min").asfreq()
+
+
 # -----------------------------------------------------------------------------
+
 
 def apply_linear_correction(
     series: ArrayLike, slope: float = 1.0, intercept: float = 0.0
-    ) -> ArrayLike:
+) -> ArrayLike:
     """Simple linear correction"""
-
     index = series.index if isinstance(series, pd.Series) else None
     result = np.array(series, dtype=float) * slope + intercept
     return pd.Series(result, index=index) if index is not None else result
@@ -106,9 +102,8 @@ def apply_linear_correction(
 
 def apply_range_limits(
     series: ArrayLike, lower_limit: float = None, upper_limit: float = None
-    ) -> ArrayLike:
+) -> ArrayLike:
     """Apply upper and / or lower range limits"""
-    
     index = series.index if isinstance(series, pd.Series) else None
     result = np.array(series, dtype=float)
     if lower_limit is not None:

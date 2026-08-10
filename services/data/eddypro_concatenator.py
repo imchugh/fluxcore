@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-EddyPro file concatenator.
+"""EddyPro file concatenator.
 
 Splices a master EddyPro (LI-COR SmartFlux) file with one or more slave
 files, patching gaps in the master with records from the slaves. Master
@@ -34,7 +32,7 @@ import pandas as pd
 from services.data import eddypro_writer, raw_data_loader
 from services.data.concat_common import validate_headers, validate_interval
 
-_HEADER_LABELS = ('variable', 'units')
+_HEADER_LABELS = ("variable", "units")
 
 ###############################################################################
 ### END IMPORTS ###
@@ -59,14 +57,12 @@ _TAIL_PEEK_BYTES = 16384
 ### BEGIN FUNCTIONS ###
 ###############################################################################
 
+
 # -----------------------------------------------------------------------------
 def _load_header(file_path: pathlib.Path) -> list[list]:
     """Return [variable, units] for an EddyPro file."""
-
-    raw = raw_data_loader.load_raw_header(
-        file_path=file_path, file_format='EddyPro'
-    )
-    return [raw['variable'], raw['units']]
+    raw = raw_data_loader.load_raw_header(file_path=file_path, file_format="EddyPro")
+    return [raw["variable"], raw["units"]]
 
 
 # -----------------------------------------------------------------------------
@@ -78,16 +74,15 @@ def _peek_last_timestamp(file_path: pathlib.Path) -> pd.Timestamp:
     DATAH/filename/date/time column layout (date at field index 2, time at
     field index 3).
     """
-
-    with open(file_path, 'rb') as f:
+    with open(file_path, "rb") as f:
         f.seek(0, os.SEEK_END)
         size = f.tell()
         f.seek(max(0, size - _TAIL_PEEK_BYTES))
-        tail = f.read().decode(errors='ignore')
+        tail = f.read().decode(errors="ignore")
 
     lines = [line for line in tail.splitlines() if line.strip()]
-    fields = lines[-1].split('\t')
-    return pd.Timestamp(f'{fields[2]} {fields[3]}')
+    fields = lines[-1].split("\t")
+    return pd.Timestamp(f"{fields[2]} {fields[3]}")
 
 
 # -----------------------------------------------------------------------------
@@ -120,7 +115,6 @@ def select_new_slaves(
         Subset of `candidates` (as Path objects) that could contain records
         newer than the master's last one.
     """
-
     master = pathlib.Path(master)
     master_date = _peek_last_timestamp(master).normalize()
 
@@ -170,20 +164,17 @@ def concatenate_eddypro(
             time step from the master.
         TypeError: if any loaded DataFrame does not have a DatetimeIndex.
     """
-
     master = pathlib.Path(master)
     slaves = [pathlib.Path(s) for s in slaves]
 
     # --- load master -----------------------------------------------------
 
     master_headers = _load_header(master)
-    combined = raw_data_loader.load_raw_data(
-        file_path=master, file_format='EddyPro'
-    )
-    combined = combined.sort_index(kind='stable')
-    combined = combined[~combined.index.duplicated(keep='first')]
+    combined = raw_data_loader.load_raw_data(file_path=master, file_format="EddyPro")
+    combined = combined.sort_index(kind="stable")
+    combined = combined[~combined.index.duplicated(keep="first")]
 
-    report = {'master_records': len(combined), 'slave_contributions': {}}
+    report = {"master_records": len(combined), "slave_contributions": {}}
 
     # --- load and merge slaves ---------------------------------------------
 
@@ -192,21 +183,21 @@ def concatenate_eddypro(
         validate_headers(master_headers, slave_path, slave_headers, _HEADER_LABELS)
 
         slave_df = raw_data_loader.load_raw_data(
-            file_path=slave_path, file_format='EddyPro'
+            file_path=slave_path, file_format="EddyPro"
         )
         validate_interval(combined, slave_df, slave_path)
 
         before = len(combined)
         combined = (
             pd.concat([combined, slave_df])
-            .sort_index(kind='stable')
-            .loc[lambda df: ~df.index.duplicated(keep='first')]
+            .sort_index(kind="stable")
+            .loc[lambda df: ~df.index.duplicated(keep="first")]
         )
         added = len(combined) - before
         if added:
-            report['slave_contributions'][slave_path.name] = added
+            report["slave_contributions"][slave_path.name] = added
 
-    report['total_records'] = len(combined)
+    report["total_records"] = len(combined)
 
     # --- write output ------------------------------------------------------
 
@@ -217,6 +208,8 @@ def concatenate_eddypro(
     )
 
     return report
+
+
 # -----------------------------------------------------------------------------
 
 ###############################################################################

@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Feb 26 13:35:13 2026
+"""Created on Thu Feb 26 13:35:13 2026
 
 @author: imchugh
 """
@@ -13,17 +11,20 @@ import os
 import shutil
 import tempfile
 from enum import Enum
-import pandas as pd
-import numpy as np
-import xarray as xr
-import yaml
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import pandas as pd
+import xarray as xr
+import yaml
+
 logger = logging.getLogger(__name__)
+
 
 class UniqueKeyLoader(yaml.SafeLoader):
     pass
+
 
 def construct_mapping(loader, node, deep=False):
     mapping = {}
@@ -35,26 +36,25 @@ def construct_mapping(loader, node, deep=False):
         mapping[key] = value
     return mapping
 
+
 UniqueKeyLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    construct_mapping
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, construct_mapping
 )
 
 
 # -----------------------------------------------------------------------------
 
+
 def _atomic_text_write(file_path: Path, write_fn, atomic: bool) -> None:
-    """
-    Write text content to `file_path` via `write_fn(file_handle)`.
+    """Write text content to `file_path` via `write_fn(file_handle)`.
 
     If `atomic`, writes to a temporary file (fsync'd) and atomically renames
     it into place; the temporary file is removed if `write_fn` raises.
     """
-
     if atomic:
-        tmp_path = file_path.with_suffix(file_path.suffix + '.tmp')
+        tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
         try:
-            with open(tmp_path, 'w', newline='\n') as f:
+            with open(tmp_path, "w", newline="\n") as f:
                 write_fn(f)
                 f.flush()
                 os.fsync(f.fileno())
@@ -63,24 +63,24 @@ def _atomic_text_write(file_path: Path, write_fn, atomic: bool) -> None:
             tmp_path.unlink(missing_ok=True)
             raise
     else:
-        with open(file_path, 'w', newline='\n') as f:
+        with open(file_path, "w", newline="\n") as f:
             write_fn(f)
 
+
 # -----------------------------------------------------------------------------
+
 
 def get_most_recent_file(
     *,
     root: Path,
     pattern: str = "*",
     recursive: bool = False,
-    ) -> Path | None:
-    """
-    Return most recent file in directory matching pattern.
+) -> Path | None:
+    """Return most recent file in directory matching pattern.
 
     Infrastructure-level utility.
     Returns None if no matching files.
     """
-
     if not root.exists():
         raise FileNotFoundError(f"Directory not found: {root}")
 
@@ -92,23 +92,27 @@ def get_most_recent_file(
         return None
 
     return max(files, key=lambda p: p.stat().st_mtime)
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def get_backup_files(file_path, abs_path=True):
-    
+
     file_path = Path(file_path)
-    paths = sorted(file_path.parent.glob(f'{file_path.stem}*backup'))
+    paths = sorted(file_path.parent.glob(f"{file_path.stem}*backup"))
     if abs_path:
         return paths
     return [path.name for path in paths]
-# -----------------------------------------------------------------------------    
 
-# -----------------------------------------------------------------------------    
-def list_available_files(
-        dir_path: Path | str, pattern: str | list[str]
-        ) -> list[Path]:
-    
+
+# -----------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------
+def list_available_files(dir_path: Path | str, pattern: str | list[str]) -> list[Path]:
+
     if isinstance(pattern, str):
         pattern_list = [pattern]
     elif isinstance(pattern, list):
@@ -117,38 +121,49 @@ def list_available_files(
     for this_pattern in pattern_list:
         files.update(Path(dir_path).glob(this_pattern))
     return sorted(files)
-# -----------------------------------------------------------------------------    
 
-# -----------------------------------------------------------------------------    
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
 
 def read_yml(file_path: Path, enforce_unique_keys=False) -> dict:
-    
-    with open(file_path, "r", encoding="utf-8") as f:
-        
+
+    with open(file_path, encoding="utf-8") as f:
         if enforce_unique_keys:
             return yaml.load(f, Loader=UniqueKeyLoader)
         return yaml.safe_load(f)
+
+
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 
 def read_json(file_path: Path):
-    
-    with open(file_path, "r", encoding="utf-8") as f:
+
+    with open(file_path, encoding="utf-8") as f:
         return json.load(f)
+
+
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 
 def read_text(file_path: Path, encoding="utf-8") -> str:
-    with open(file_path, "r", encoding=encoding) as f:
+    with open(file_path, encoding=encoding) as f:
         return f.read()
-# -----------------------------------------------------------------------------    
 
-#------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------
 def read_lines(
-        file_path: str | Path, begin: int=0, end: int=4, sep: str=','
-        ) -> list:
+    file_path: str | Path, begin: int = 0, end: int = 4, sep: str = ","
+) -> list:
     """Get a list of the header strings.
 
     Args:
@@ -162,20 +177,21 @@ def read_lines(
             line.
 
     """
-
     line_list = []
-    with open(file_path, 'r') as f:
+    with open(file_path) as f:
         for i in range(end + 1):
             line = f.readline()
             if not i < begin:
                 line_list.append(line)
     return [line for line in csv.reader(line_list, delimiter=sep)]
-#------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
-    """
-    Reads a CSV/TSV file according to the provided file_format dictionary.
+    """Reads a CSV/TSV file according to the provided file_format dictionary.
 
     Parameters
     ----------
@@ -193,11 +209,10 @@ def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
     **kwargs
         Any additional keyword arguments are passed directly to pd.read_csv.
 
-    Returns
+    Returns:
     -------
     pd.DataFrame
     """
-    
     # Extract skiprows and header line
     header_lines = file_format.get("header_lines", {})
     variable_row = header_lines.get("variable", 0)
@@ -224,27 +239,32 @@ def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
         dtype=dtype,
         na_values=na_values,
         quoting=quoting,
-        **kwargs  # pass any extra kwargs
-        )
+        **kwargs,  # pass any extra kwargs
+    )
+
+
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+
 
 def read_csv(file_path: Path) -> pd.DataFrame:
     return pd.read_csv(file_path)
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def write_json(
-        *,
-        file_path: Path,
-        data: Any,
-        indent: int = 2,
-        sort_keys: bool = False,
-        atomic: bool = True,
-        ) -> None:
-    """
-    Write JSON data to disk.
+    *,
+    file_path: Path,
+    data: Any,
+    indent: int = 2,
+    sort_keys: bool = False,
+    atomic: bool = True,
+) -> None:
+    """Write JSON data to disk.
 
     Args:
         file_path:
@@ -263,23 +283,18 @@ def write_json(
             If True, write via temporary file replacement to avoid
             partially-written/corrupted files.
     """
-
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     if atomic:
-
-        tmp_path = file_path.with_suffix(
-            f"{file_path.suffix}.tmp"
-            )
+        tmp_path = file_path.with_suffix(f"{file_path.suffix}.tmp")
 
         with open(tmp_path, "w", encoding="utf-8") as f:
-
             json.dump(
                 data,
                 f,
                 indent=indent,
                 sort_keys=sort_keys,
-                )
+            )
 
             f.flush()
             os.fsync(f.fileno())
@@ -287,27 +302,27 @@ def write_json(
         tmp_path.replace(file_path)
 
     else:
-
         with open(file_path, "w", encoding="utf-8") as f:
-
             json.dump(
                 data,
                 f,
                 indent=indent,
                 sort_keys=sort_keys,
-                )
+            )
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def write_toa5_csv(
-        *,
-        file_path: Path,
-        headers: list[list],
-        data: pd.DataFrame,
-        atomic: bool = True,
-        ) -> None:
-    """
-    Write headers and data to a TOA5-format CSV file.
+    *,
+    file_path: Path,
+    headers: list[list],
+    data: pd.DataFrame,
+    atomic: bool = True,
+) -> None:
+    """Write headers and data to a TOA5-format CSV file.
 
     Handles raw I/O mechanics only: TOA5 CSV quoting conventions, atomic
     write via a temporary file, and fsync.  All domain concerns (building
@@ -330,10 +345,9 @@ def write_toa5_csv(
             removed on failure.  Set False only when atomicity is guaranteed
             by the caller.
     """
-
-    _SEP         = ','
-    _NA          = 'NAN'
-    _FLOAT_FMT   = '%.7g'   # matches Campbell logger's 7-significant-figure output
+    _SEP = ","
+    _NA = "NAN"
+    _FLOAT_FMT = "%.7g"  # matches Campbell logger's 7-significant-figure output
 
     file_path = Path(file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -355,43 +369,39 @@ def write_toa5_csv(
         for col in data.columns:
             s = data[col]
             if pd.api.types.is_string_dtype(s):
-                col_fmt.append([
-                    f'"{v}"' if pd.notna(v) else f'"{_NA}"'
-                    for v in s
-                ])
+                col_fmt.append([f'"{v}"' if pd.notna(v) else f'"{_NA}"' for v in s])
             elif pd.api.types.is_integer_dtype(s):
-                col_fmt.append([
-                    _NA if pd.isna(v) else str(v)
-                    for v in s
-                ])
+                col_fmt.append([_NA if pd.isna(v) else str(v) for v in s])
             else:  # float
                 arr = s.to_numpy(dtype=float, na_value=np.nan)
                 nan_mask = np.isnan(arr)
                 formatted = np.empty(len(arr), dtype=object)
-                formatted[nan_mask]  = f'"{_NA}"'
+                formatted[nan_mask] = f'"{_NA}"'
                 formatted[~nan_mask] = [
-                    (_FLOAT_FMT % v).replace('e', 'E') for v in arr[~nan_mask]
+                    (_FLOAT_FMT % v).replace("e", "E") for v in arr[~nan_mask]
                 ]
                 col_fmt.append(formatted.tolist())
 
         for row in zip(*col_fmt):
-            f.write(_SEP.join(row) + '\n')
+            f.write(_SEP.join(row) + "\n")
 
     _atomic_text_write(file_path, _write, atomic)
 
-    logger.info('Wrote TOA5 file: %s', file_path.name)
+    logger.info("Wrote TOA5 file: %s", file_path.name)
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def write_eddypro_csv(
-        *,
-        file_path: Path,
-        headers: list[list],
-        data: pd.DataFrame,
-        atomic: bool = True,
-        ) -> None:
-    """
-    Write headers and data to an EddyPro-format (tab-separated) CSV file.
+    *,
+    file_path: Path,
+    headers: list[list],
+    data: pd.DataFrame,
+    atomic: bool = True,
+) -> None:
+    """Write headers and data to an EddyPro-format (tab-separated) CSV file.
 
     Handles raw I/O mechanics only: EddyPro's tab-delimited, minimally-quoted
     convention, atomic write via a temporary file, and fsync. All domain
@@ -416,9 +426,8 @@ def write_eddypro_csv(
             file is removed on failure. Set False only when atomicity is
             guaranteed by the caller.
     """
-
-    _SEP = '\t'
-    _NA = 'NaN'
+    _SEP = "\t"
+    _NA = "NaN"
 
     file_path = Path(file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -429,14 +438,22 @@ def write_eddypro_csv(
             writer.writerow(row)
 
         data.to_csv(
-            f, header=False, index=False, na_rep=_NA,
-            sep=_SEP, quoting=csv.QUOTE_MINIMAL, lineterminator='\n',
-            )
+            f,
+            header=False,
+            index=False,
+            na_rep=_NA,
+            sep=_SEP,
+            quoting=csv.QUOTE_MINIMAL,
+            lineterminator="\n",
+        )
 
     _atomic_text_write(file_path, _write, atomic)
 
-    logger.info('Wrote EddyPro file: %s', file_path.name)
+    logger.info("Wrote EddyPro file: %s", file_path.name)
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def _serialize_attrs(attrs: dict) -> dict:
@@ -473,12 +490,14 @@ def serialize_dataset_attrs(ds: xr.Dataset) -> xr.Dataset:
         if ds[name].attrs:
             ds[name].attrs = _serialize_attrs(ds[name].attrs)
     return ds
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def peek_netcdf_variables(file_path: Path) -> list[str]:
-    """
-    List data variable names in a NetCDF file without loading any data.
+    """List data variable names in a NetCDF file without loading any data.
 
     xarray's netCDF4 backend reads only variable/coordinate metadata on
     open; array data is read lazily on first access. This opens and
@@ -490,17 +509,16 @@ def peek_netcdf_variables(file_path: Path) -> list[str]:
     Returns:
         Data variable names (excludes coordinates).
     """
-
     with xr.open_dataset(file_path) as ds:
         return list(ds.data_vars)
-# -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
-def read_netcdf(
-        file_path: Path, variables: list[str] | None = None
-        ) -> xr.Dataset:
-    """
-    Load a NetCDF file into an in-memory xarray Dataset.
+
+
+# -----------------------------------------------------------------------------
+def read_netcdf(file_path: Path, variables: list[str] | None = None) -> xr.Dataset:
+    """Load a NetCDF file into an in-memory xarray Dataset.
 
     xarray opens NetCDF files lazily, so restricting `variables` before
     loading means only those variables' data is read from disk — the rest
@@ -517,35 +535,33 @@ def read_netcdf(
         Dataset fully loaded into memory; the underlying file handle is
         closed before this function returns.
     """
-
     file_path = Path(file_path)
 
     with xr.open_dataset(file_path) as ds:
-
         if variables is not None:
-
             missing = set(variables) - set(ds.data_vars)
             if missing:
                 raise KeyError(
-                    f"Variable(s) not found in {file_path.name}: "
-                    f"{sorted(missing)}"
-                    )
+                    f"Variable(s) not found in {file_path.name}: {sorted(missing)}"
+                )
 
             ds = ds[variables]
 
         return ds.load()
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def write_netcdf(
-        *,
-        ds: xr.Dataset,
-        file_path: Path,
-        time_units: str = None,
-        atomic: bool = True,
-        ) -> None:
-    """
-    Write an xarray Dataset to NetCDF.
+    *,
+    ds: xr.Dataset,
+    file_path: Path,
+    time_units: str = None,
+    atomic: bool = True,
+) -> None:
+    """Write an xarray Dataset to NetCDF.
 
     Does not serialize attrs — callers must ensure `ds` is already
     NetCDF-writable (see `serialize_dataset_attrs`) before calling this.
@@ -558,16 +574,15 @@ def write_netcdf(
         atomic: If True (default), write via a temporary file that is
             atomically renamed on success.
     """
-
     file_path = Path(file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    encoding = {'time': {'units': time_units}} if time_units else {}
+    encoding = {"time": {"units": time_units}} if time_units else {}
 
     if atomic:
         # Write to a local temp file then move to the destination.  This avoids
         # HDF5 file-locking hangs when the destination is on a network filesystem.
-        fd, tmp_str = tempfile.mkstemp(suffix='.nc.tmp', dir=file_path.parent)
+        fd, tmp_str = tempfile.mkstemp(suffix=".nc.tmp", dir=file_path.parent)
         os.close(fd)
         tmp_path = Path(tmp_str)
         try:
@@ -579,8 +594,11 @@ def write_netcdf(
     else:
         ds.to_netcdf(file_path, encoding=encoding)
 
-    logger.info('Wrote NetCDF file: %s', file_path.name)
+    logger.info("Wrote NetCDF file: %s", file_path.name)
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def write_yml_file(
@@ -588,10 +606,9 @@ def write_yml_file(
     data: dict,
     *,
     sort_keys: bool = False,
-    default_flow_style: bool = False
-    ) -> None:
-    """
-    Write a dictionary to a YAML file.
+    default_flow_style: bool = False,
+) -> None:
+    """Write a dictionary to a YAML file.
 
     Args:
         data: dictionary to write.
@@ -602,7 +619,6 @@ def write_yml_file(
     Returns:
         None
     """
-
     file = Path(file_path)
 
     with file.open("w", encoding="utf-8") as f:
@@ -611,6 +627,8 @@ def write_yml_file(
             f,
             sort_keys=sort_keys,
             default_flow_style=default_flow_style,
-            allow_unicode=True
+            allow_unicode=True,
         )
+
+
 # -----------------------------------------------------------------------------

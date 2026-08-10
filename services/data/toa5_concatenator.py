@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-TOA5 file concatenator.
+"""TOA5 file concatenator.
 
 Splices a master TOA5 file with one or more slave files, patching gaps in the
 master with records from the slaves.  Master data always takes priority: for
@@ -29,7 +27,7 @@ from infrastructure.data_conditioning import infer_interval
 from services.data import raw_data_loader, toa5_writer
 from services.data.concat_common import validate_headers, validate_interval
 
-_HEADER_LABELS = ('variable', 'units', 'sampling')
+_HEADER_LABELS = ("variable", "units", "sampling")
 
 ###############################################################################
 ### END IMPORTS ###
@@ -40,14 +38,12 @@ _HEADER_LABELS = ('variable', 'units', 'sampling')
 ### BEGIN FUNCTIONS ###
 ###############################################################################
 
+
 # -----------------------------------------------------------------------------
 def _load_header(file_path: pathlib.Path) -> tuple[list, list[list]]:
     """Return (info, [variable, units, sampling]) for a TOA5 file."""
-
-    raw = raw_data_loader.load_raw_header(
-        file_path=file_path, file_format='TOA5'
-    )
-    info = raw.pop('info')
+    raw = raw_data_loader.load_raw_header(file_path=file_path, file_format="TOA5")
+    info = raw.pop("info")
     return info, list(raw.values())
 
 
@@ -86,26 +82,23 @@ def analyse_gap_fill(
             step from the master.
         TypeError: if any loaded DataFrame does not have a DatetimeIndex.
     """
-
     master = pathlib.Path(master)
     slaves = [pathlib.Path(s) for s in slaves]
 
     master_headers = _load_header(master)[1]
-    master_df = raw_data_loader.load_raw_data(
-        file_path=master, file_format='TOA5'
-    )
-    master_df = master_df.sort_index(kind='stable')
-    master_df = master_df[~master_df.index.duplicated(keep='first')]
+    master_df = raw_data_loader.load_raw_data(file_path=master, file_format="TOA5")
+    master_df = master_df.sort_index(kind="stable")
+    master_df = master_df[~master_df.index.duplicated(keep="first")]
 
     interval = infer_interval(master_df)
     remaining_gaps = data_diagnostics.analyse_data_gaps(
         df=master_df, interval_minutes=interval
-    )['missing_timestamps']
+    )["missing_timestamps"]
 
     report = {
-        'master_gaps': len(remaining_gaps),
-        'gap_timestamps': list(remaining_gaps),
-        'slave_fill': {},
+        "master_gaps": len(remaining_gaps),
+        "gap_timestamps": list(remaining_gaps),
+        "slave_fill": {},
     }
 
     for slave_path in slaves:
@@ -113,20 +106,20 @@ def analyse_gap_fill(
         validate_headers(master_headers, slave_path, slave_headers, _HEADER_LABELS)
 
         slave_df = raw_data_loader.load_raw_data(
-            file_path=slave_path, file_format='TOA5'
+            file_path=slave_path, file_format="TOA5"
         )
         validate_interval(master_df, slave_df, slave_path)
 
         filled = remaining_gaps.intersection(slave_df.index)
         if len(filled):
-            report['slave_fill'][slave_path.name] = {
-                'fills': len(filled),
-                'timestamps': list(filled),
+            report["slave_fill"][slave_path.name] = {
+                "fills": len(filled),
+                "timestamps": list(filled),
             }
         remaining_gaps = remaining_gaps.difference(filled)
 
-    report['unfilled_gaps'] = len(remaining_gaps)
-    report['unfilled_timestamps'] = list(remaining_gaps)
+    report["unfilled_gaps"] = len(remaining_gaps)
+    report["unfilled_timestamps"] = list(remaining_gaps)
 
     return report
 
@@ -185,20 +178,17 @@ def concatenate_toa5(
             step from the master.
         TypeError: if any loaded DataFrame does not have a DatetimeIndex.
     """
-
     master = pathlib.Path(master)
     slaves = [pathlib.Path(s) for s in slaves]
 
     # --- load master ---------------------------------------------------------
 
     master_info, master_headers = _load_header(master)
-    combined = raw_data_loader.load_raw_data(
-        file_path=master, file_format='TOA5'
-    )
-    combined = combined.sort_index(kind='stable')
-    combined = combined[~combined.index.duplicated(keep='first')]
+    combined = raw_data_loader.load_raw_data(file_path=master, file_format="TOA5")
+    combined = combined.sort_index(kind="stable")
+    combined = combined[~combined.index.duplicated(keep="first")]
 
-    report = {'master_records': len(combined), 'slave_contributions': {}}
+    report = {"master_records": len(combined), "slave_contributions": {}}
 
     # --- load and merge slaves -----------------------------------------------
 
@@ -207,27 +197,27 @@ def concatenate_toa5(
         validate_headers(master_headers, slave_path, slave_headers, _HEADER_LABELS)
 
         slave_df = raw_data_loader.load_raw_data(
-            file_path=slave_path, file_format='TOA5'
-            )
+            file_path=slave_path, file_format="TOA5"
+        )
         validate_interval(combined, slave_df, slave_path)
 
         before = len(combined)
         combined = (
             pd.concat([combined, slave_df])
-            .sort_index(kind='stable')
-            .loc[lambda df: ~df.index.duplicated(keep='first')]
-            )
+            .sort_index(kind="stable")
+            .loc[lambda df: ~df.index.duplicated(keep="first")]
+        )
         added = len(combined) - before
         if added:
-            report['slave_contributions'][slave_path.name] = added
+            report["slave_contributions"][slave_path.name] = added
 
     if min_timestamp is not None:
         min_timestamp = pd.Timestamp(min_timestamp)
         before = len(combined)
         combined = combined[combined.index >= min_timestamp]
-        report['dropped_below_min'] = before - len(combined)
+        report["dropped_below_min"] = before - len(combined)
 
-    report['total_records'] = len(combined)
+    report["total_records"] = len(combined)
 
     # --- write output --------------------------------------------------------
 
@@ -239,6 +229,8 @@ def concatenate_toa5(
     )
 
     return report
+
+
 # -----------------------------------------------------------------------------
 
 ###############################################################################

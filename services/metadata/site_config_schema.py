@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Mar  2 13:52:01 2026
+"""Created on Mon Mar  2 13:52:01 2026
 
 @author: imchugh
 """
@@ -11,16 +9,27 @@ Created on Mon Mar  2 13:52:01 2026
 ###############################################################################
 
 import re
-
 from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator, ValidationError
 
-from infrastructure.file_io import read_yml
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+
 from domain.enums import (
-    StatisticType, FileType, FluxSystemType, VariableType, DiagnosticType
-    )
+    DiagnosticType,
+    FileType,
+    FluxSystemType,
+    StatisticType,
+    VariableType,
+)
+from infrastructure.file_io import read_yml
+
 ###############################################################################
 ### END IMPORTS ###
 ###############################################################################
@@ -36,11 +45,12 @@ VALID_FILE_TYPES = [x.name for x in FileType]
 # Input-level configuration
 # -----------------------------------------------------------------------------
 
+
 # -----------------------------------------------------------------------------
 class InputVariableConfig(BaseModel):
     """Define the architecture / rules validation rules for input variables"""
 
-    model_config = ConfigDict(extra='allow')
+    model_config = ConfigDict(extra="allow")
 
     # -------------------------------------------------------------------------
     # Define attributes
@@ -60,7 +70,6 @@ class InputVariableConfig(BaseModel):
     @field_validator("begin", "end", mode="before")
     def parse_datetime(cls, v):
         """Ensure that date fields are either datetimes or None"""
-        
         if v is None:
             return v
         if isinstance(v, datetime):
@@ -70,9 +79,12 @@ class InputVariableConfig(BaseModel):
                 return None
             return datetime.fromisoformat(v)
         raise TypeError(f"Invalid type for datetime field: {type(v)}")
+
     # -------------------------------------------------------------------------
 
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 class HorizontalLocationConfig(BaseModel):
@@ -91,7 +103,6 @@ class HorizontalLocationConfig(BaseModel):
     @field_validator("belowground", "aboveground")
     def validate_keys(cls, v):
         """Ensure that horizontal location keys are alphabetic"""
-
         if v is None:
             return v
 
@@ -101,27 +112,30 @@ class HorizontalLocationConfig(BaseModel):
                     f"Horizontal location keys must be single alphabetic characters, got '{key}'"
                 )
         return v
+
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     @model_validator(mode="after")
     def ensure_at_least_one_category(self):
         """Ensure that at least one expected field is in structure"""
-
         if not self.belowground and not self.aboveground:
             raise ValueError(
                 "horizontal_location must contain at least one of 'belowground' or 'aboveground'"
             )
         return self
+
     # -------------------------------------------------------------------------
 
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 class CustomMetadataConfig(BaseModel):
     """Define architecture of custom metadata"""
 
-    model_config = ConfigDict(extra='allow')
+    model_config = ConfigDict(extra="allow")
 
     # -------------------------------------------------------------------------
     # Define attributes
@@ -129,6 +143,7 @@ class CustomMetadataConfig(BaseModel):
     # Mandatory
     horizontal_location: HorizontalLocationConfig
     # -------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 
@@ -138,11 +153,12 @@ class CustomMetadataConfig(BaseModel):
 # Output-level variable configuration
 # -----------------------------------------------------------------------------
 
+
 # -----------------------------------------------------------------------------
 class VariableConfig(BaseModel):
     """Define the complete architecture for canonical variable"""
 
-    model_config = ConfigDict(extra='allow')
+    model_config = ConfigDict(extra="allow")
 
     # -------------------------------------------------------------------------
     # Define attributes
@@ -159,29 +175,28 @@ class VariableConfig(BaseModel):
     height_range: tuple[float, float] | None = None
     standard_name: str | None = None
     # -------------------------------------------------------------------------
-    
+
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     @field_validator("height_range")
     @classmethod
     def validate_height_range(cls, v):
-        """
-        Enforce ordering by ascending absolute value.
+        """Enforce ordering by ascending absolute value.
         Depths are negative, so e.g. [0.0, -0.3] is valid (0.0 < 0.3 in
         absolute terms) but [-0.3, 0.0] or [0.0, 0.3] with equal magnitudes
         are not.  Exactly-two-element constraint is enforced by the type
         annotation tuple[float, float].
         """
-
         if v is None:
             return v
         if abs(v[0]) >= abs(v[1]):
             raise ValueError(
                 "height_range must be ordered by ascending absolute value "
                 f"(|first| < |second|); got [{v[0]}, {v[1]}]"
-                )
+            )
         return v
+
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
@@ -190,30 +205,29 @@ class VariableConfig(BaseModel):
 
         if self.variable_type == VariableType.CONTINUOUS:
             if self.statistic_type is None:
-                raise ValueError(
-                    "Continuous variables must define statistic_type"
-                    )
+                raise ValueError("Continuous variables must define statistic_type")
 
         if self.variable_type in (
-                VariableType.QUALITY_FLAG,
-                VariableType.COUNTER,
-                ):
+            VariableType.QUALITY_FLAG,
+            VariableType.COUNTER,
+        ):
             if self.statistic_type is not None:
                 raise ValueError(
-                    f"{self.variable_type.value} variables cannot define "
-                    "statistic_type"
-                    )
+                    f"{self.variable_type.value} variables cannot define statistic_type"
+                )
 
         return self
+
     # -------------------------------------------------------------------------
-    
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 # Complete site configuration
 # -----------------------------------------------------------------------------
 class SiteConfig(BaseModel):
-
     # -------------------------------------------------------------------------
     # Define attributes
 
@@ -240,13 +254,13 @@ class SiteConfig(BaseModel):
                 f"invalid entries: {invalid}"
             )
         return v
+
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     @model_validator(mode="after")
     def enforce_diag_rules(self):
         """Enforce that counter variables declare a diag_type."""
-
         for var_name, var_cfg in self.variables.items():
             if var_cfg.variable_type == VariableType.COUNTER:
                 for input_name, input_cfg in var_cfg.input_variables.items():
@@ -254,15 +268,15 @@ class SiteConfig(BaseModel):
                         raise ValueError(
                             f"Counter variable '{var_name}' input "
                             f"'{input_name}' must specify diag_type"
-                            )
+                        )
         return self
+
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     @model_validator(mode="after")
     def enforce_diag_prefix_rules(self):
         """Enforce that Diag_-prefixed variables are declared as counter type."""
-
         for var_name, var_cfg in self.variables.items():
             if any(var_name.startswith(p) for p in self.diag_prefixes):
                 if var_cfg.variable_type != VariableType.COUNTER:
@@ -270,15 +284,15 @@ class SiteConfig(BaseModel):
                         f"Variable '{var_name}' has a diagnostic prefix but "
                         f"variable_type is '{var_cfg.variable_type.value}'; "
                         "expected 'counter'"
-                        )
+                    )
         return self
+
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     @model_validator(mode="after")
     def enforce_name_type_consistency(self):
-        """
-        Enforce bidirectional agreement between variable name suffix and
+        """Enforce bidirectional agreement between variable name suffix and
         variable_type. Rules:
           - If the name ends with a known type suffix (e.g. _Ct, _QC), the
             declared variable_type must match.
@@ -286,12 +300,7 @@ class SiteConfig(BaseModel):
             with that suffix — except for Diag_-prefixed variables, which are
             counter by convention without the _Ct suffix.
         """
-
-        suffix_to_type = {
-            vt.suffix: vt
-            for vt in VariableType
-            if vt.suffix is not None
-            }
+        suffix_to_type = {vt.suffix: vt for vt in VariableType if vt.suffix is not None}
 
         for var_name, var_cfg in self.variables.items():
             vtype = var_cfg.variable_type
@@ -305,7 +314,7 @@ class SiteConfig(BaseModel):
                             f"Variable '{var_name}' name implies type "
                             f"'{expected_type.value}' (suffix '_{suffix}') "
                             f"but variable_type is '{vtype.value}'"
-                            )
+                        )
                     break
 
             # Forward check: type carries a suffix → name must end with it
@@ -316,29 +325,30 @@ class SiteConfig(BaseModel):
                         f"Variable '{var_name}' has variable_type "
                         f"'{vtype.value}' but name does not end with "
                         f"'_{vtype.suffix}'"
-                        )
+                    )
 
         return self
+
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     @model_validator(mode="after")
     def enforce_flux_file_consistency(self):
-        
+
         file_list = set()
-        
+
         for var_name, var_cfg in self.variables.items():
             for input_cfg in var_cfg.input_variables.values():
                 file_list.add(input_cfg.file)
-                        
+
         if self.flux_file not in file_list:
-            raise ValueError(
-                'Flux file must be mapped to at least one variable!'
-                )
-            
+            raise ValueError("Flux file must be mapped to at least one variable!")
+
         return self
+
     # -------------------------------------------------------------------------
-    
+
+
 # -----------------------------------------------------------------------------
 
 ###############################################################################
@@ -350,40 +360,44 @@ class SiteConfig(BaseModel):
 ### BEGIN FUNCTIONS ###
 ###############################################################################
 
+
 # -----------------------------------------------------------------------------
 def validate_variable(config_data: dict, key: str) -> tuple[bool, list]:
-    """
-    External variable validator used to test e.g. UI validity after user
+    """External variable validator used to test e.g. UI validity after user
     changes
     """
-
     try:
         VariableConfig(**config_data["variables"][key])
         return True, []
     except ValidationError as e:
         return False, e.errors()
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def validate_all(config_data: dict) -> tuple[bool, list]:
+    """External config validator used to test e.g. UI validity after user changes
     """
-    External config validator used to test e.g. UI validity after user changes
-    """
-
     try:
         SiteConfig(**config_data)
         return True, []
     except ValidationError as e:
         return False, e.errors()
+
+
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 def validate_L1_config_structure(file: Path | str) -> SiteConfig:
     """Validate YAML structure and return Config object."""
     return SiteConfig(**read_yml(file_path=file, enforce_unique_keys=True))
+
+
 # -----------------------------------------------------------------------------
 
 ###############################################################################
 ### END FUNCTIONS ###
 ###############################################################################
-
