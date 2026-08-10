@@ -8,6 +8,16 @@ Created on Tue Apr 28 10:27:17 2026
 
 from enum import Enum
 
+
+def _find_by_attr(cls, attr: str, value, label: str):
+    """Return the enum member whose `attr` equals `value`, or raise ValueError."""
+
+    for item in cls:
+        if getattr(item, attr) == value:
+            return item
+    raise ValueError(f"Unknown {label}: {value!r}")
+
+
 class DiagnosticType(str, Enum):
     
     VALID_COUNT = "valid_count"
@@ -33,10 +43,7 @@ class StatisticType(str, Enum):
 
     @classmethod
     def from_suffix(cls, suffix: str) -> "StatisticType":
-        for item in cls:
-            if item.suffix == suffix:
-                return item
-        raise ValueError(f"Unknown statistic suffix: {suffix}")
+        return _find_by_attr(cls, 'suffix', suffix, 'statistic suffix')
 
 class VariableType(str, Enum):
     """Semantic type of variable."""
@@ -55,10 +62,7 @@ class VariableType(str, Enum):
 
     @classmethod
     def from_suffix(cls, suffix: str) -> 'VariableType':
-        for item in cls:
-            if item.suffix == suffix:
-                return item
-        raise ValueError(f"Unknown variable type suffix: {suffix!r}")
+        return _find_by_attr(cls, 'suffix', suffix, 'variable type suffix')
     
 class FileType(str, Enum):
     """"""
@@ -72,10 +76,7 @@ class FileType(str, Enum):
 
     @classmethod
     def from_extension(cls, ext: str) -> "FileType":
-        for ft in cls:
-            if ft.value == ext:
-                return ft
-        raise ValueError(f"No FileType for extension '{ext}'")    
+        return _find_by_attr(cls, 'value', ext, "FileType for extension")
         
 class FluxSystemType(str, Enum):
     
