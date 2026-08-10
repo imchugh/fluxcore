@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Created on Tue Mar 17 09:13:20 2026
-
-@author: imchugh
-"""
+"""Gap and duplicate-timestamp analysis for time-indexed dataframes."""
 
 import pandas as pd
 
@@ -11,11 +8,8 @@ def validate_dataframe(df: pd.DataFrame) -> None:
     """Assert that a DataFrame is fit for analysis.
 
     Raises:
-    ------
-    TypeError
-        If the index is not a DatetimeIndex.
-    ValueError
-        If the DataFrame contains no rows.
+        TypeError: If the index is not a DatetimeIndex.
+        ValueError: If the DataFrame contains no rows.
     """
     if not isinstance(df.index, pd.DatetimeIndex):
         raise TypeError("DataFrame must have a DatetimeIndex.")
@@ -31,31 +25,20 @@ def analyse_data_gaps(
 ) -> dict:
     """Analyse timestamp gaps in a dataframe.
 
-    Parameters
-    ----------
-    df : DataFrame
-        Dataframe with DatetimeIndex.
-    interval_minutes : int
-        Expected sampling interval in minutes.
-    start : pd.Timestamp, optional
-        Start of the reference window. Defaults to ``df.index.min()``.
-        Supply this (together with ``end``) when the window of interest
-        extends beyond the available data — e.g. when the trailing portion
-        of the window has no records at all and ``df`` would otherwise
-        understate the missing percentage.
-    end : pd.Timestamp, optional
-        End of the reference window. Defaults to ``df.index.max()``.
+    Args:
+        df: Dataframe with DatetimeIndex.
+        interval_minutes: Expected sampling interval in minutes.
+        start: Start of the reference window. Defaults to ``df.index.min()``.
+            Supply this (together with ``end``) when the window of interest
+            extends beyond the available data — e.g. when the trailing
+            portion of the window has no records at all and ``df`` would
+            otherwise understate the missing percentage.
+        end: End of the reference window. Defaults to ``df.index.max()``.
 
     Returns:
-    -------
-    dict
-        {
-            'n_missing': int,
-            'pct_missing': float,
-            'gap_distribution': pd.Series,
-            'gap_table': pd.DataFrame,
-            'missing_timestamps': pd.DatetimeIndex
-        }
+        Dict with keys ``n_missing`` (int), ``pct_missing`` (float),
+        ``gap_distribution`` (pd.Series), ``gap_table`` (pd.DataFrame), and
+        ``missing_timestamps`` (pd.DatetimeIndex).
     """
     if not isinstance(df.index, pd.DatetimeIndex):
         raise TypeError("DataFrame must have a DatetimeIndex.")
@@ -130,20 +113,13 @@ def analyse_data_duplicates(df: pd.DataFrame) -> dict:
     that appears more than once, regardless of whether the associated data
     differs between occurrences.
 
-    Parameters
-    ----------
-    df : DataFrame
-        Dataframe with DatetimeIndex.
+    Args:
+        df: Dataframe with DatetimeIndex.
 
     Returns:
-    -------
-    dict
-        {
-            'n_duplicates': int,
-            'pct_duplicates': float,
-            'duplicate_timestamps': pd.DatetimeIndex,
-            'duplicate_counts': pd.Series
-        }
+        Dict with keys ``n_duplicates`` (int), ``pct_duplicates`` (float),
+        ``duplicate_timestamps`` (pd.DatetimeIndex), and
+        ``duplicate_counts`` (pd.Series).
     """
     if not isinstance(df.index, pd.DatetimeIndex):
         raise TypeError("DataFrame must have a DatetimeIndex.")

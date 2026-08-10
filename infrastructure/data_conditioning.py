@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
-"""Created on Tue Mar 17 08:43:15 2026
-
-@author: imchugh
-"""
+"""Dataframe conditioning utilities: index validation, gap-filling, corrections."""
 
 import numpy as np
 import pandas as pd
 from numpy.typing import ArrayLike
 
 
-# -----------------------------------------------------------------------------
 def check_datetime_index(df: pd.DataFrame) -> None:
     """Raise TypeError if ``df`` does not have a DatetimeIndex.
 
@@ -23,10 +19,6 @@ def check_datetime_index(df: pd.DataFrame) -> None:
         raise TypeError("DataFrame must have a DatetimeIndex.")
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def infer_interval(df: pd.DataFrame) -> int:
     """Infer the time step of a DataFrame in minutes.
 
@@ -46,10 +38,6 @@ def infer_interval(df: pd.DataFrame) -> int:
     return int(df.index.to_series().diff().median().total_seconds() / 60)
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def condition_dataframe(
     df: pd.DataFrame,
     interval_in: int | None = None,
@@ -88,13 +76,10 @@ def condition_dataframe(
     return df.resample(f"{interval}min").asfreq()
 
 
-# -----------------------------------------------------------------------------
-
-
 def apply_linear_correction(
     series: ArrayLike, slope: float = 1.0, intercept: float = 0.0
 ) -> ArrayLike:
-    """Simple linear correction"""
+    """Apply a linear correction (series * slope + intercept)."""
     index = series.index if isinstance(series, pd.Series) else None
     result = np.array(series, dtype=float) * slope + intercept
     return pd.Series(result, index=index) if index is not None else result
@@ -103,7 +88,7 @@ def apply_linear_correction(
 def apply_range_limits(
     series: ArrayLike, lower_limit: float = None, upper_limit: float = None
 ) -> ArrayLike:
-    """Apply upper and / or lower range limits"""
+    """Mask values outside [lower_limit, upper_limit] to NaN (bounds are optional)."""
     index = series.index if isinstance(series, pd.Series) else None
     result = np.array(series, dtype=float)
     if lower_limit is not None:

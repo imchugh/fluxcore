@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Created on Thu Feb 26 13:35:13 2026
-
-@author: imchugh
-"""
+"""File I/O: YAML/JSON/text/CSV reading, and atomic writers for TOA5/EddyPro/NetCDF."""
 
 import csv
 import json
@@ -23,10 +20,13 @@ logger = logging.getLogger(__name__)
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
+    """YAML loader that rejects duplicate mapping keys instead of overwriting."""
+
     pass
 
 
 def construct_mapping(loader, node, deep=False):
+    """Build a mapping node, raising ValueError on a duplicate key."""
     mapping = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
@@ -40,9 +40,6 @@ def construct_mapping(loader, node, deep=False):
 UniqueKeyLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, construct_mapping
 )
-
-
-# -----------------------------------------------------------------------------
 
 
 def _atomic_text_write(file_path: Path, write_fn, atomic: bool) -> None:
@@ -67,19 +64,16 @@ def _atomic_text_write(file_path: Path, write_fn, atomic: bool) -> None:
             write_fn(f)
 
 
-# -----------------------------------------------------------------------------
-
-
 def get_most_recent_file(
     *,
     root: Path,
     pattern: str = "*",
     recursive: bool = False,
 ) -> Path | None:
-    """Return most recent file in directory matching pattern.
+    """Return the most recently modified file in `root` matching `pattern`.
 
-    Infrastructure-level utility.
-    Returns None if no matching files.
+    Returns:
+        Path to the most recent match, or None if no file matches.
     """
     if not root.exists():
         raise FileNotFoundError(f"Directory not found: {root}")
@@ -94,12 +88,20 @@ def get_most_recent_file(
     return max(files, key=lambda p: p.stat().st_mtime)
 
 
-# -----------------------------------------------------------------------------
+def get_backup_files(
+    file_path: str | Path, abs_path: bool = True
+) -> list[Path] | list[str]:
+    """Return backup files alongside `file_path`, matching `<stem>*backup`.
 
+    Args:
+        file_path: reference file; its parent directory and stem are used
+            to build the glob pattern.
+        abs_path: if True (default), return full paths; if False, return
+            just the filenames.
 
-# -----------------------------------------------------------------------------
-def get_backup_files(file_path, abs_path=True):
-
+    Returns:
+        Sorted list of matching backup files (as Paths or filenames).
+    """
     file_path = Path(file_path)
     paths = sorted(file_path.parent.glob(f"{file_path.stem}*backup"))
     if abs_path:
@@ -107,12 +109,17 @@ def get_backup_files(file_path, abs_path=True):
     return [path.name for path in paths]
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def list_available_files(dir_path: Path | str, pattern: str | list[str]) -> list[Path]:
+    """Return sorted files under `dir_path` matching one or more glob patterns.
 
+    Args:
+        dir_path: directory to search (non-recursive).
+        pattern: a single glob pattern, or a list of patterns whose matches
+            are unioned.
+
+    Returns:
+        Sorted list of matching paths.
+    """
     if isinstance(pattern, str):
         pattern_list = [pattern]
     elif isinstance(pattern, list):
@@ -123,51 +130,42 @@ def list_available_files(dir_path: Path | str, pattern: str | list[str]) -> list
     return sorted(files)
 
 
-# -----------------------------------------------------------------------------
+def read_yml(file_path: Path, enforce_unique_keys: bool = False) -> dict:
+    """Load a YAML file.
 
-# -----------------------------------------------------------------------------
+    Args:
+        file_path: path to the YAML file.
+        enforce_unique_keys: if True, raise ValueError on a duplicate
+            mapping key instead of silently keeping the last one.
 
-
-def read_yml(file_path: Path, enforce_unique_keys=False) -> dict:
-
+    Returns:
+        Parsed YAML content.
+    """
     with open(file_path, encoding="utf-8") as f:
         if enforce_unique_keys:
             return yaml.load(f, Loader=UniqueKeyLoader)
         return yaml.safe_load(f)
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
-def read_json(file_path: Path):
-
+def read_json(file_path: Path) -> dict | list:
+    """Load a JSON file."""
     with open(file_path, encoding="utf-8") as f:
         return json.load(f)
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def read_text(file_path: Path, encoding="utf-8") -> str:
+    """Read a file's entire contents as text."""
     with open(file_path, encoding=encoding) as f:
         return f.read()
 
 
-# -----------------------------------------------------------------------------
-
-
-# ------------------------------------------------------------------------------
 def read_lines(
     file_path: str | Path, begin: int = 0, end: int = 4, sep: str = ","
 ) -> list:
     """Get a list of the header strings.
 
     Args:
-        file: absolute path of file to parse.
+        file_path: absolute path of file to parse.
         begin: line number of first header line.
         end: line number of last header line.
         sep: text separation character.
@@ -175,7 +173,6 @@ def read_lines(
     Returns:
         List of sublists, each sublist containing the text elements of a header
             line.
-
     """
     line_list = []
     with open(file_path) as f:
@@ -186,32 +183,21 @@ def read_lines(
     return [line for line in csv.reader(line_list, delimiter=sep)]
 
 
-# ------------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
-    """Reads a CSV/TSV file according to the provided file_format dictionary.
+    """Read a CSV/TSV file according to the provided file_format dictionary.
 
-    Parameters
-    ----------
-    path : str
-        Path to the data file.
-    file_format : dict
-        Dictionary containing parsing information. Expected keys:
-        - info_line: number of initial info lines to skip
-        - header_lines: dict with keys 'variable', 'units', 'sampling'
-        - separator: str, column separator
-        - non_numeric_cols: list of columns to treat as strings
-        - time_variables: dict mapping time columns to indices
-        - na_values: value(s) to treat as NaN
-        - quoting: quoting level (0,1,2)
-    **kwargs
-        Any additional keyword arguments are passed directly to pd.read_csv.
+    Args:
+        file_path: path to the data file.
+        file_format: dictionary containing parsing information. Expected
+            keys: ``header_lines`` (dict with keys 'variable', 'units',
+            'sampling'), ``separator`` (column separator), ``non_numeric_cols``
+            (columns to treat as strings), ``na_values`` (value(s) to treat
+            as NaN), and ``quoting`` (quoting level, 0-2).
+        **kwargs: additional keyword arguments passed directly to
+            pd.read_csv.
 
     Returns:
-    -------
-    pd.DataFrame
+        Parsed DataFrame.
     """
     # Extract skiprows and header line
     header_lines = file_format.get("header_lines", {})
@@ -243,19 +229,11 @@ def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
     )
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def read_csv(file_path: Path) -> pd.DataFrame:
+    """Read a CSV file with pandas' default parsing (no custom format handling)."""
     return pd.read_csv(file_path)
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def write_json(
     *,
     file_path: Path,
@@ -311,10 +289,6 @@ def write_json(
             )
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def write_toa5_csv(
     *,
     file_path: Path,
@@ -390,10 +364,6 @@ def write_toa5_csv(
     logger.info("Wrote TOA5 file: %s", file_path.name)
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def write_eddypro_csv(
     *,
     file_path: Path,
@@ -452,10 +422,6 @@ def write_eddypro_csv(
     logger.info("Wrote EddyPro file: %s", file_path.name)
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def _serialize_attrs(attrs: dict) -> dict:
     """Convert attr values to NetCDF-compatible types.
 
@@ -492,10 +458,6 @@ def serialize_dataset_attrs(ds: xr.Dataset) -> xr.Dataset:
     return ds
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def peek_netcdf_variables(file_path: Path) -> list[str]:
     """List data variable names in a NetCDF file without loading any data.
 
@@ -513,10 +475,6 @@ def peek_netcdf_variables(file_path: Path) -> list[str]:
         return list(ds.data_vars)
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def read_netcdf(file_path: Path, variables: list[str] | None = None) -> xr.Dataset:
     """Load a NetCDF file into an in-memory xarray Dataset.
 
@@ -550,10 +508,6 @@ def read_netcdf(file_path: Path, variables: list[str] | None = None) -> xr.Datas
         return ds.load()
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def write_netcdf(
     *,
     ds: xr.Dataset,
@@ -597,10 +551,6 @@ def write_netcdf(
     logger.info("Wrote NetCDF file: %s", file_path.name)
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def write_yml_file(
     file_path: str | Path,
     data: dict,
@@ -611,13 +561,10 @@ def write_yml_file(
     """Write a dictionary to a YAML file.
 
     Args:
+        file_path: output file path.
         data: dictionary to write.
-        file: output file path.
-        sort_keys (optional): sort dictionary keys alphabetically.
-        default_flow_style (optional): write in inline YAML format.
-
-    Returns:
-        None
+        sort_keys: sort dictionary keys alphabetically. Defaults to False.
+        default_flow_style: write in inline YAML format. Defaults to False.
     """
     file = Path(file_path)
 
@@ -629,6 +576,3 @@ def write_yml_file(
             default_flow_style=default_flow_style,
             allow_unicode=True,
         )
-
-
-# -----------------------------------------------------------------------------
