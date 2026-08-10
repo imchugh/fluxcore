@@ -32,6 +32,7 @@ def convert_CO2_flux(data, from_units='mg/m^2/s'):
 
     if from_units == 'mg/m^2/s':
         return data * 1000 / CO2_MOL_MASS
+    raise ValueError(f"Unsupported from_units {from_units!r} for CO2 flux conversion")
 
 
 @register_conversion("CO2c")
@@ -39,6 +40,7 @@ def convert_CO2_density(data, from_units='mmol/m^3'):
 
     if from_units == 'mmol/m^3':
         return data * CO2_MOL_MASS
+    raise ValueError(f"Unsupported from_units {from_units!r} for CO2 density conversion")
 
 
 @register_conversion('Sig', 'SigCO2', 'SigH2O', 'CO2Sig', 'H2OSig')
@@ -46,6 +48,7 @@ def convert_signal_strength(data, from_units='frac'):
 
     if from_units == 'frac':
         return data * 100
+    raise ValueError(f"Unsupported from_units {from_units!r} for signal strength conversion")
 
 
 @register_conversion('Diag')
@@ -60,6 +63,7 @@ def convert_diagnostic(data, n_samples, from_units='valid_count'):
 
     if from_units == 'valid_count':
         return n_samples - data
+    raise ValueError(f"Unsupported from_units {from_units!r} for diagnostic conversion")
 
 
 @register_conversion('AH')
@@ -69,6 +73,7 @@ def convert_H2O_density(data, from_units='mmol/m^3'):
         return data * H2O_MOL_MASS / 10**3
     if from_units == 'kg/m^3':
         return data * 10**3
+    raise ValueError(f"Unsupported from_units {from_units!r} for H2O density conversion")
 
 
 @register_conversion('Precip')
@@ -78,6 +83,7 @@ def convert_precipitation(data, from_units='pulse_0.2mm'):
         return data * 0.2
     if from_units == 'pulse_0.5mm':
         return data * 0.5
+    raise ValueError(f"Unsupported from_units {from_units!r} for precipitation conversion")
 
 
 @register_conversion('ps')
@@ -87,6 +93,7 @@ def convert_pressure(data, from_units='Pa'):
         return data / 10**3
     if from_units == 'hPa':
         return data / 10
+    raise ValueError(f"Unsupported from_units {from_units!r} for pressure conversion")
 
 
 @register_conversion('RH')
@@ -94,6 +101,7 @@ def convert_RH(data, from_units='frac'):
 
     if from_units == 'frac':
         return data * 100
+    raise ValueError(f"Unsupported from_units {from_units!r} for RH conversion")
 
 
 @register_conversion('Sws')
@@ -101,6 +109,7 @@ def convert_Sws(data, from_units='percent'):
 
     if from_units == 'percent':
         return data / 100
+    raise ValueError(f"Unsupported from_units {from_units!r} for Sws conversion")
 
 
 @register_conversion('Ta', 'Tv', 'Tbody')
@@ -108,6 +117,7 @@ def convert_temperature(data, from_units='K'):
 
     if from_units == 'K':
         return data - K
+    raise ValueError(f"Unsupported from_units {from_units!r} for temperature conversion")
 
 
 def get_unit_conversion(quantity):

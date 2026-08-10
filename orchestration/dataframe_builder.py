@@ -264,10 +264,6 @@ def _apply_conversions(
                     raise RuntimeError(
                         f"Diagnostic conversion failed for {variable!r}"
                         ) from e
-                if result is None:
-                    raise RuntimeError(
-                        f"Diagnostic converter returned None for {variable!r}"
-                        )
                 df[variable] = result
             # INVALID_COUNT: pass through unchanged
             continue
@@ -281,12 +277,6 @@ def _apply_conversions(
                     f"Unit conversion failed for {variable!r} "
                     f"({from_units!r} → {spec.canonical_units!r})"
                     ) from e
-            if result is None:
-                raise RuntimeError(
-                    f"Unit conversion returned None for {variable!r}: "
-                    f"converter for quantity {spec.quantity!r} does not "
-                    f"handle from_units={from_units!r}"
-                    )
             df[variable] = result
 
     return df

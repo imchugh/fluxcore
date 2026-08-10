@@ -10,6 +10,7 @@ Created on Thu Mar  5 12:12:51 2026
 ### BEGIN IMPORTS ###
 ###############################################################################
 
+import logging
 from datetime import datetime
 from pydantic.dataclasses import dataclass, ConfigDict
 from typing import Optional, Union
@@ -17,6 +18,8 @@ from typing import Optional, Union
 # -----------------------------------------------------------------------------
 
 from domain import enums
+
+logger = logging.getLogger(__name__)
 
 ###############################################################################
 ### BEGIN IMPORTS ###
@@ -152,7 +155,11 @@ class SiteMetadata(dict):
                 else:
                     formatted[key] = value
 
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "Could not coerce %s=%r to %s for site metadata; "
+                    "keeping raw value (%s)", key, value, dtype, exc,
+                    )
                 formatted[key] = value
 
         super().__init__(formatted)
