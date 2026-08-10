@@ -46,6 +46,9 @@ _FILE_FORMATS = {
     },
 }
 
+# Maps the site config's logger system_type to the file format it produces.
+_SYSTEM_TYPE_FORMAT_MAP = {'CSI': 'TOA5', 'LICOR': 'EddyPro'}
+
 ###############################################################################
 ### END INITS ###
 ###############################################################################
@@ -129,8 +132,7 @@ def _drop_non_numeric(df, file_format):
 
 def get_data_adapter(system_type: str):
 
-    format_map = {'CSI': 'TOA5', 'LICOR': 'EddyPro'}
-    file_format = format_map[system_type]
+    file_format = _SYSTEM_TYPE_FORMAT_MAP[system_type]
 
     def load(file_path):
         return load_raw_data(file_path=file_path, file_format=file_format)
@@ -172,8 +174,7 @@ def load_raw_header(file_path, file_format: str) -> dict:
 
 def get_header_adapter(system_type: str):
 
-    format_map = {'CSI': 'TOA5', 'LICOR': 'EddyPro'}
-    file_format = format_map[system_type]
+    file_format = _SYSTEM_TYPE_FORMAT_MAP[system_type]
 
     def load(file_path):
         return load_raw_header(file_path=file_path, file_format=file_format)
