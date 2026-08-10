@@ -7,6 +7,8 @@ Public API
 ----------
 VariableSpec          — flat specification for a single raw-to-canonical mapping
 build_variable_registry(runtime_cfg, file_groups) -> dict[str, VariableSpec]
+group_by_canonical_name(registry) -> dict[str, list[VariableSpec]]
+canonical_output_name(var_spec) -> str
 """
 
 from datetime import datetime
@@ -117,3 +119,28 @@ def build_variable_registry(
                     )
 
     return registry
+
+
+def group_by_canonical_name(
+        registry: dict[str, VariableSpec],
+        ) -> dict[str, list[VariableSpec]]:
+    """Group registry entries by canonical variable name."""
+
+    groups: dict[str, list[VariableSpec]] = {}
+    for entry in registry.values():
+        groups.setdefault(entry.canonical_name, []).append(entry)
+    return groups
+
+
+def canonical_output_name(var_spec: VariableSpec) -> str:
+    """
+    Return the output variable name.
+
+    Variance variables are output as standard deviation, so the _Vr suffix
+    is replaced with _Sd.
+    """
+
+    name = var_spec.canonical_name
+    if var_spec.statistic_type == StatisticType.VAR and name.endswith('_Vr'):
+        return f"{name[:-2]}Sd"
+    return name

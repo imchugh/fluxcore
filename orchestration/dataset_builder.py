@@ -20,7 +20,10 @@ from domain.enums import StatisticType, VariableType
 from services.metadata.site_registry import SiteRegistry, SiteContext
 from services.metadata import file_group_builder
 from services.metadata.instrument_registry import get_instrument_uri
-from services.metadata.variable_registry import VariableSpec, build_variable_registry
+from services.metadata.variable_registry import (
+    VariableSpec, build_variable_registry, canonical_output_name,
+    group_by_canonical_name,
+    )
 from orchestration.dataframe_builder import build_dataframe
 
 
@@ -245,7 +248,7 @@ def _build_var_attrs(
 
     rslt = {}
 
-    canonical_groups = _canonical_from_registry(registry)
+    canonical_groups = group_by_canonical_name(registry)
 
     for _, var_specs in canonical_groups.items():
 
@@ -270,20 +273,9 @@ def _build_var_attrs(
             'units':              main_spec.canonical_units,
             }
 
-        rslt[_canonical_output_name(main_spec)] = attrs
+        rslt[canonical_output_name(main_spec)] = attrs
 
     return rslt
-
-
-def _canonical_from_registry(
-        registry: dict[str, VariableSpec],
-        ) -> dict[str, list[VariableSpec]]:
-    """Group registry entries by canonical variable name."""
-
-    groups: dict[str, list[VariableSpec]] = {}
-    for entry in registry.values():
-        groups.setdefault(entry.canonical_name, []).append(entry)
-    return groups
 
 
 def _history_from_instruments(
@@ -334,20 +326,6 @@ def _history_from_compound_instruments(
                 for spec in var_specs
                 }
     return result if result else None
-
-
-def _canonical_output_name(var_spec: VariableSpec) -> str:
-    """
-    Return the output variable name.
-
-    Variance variables are output as standard deviation, so the _Vr suffix
-    is replaced with _Sd.
-    """
-
-    name = var_spec.canonical_name
-    if var_spec.statistic_type == StatisticType.VAR and name.endswith('_Vr'):
-        return f"{name[:-2]}Sd"
-    return name
 
 
 def _output_statistic(var_spec: VariableSpec) -> StatisticType | None:

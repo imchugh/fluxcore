@@ -18,7 +18,10 @@ import pandas as pd
 from domain.enums import DiagnosticType, StatisticType, VariableType
 from services.metadata.file_group_builder import FileGroup, build_file_groups
 from services.metadata.canonical_quantity_registry import resolve_variance_units
-from services.metadata.variable_registry import VariableSpec, build_variable_registry
+from services.metadata.variable_registry import (
+    VariableSpec, build_variable_registry, canonical_output_name,
+    group_by_canonical_name,
+    )
 from services.metadata.site_registry import SiteRegistry, SiteContext
 from services.data import raw_data_loader, transform_service
 from infrastructure.data_conditioning import condition_dataframe
@@ -293,7 +296,7 @@ def _get_merge_blocks(registry: dict[str, VariableSpec]) -> dict:
 
     rslt = {}
 
-    for canonical_name, var_specs in _canonical_from_registry(registry).items():
+    for canonical_name, var_specs in group_by_canonical_name(registry).items():
 
         if len(var_specs) <= 1:
             continue
@@ -352,34 +355,9 @@ def _rename_to_canonical(
     """Rename aliased columns to their canonical output names."""
 
     rename_map = {
-        alias: _canonical_output_name(spec)
+        alias: canonical_output_name(spec)
         for alias, spec in registry.items()
         if alias in df.columns
         }
 
     return df.rename(columns=rename_map)
-
-
-def _canonical_from_registry(
-        registry: dict[str, VariableSpec],
-        ) -> dict[str, list[VariableSpec]]:
-    """Group registry entries by canonical variable name."""
-
-    groups: dict[str, list[VariableSpec]] = {}
-    for entry in registry.values():
-        groups.setdefault(entry.canonical_name, []).append(entry)
-    return groups
-
-
-def _canonical_output_name(var_spec: VariableSpec) -> str:
-    """
-    Return the output variable name.
-
-    Variance variables are output as standard deviation, so the _Vr suffix
-    is replaced with _Sd.
-    """
-
-    name = var_spec.canonical_name
-    if var_spec.statistic_type == StatisticType.VAR and name.endswith('_Vr'):
-        return f"{name[:-2]}Sd"
-    return name
