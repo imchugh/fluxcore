@@ -43,6 +43,31 @@ UniqueKeyLoader.add_constructor(
 
 # -----------------------------------------------------------------------------
 
+def _atomic_text_write(file_path: Path, write_fn, atomic: bool) -> None:
+    """
+    Write text content to `file_path` via `write_fn(file_handle)`.
+
+    If `atomic`, writes to a temporary file (fsync'd) and atomically renames
+    it into place; the temporary file is removed if `write_fn` raises.
+    """
+
+    if atomic:
+        tmp_path = file_path.with_suffix(file_path.suffix + '.tmp')
+        try:
+            with open(tmp_path, 'w', newline='\n') as f:
+                write_fn(f)
+                f.flush()
+                os.fsync(f.fileno())
+            tmp_path.replace(file_path)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+    else:
+        with open(file_path, 'w', newline='\n') as f:
+            write_fn(f)
+
+# -----------------------------------------------------------------------------
+
 def get_most_recent_file(
     *,
     root: Path,
@@ -352,20 +377,7 @@ def write_toa5_csv(
         for row in zip(*col_fmt):
             f.write(_SEP.join(row) + '\n')
 
-    if atomic:
-        tmp_path = file_path.with_suffix(file_path.suffix + '.tmp')
-        try:
-            with open(tmp_path, 'w', newline='\n') as f:
-                _write(f)
-                f.flush()
-                os.fsync(f.fileno())
-            tmp_path.replace(file_path)
-        except Exception:
-            tmp_path.unlink(missing_ok=True)
-            raise
-    else:
-        with open(file_path, 'w', newline='\n') as f:
-            _write(f)
+    _atomic_text_write(file_path, _write, atomic)
 
     logger.info('Wrote TOA5 file: %s', file_path.name)
 # -----------------------------------------------------------------------------
@@ -421,20 +433,7 @@ def write_eddypro_csv(
             sep=_SEP, quoting=csv.QUOTE_MINIMAL, lineterminator='\n',
             )
 
-    if atomic:
-        tmp_path = file_path.with_suffix(file_path.suffix + '.tmp')
-        try:
-            with open(tmp_path, 'w', newline='\n') as f:
-                _write(f)
-                f.flush()
-                os.fsync(f.fileno())
-            tmp_path.replace(file_path)
-        except Exception:
-            tmp_path.unlink(missing_ok=True)
-            raise
-    else:
-        with open(file_path, 'w', newline='\n') as f:
-            _write(f)
+    _atomic_text_write(file_path, _write, atomic)
 
     logger.info('Wrote EddyPro file: %s', file_path.name)
 # -----------------------------------------------------------------------------
