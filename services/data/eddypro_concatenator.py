@@ -31,8 +31,10 @@ import pathlib
 
 import pandas as pd
 
-from infrastructure.data_conditioning import infer_interval
 from services.data import eddypro_writer, raw_data_loader
+from services.data.concat_common import validate_headers, validate_interval
+
+_HEADER_LABELS = ('variable', 'units')
 
 ###############################################################################
 ### END IMPORTS ###
@@ -65,41 +67,6 @@ def _load_header(file_path: pathlib.Path) -> list[list]:
         file_path=file_path, file_format='EddyPro'
     )
     return [raw['variable'], raw['units']]
-
-
-# -----------------------------------------------------------------------------
-def _validate_headers(
-    master_headers: list[list],
-    slave_path: pathlib.Path,
-    slave_headers: list[list],
-) -> None:
-    """Raise ValueError if slave headers are incompatible with master."""
-
-    labels = ('variable', 'units')
-    for label, master_row, slave_row in zip(labels, master_headers, slave_headers):
-        if master_row != slave_row:
-            raise ValueError(
-                f'{slave_path.name}: {label} header does not match master.\n'
-                f'  master : {master_row}\n'
-                f'  slave  : {slave_row}'
-            )
-
-
-# -----------------------------------------------------------------------------
-def _validate_interval(
-    master_df: pd.DataFrame,
-    slave_df: pd.DataFrame,
-    slave_path: pathlib.Path,
-) -> None:
-    """Raise ValueError if slave time step differs from master."""
-
-    master_interval = infer_interval(master_df)
-    slave_interval = infer_interval(slave_df)
-    if master_interval != slave_interval:
-        raise ValueError(
-            f'{slave_path.name}: time step ({slave_interval} min) does not '
-            f'match master ({master_interval} min).'
-        )
 
 
 # -----------------------------------------------------------------------------
@@ -222,12 +189,12 @@ def concatenate_eddypro(
 
     for slave_path in slaves:
         slave_headers = _load_header(slave_path)
-        _validate_headers(master_headers, slave_path, slave_headers)
+        validate_headers(master_headers, slave_path, slave_headers, _HEADER_LABELS)
 
         slave_df = raw_data_loader.load_raw_data(
             file_path=slave_path, file_format='EddyPro'
         )
-        _validate_interval(combined, slave_df, slave_path)
+        validate_interval(combined, slave_df, slave_path)
 
         before = len(combined)
         combined = (
