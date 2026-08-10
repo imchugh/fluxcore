@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Created on Thu Mar  5 11:09:44 2026
-
-@author: imchugh
-"""
-
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
+"""Build FileGroup objects (master path, format, backups) for a site's input files."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,22 +9,12 @@ from infrastructure import file_io, paths
 from services.data import raw_data_loader
 from services.metadata.runtime_config_loader import SiteRuntimeConfig
 
-###############################################################################
-### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN CLASSES ###
-###############################################################################
-
-# -----------------------------------------------------------------------------
-
 
 @dataclass
 class FileGroup:
-    """Represents a group of files (master + backups) and the variables
-    expected and actually found in them. Header discovery is lazy.
+    """A group of files (master + backups) and their expected/found variables.
+
+    Header discovery is lazy.
     """
 
     group: str
@@ -43,20 +26,14 @@ class FileGroup:
         default_factory=dict, init=False, repr=False
     )
 
-    # -------------------------------------------------------------------------
-
     @property
     def all_files(self) -> list[Path]:
+        """Master file followed by its backups."""
         return [self.master, *self.backups]
-
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
 
     @property
     def variables_by_file(self) -> dict[Path, set[str]]:
-        """Lazy evaluation: read headers only on first access and cache results.
-        """
+        """Lazy evaluation: read headers only on first access and cache results."""
         if not self._variables_by_file_cache:
             for file in self.all_files:
                 header_vars = get_variables_from_file(
@@ -65,26 +42,18 @@ class FileGroup:
                 self._variables_by_file_cache[file] = set(header_vars)
         return self._variables_by_file_cache
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-
     def validate(self) -> dict[str, set[str]]:
         """Compare expected variables vs discovered variables.
-        Returns a dict with 'found' and 'missing' sets.
+
+        Returns:
+            Dict with 'found' and 'missing' sets.
         """
         found = set().union(*self.variables_by_file.values())
         missing = self.expected_variables - found
         return {"found": found & self.expected_variables, "missing": missing}
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-
     def validate_or_raise(self) -> None:
-        """Raise if any expected variable is missing from the file group's
-        discovered headers.
-        """
+        """Raise if any expected variable is missing from the discovered headers."""
         missing = self.validate()["missing"]
         if missing:
             raise ValueError(
@@ -92,36 +61,15 @@ class FileGroup:
                 f"{sorted(missing)} not found in {[str(f) for f in self.all_files]}"
             )
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-
     def files_for_variable(self, variable: str) -> list[Path]:
-        """Return the list of files in which the variable was found.
-        """
+        """Return the list of files in which the variable was found."""
         return [f for f, vars in self.variables_by_file.items() if variable in vars]
-
-    # -------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END CLASSES ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-# -----------------------------------------------------------------------------
 
 
 def get_variables_from_file(
     file_path: Path | str, system_type: str, incl_backups: bool = False
 ):
-    """Get the variable names from the file header"""
+    """Get the variable names from the file header."""
     # Set FileType
     ftype = FileType[system_type]
 
@@ -147,14 +95,8 @@ def get_variables_from_file(
     return sorted(rslt)
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
-    """Build FileGroup objects for all variable groups in the runtime config.
-    """
+    """Build FileGroup objects for all variable groups in the runtime config."""
     base_path = paths.get_local_stream_path(
         resource="raw_data", stream="flux_slow", site=runtime_cfg.site_name
     )
@@ -183,10 +125,3 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
             group.expected_variables.add(raw_var.raw_name)
 
     return groups
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################

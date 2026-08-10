@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Created on Tue Mar  3 06:59:42 2026
-@author: imchugh
+"""Assemble SiteRuntimeConfig from a site YAML config.
 
-Assembles SiteRuntimeConfig — the runtime variable metadata object containing
-all information required to build a generic dataset from site data.
+SiteRuntimeConfig is the runtime variable metadata object containing all
+information required to build a generic dataset from site data.
 
 Responsibilities:
     - structural validation of the site config YML
@@ -15,12 +14,7 @@ Responsibilities:
     - canonical quantity resolution for each variable
       (via canonical_quantity_registry)
     - assembly of VariableDefinition and SiteRuntimeConfig objects
-
 """
-
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
 
 from dataclasses import dataclass
 from functools import cached_property
@@ -31,27 +25,17 @@ from domain.enums import FileType, FluxSystemType, StatisticType, VariableType
 from services.metadata.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
-
-# -----------------------------------------------------------------------------
 from services.metadata.site_config_schema import (
     SiteConfig,
     validate_L1_config_structure,
 )
 from services.metadata.variable_name_parser import NameParser
 
-###############################################################################
-### END IMPORTS ###
-###############################################################################
 
-
-###############################################################################
-### BEGIN CLASSES ###
-###############################################################################
-
-
-# -----------------------------------------------------------------------------
 @dataclass(frozen=True)
 class SiteRuntimeConfig:
+    """Assembled runtime metadata for one site: variables, file formats, flux system."""
+
     site_name: str
 
     # Store FILE FORMATS, not extensions; keyed by file stem
@@ -64,9 +48,7 @@ class SiteRuntimeConfig:
 
     variables: dict[str, VariableDefinition]
 
-    # -------------------------------------------------------------------------
     # File format helpers
-    # -------------------------------------------------------------------------
 
     def get_file_format(self, file_group: str) -> str:
         """Resolve file format name for file group.
@@ -76,16 +58,11 @@ class SiteRuntimeConfig:
         """
         return self.file_formats[file_group]
 
-    # -------------------------------------------------------------------------
-
     def get_file_type(self, file_group: str) -> FileType:
-        """Resolve FileType enum for file group.
-        """
+        """Resolve FileType enum for file group."""
         format_name = self.get_file_format(file_group)
 
         return FileType[format_name]
-
-    # -------------------------------------------------------------------------
 
     def get_file_extension(self, file_group: str) -> str:
         """Resolve extension for file group.
@@ -95,28 +72,20 @@ class SiteRuntimeConfig:
         """
         return self.get_file_type(file_group).extension
 
-    # -------------------------------------------------------------------------
-
     def get_filename(self, file_group: str) -> str:
-        """Construct canonical filename.
-        """
+        """Construct canonical filename."""
         ext = self.get_file_extension(file_group)
 
         return f"{file_group}.{ext}"
 
-    # -------------------------------------------------------------------------
-
     @property
     def flux_filename(self) -> str:
-        """Canonical flux filename.
-        """
+        """Canonical flux filename."""
         return self.get_filename(self.flux_file)
-
-    # -------------------------------------------------------------------------
 
     @cached_property
     def input_file_groups(self) -> tuple[str, ...]:
-
+        """Sorted, deduplicated file-group names referenced by any raw input."""
         rslt = {
             raw_var.file
             for attrs in self.variables.values()
@@ -125,23 +94,6 @@ class SiteRuntimeConfig:
         }
 
         return tuple(sorted(rslt))
-
-    # -------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
-
-
-###############################################################################
-### END CLASSES ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-# -----------------------------------------------------------------------------
 
 
 def _check_name_config_consistency(
@@ -182,15 +134,11 @@ def _check_name_config_consistency(
             )
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def _validate_instrument_names(validated_config: SiteConfig) -> None:
-    """Check every instrument name in the config against the TERN instrument
-    registry. Collects all failures before raising so the caller sees the
-    complete list of unknown instruments in one pass.
+    """Check every instrument name in the config against the TERN instrument registry.
+
+    Collects all failures before raising so the caller sees the complete
+    list of unknown instruments in one pass.
 
     Args:
         validated_config: structurally-validated SiteConfig.
@@ -221,15 +169,11 @@ def _validate_instrument_names(validated_config: SiteConfig) -> None:
         )
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
-    """Build a SiteRuntimeConfig from a structurally- and semantically-validated
-    SiteConfig. Performs name-syntax, quantity-existence, and units checks as
-    part of assembly, raising on the first failure found.
+    """Build a SiteRuntimeConfig from a structurally/semantically-validated SiteConfig.
+
+    Performs name-syntax, quantity-existence, and units checks as part of
+    assembly, raising on the first failure found.
 
     Args:
         validated_config: structurally-validated SiteConfig (instrument names
@@ -328,11 +272,6 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
     )
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     """Assemble a SiteRuntimeConfig from a site YAML config file.
 
@@ -350,10 +289,3 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     validated_config = validate_L1_config_structure(file=file_path)
     _validate_instrument_names(validated_config)
     return _build_runtime_config(validated_config)
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END FUNCTIONS ###
-###############################################################################

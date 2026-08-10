@@ -1,26 +1,8 @@
 #!/usr/bin/env python3
-"""Created on Mon Mar  2 10:28:57 2026
-
-@author: imchugh
-"""
-
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
+"""Parse canonical variable names into their component parts."""
 
 from domain.data_models.metadata_classes import ParsedVariableName
 from domain.enums import StatisticType, VariableType
-
-###############################################################################
-### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN CLASSES ###
-###############################################################################
-
-# -----------------------------------------------------------------------------
 
 
 class VariableNameParseError(Exception):
@@ -29,25 +11,12 @@ class VariableNameParseError(Exception):
     pass
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 class NameParser:
     """Service for parsing and validating standardised variable names."""
 
     # Private module-level constants
     _VALID_INSTRUMENTS = ["SONIC", "IRGA", "RAD"]
     _VALID_LOC_UNITS = ["m"]
-
-    # -------------------------------------------------------------------------
-
-    def __init__(self):
-        pass
-
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
 
     def parse_variable_name(self, variable_name: str) -> ParsedVariableName:
         """Parse a variable name and return structured components.
@@ -93,13 +62,7 @@ class NameParser:
             replicate=replicate,
         )
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
     ### Component parsers ###
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
 
     def _parse_quantity(self, elems: list[str]) -> tuple[str, str | None, list[str]]:
         """Extract the fundamental quantity and optional qualifier.
@@ -144,10 +107,6 @@ class NameParser:
 
         return quantity, qualifier, remainder
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-
     def _parse_process(
         self, elems: list[str]
     ) -> tuple[str | None, str | None, list[str]]:
@@ -189,10 +148,6 @@ class NameParser:
 
         return statistic_id, variable_type_id, elems
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-
     def _parse_vertical_location(
         self, elems: list[str]
     ) -> tuple[str | None, list[str]]:
@@ -221,15 +176,11 @@ class NameParser:
                     except ValueError:
                         raise VariableNameParseError(
                             "Characters preceding height / depth units must be numeric!"
-                        )
+                        ) from None
                     vertical_location = f"{elems[0]}{unit}"
                     elems = elems[1:]
                     break
         return vertical_location, elems
-
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
 
     def _parse_horizontal_location(
         self, elems: list[str]
@@ -252,10 +203,6 @@ class NameParser:
                 elems = [remainder] if remainder else []
         return horizontal_location, elems
 
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
-
     def _parse_replicate(self, elems: list[str]) -> tuple[str | None, list[str]]:
         """Extract replicates.
 
@@ -273,10 +220,3 @@ class NameParser:
                 replicate = candidate
                 elems = elems[1:]
         return replicate, elems
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END CLASSES ###
-###############################################################################

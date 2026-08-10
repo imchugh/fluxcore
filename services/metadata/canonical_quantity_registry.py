@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Created on Fri May  8 13:42:59 2026
-
-@author: imchugh
-"""
-
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
+"""Registry of canonical quantity metadata: units, naming, and valid range."""
 
 from dataclasses import asdict
 from functools import cache
@@ -37,49 +30,32 @@ def resolve_variance_units(units: str, to_stdev: bool = True) -> str:
     try:
         return mapping[units]
     except KeyError:
-        raise ValueError(f"No unit transform defined for unit '{units}'")
+        raise ValueError(f"No unit transform defined for unit '{units}'") from None
 
 
-###############################################################################
-### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN CLASSES ###
-###############################################################################
-
-
-# -----------------------------------------------------------------------------
 class CanonicalQuantityRegistry:
-    """Registry containing invariant canonical quantity metadata plus
-    logic for deriving realized metadata representations (QC, variance).
-    """
+    """Invariant canonical quantity metadata, plus derived (QC/variance) forms."""
 
-    # -------------------------------------------------------------------------
     def __init__(self, quantity_definitions: dict[str, CanonicalQuantityMetadata]):
-        """Parameters
-        ----------
-        quantity_definitions : dict
-            Mapping of quantity name to materialised CanonicalQuantityMetadata.
+        """Wrap an already-materialised quantity-name to metadata mapping.
+
+        Args:
+            quantity_definitions: mapping of quantity name to materialised
+                CanonicalQuantityMetadata.
         """
         self._registry = quantity_definitions
 
-    # -------------------------------------------------------------------------
     def has_quantity(self, quantity: str) -> bool:
         """Check whether quantity exists in registry."""
         return quantity in self._registry
 
-    # -------------------------------------------------------------------------
     def get_base_metadata(self, quantity: str) -> CanonicalQuantityMetadata:
-        """Return invariant canonical metadata.
-        """
+        """Return invariant canonical metadata."""
         if quantity not in self._registry:
             raise KeyError(f"Unknown canonical quantity: {quantity}")
 
         return self._registry[quantity]
 
-    # -------------------------------------------------------------------------
     def resolve_metadata(
         self,
         quantity: str,
@@ -101,9 +77,7 @@ class CanonicalQuantityRegistry:
         # Deep copy prevents accidental mutation
         attrs = asdict(base)
 
-        # ---------------------------------------------------------------------
         # QUALITY FLAGS
-        # ---------------------------------------------------------------------
 
         if variable_type == VariableType.QUALITY_FLAG:
             attrs["standard_units"] = "dimensionless"
@@ -118,12 +92,10 @@ class CanonicalQuantityRegistry:
             if attrs["standard_name"] is not None:
                 attrs["standard_name"] = f"{attrs['standard_name']}_quality_flag"
 
-        # ---------------------------------------------------------------------
         # COUNTERS
         # Counter variables (diagnostic sample counts) are dimensionless.
         # Raw data may arrive as either valid_count or invalid_count; the
         # pipeline standardises to invalid_count based on diag_type.
-        # ---------------------------------------------------------------------
 
         elif variable_type == VariableType.COUNTER:
             attrs["standard_units"] = "dimensionless"
@@ -136,9 +108,7 @@ class CanonicalQuantityRegistry:
             if attrs["long_name"]:
                 attrs["long_name"] = f"{attrs['long_name']} sample count"
 
-        # ---------------------------------------------------------------------
         # VARIANCE
-        # ---------------------------------------------------------------------
 
         elif statistic_type == StatisticType.VAR:
             attrs["standard_units"] = resolve_variance_units(
@@ -155,33 +125,14 @@ class CanonicalQuantityRegistry:
             if base.valid_max is not None:
                 attrs["valid_max"] = base.valid_max**2
 
-        # ---------------------------------------------------------------------
-
         return CanonicalQuantityMetadata(**attrs)
-
-    # -------------------------------------------------------------------------
 
     @property
     def quantities(self) -> list[str]:
         """Return sorted quantity names."""
         return sorted(self._registry.keys())
 
-    # -------------------------------------------------------------------------
 
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END CLASSES ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-
-# -----------------------------------------------------------------------------
 @cache
 def build_canonical_quantity_registry() -> CanonicalQuantityRegistry:
     """Build the canonical quantity registry from the standard config file.
@@ -202,10 +153,3 @@ def build_canonical_quantity_registry() -> CanonicalQuantityRegistry:
             for quantity, quantity_dict in raw.items()
         }
     )
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END FUNCTIONS ###
-###############################################################################
