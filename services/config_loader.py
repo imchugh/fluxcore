@@ -1,54 +1,25 @@
 #!/usr/bin/env python3
-"""Created on Fri Feb 27 09:41:30 2026
-
-@author: imchugh
-"""
-
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
+"""Resolve and load internal config files (yml/txt/csv) by name."""
 
 import pathlib
-from typing import Union
 
 import pandas as pd
 
-# -----------------------------------------------------------------------------
 from infrastructure.file_io import read_csv, read_text, read_yml
 from infrastructure.paths import CONFIG_FILE, CONFIG_PATH
 
-###############################################################################
-### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN INITS ###
-###############################################################################
-
-ConfigType = Union[dict, str, pd.DataFrame]
+ConfigType = dict | str | pd.DataFrame
 ALLOWED_CONFIG_TYPES = [".yml", ".txt", ".csv"]
-
-###############################################################################
-### END INITS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-# ------------------------------------------------------------------------------
 
 
 def list_internal_config_files() -> list[pathlib.Path]:
-    """List the absolute paths of the available internal configuration files
-    (note that paths.yml is not available here - it is consumed at
-     infrastructure level by paths module).
+    """List the absolute paths of the available internal configuration files.
+
+    Note that paths.yml is not available here — it is consumed at
+    infrastructure level by the paths module.
 
     Returns:
-        list of files.
-
+        List of config file paths.
     """
     return [
         file
@@ -57,28 +28,17 @@ def list_internal_config_files() -> list[pathlib.Path]:
     ]
 
 
-# ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
-
-
 def list_internal_config_names() -> list:
     """List the names of the available internal configuration files.
 
     Returns:
-        list of config names.
-
+        List of config names.
     """
     return list(_build_config_index().keys())
 
 
-# ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
-
-
 def get_file_from_config_name(name: str) -> pathlib.Path:
-    """Return the absolute path to the file given the cnfiguration name.
+    """Return the absolute path to the file given the configuration name.
 
     Args:
         name: configuration name.
@@ -87,34 +47,22 @@ def get_file_from_config_name(name: str) -> pathlib.Path:
         FileNotFoundError: raised if no file with compatible name is found.
 
     Returns:
-        TYPE: DESCRIPTION.
-
+        Absolute path to the config file.
     """
     index = _build_config_index()
     try:
         return index[name]
     except KeyError:
-        raise FileNotFoundError(f"No file with name {name} found")
-
-
-# ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
+        raise FileNotFoundError(f"No file with name {name} found") from None
 
 
 def _build_config_index() -> dict[str, pathlib.Path]:
-    """Helper function that maps name to file.
+    """Map config name to file.
 
     Returns:
-        dict containing config names as keys, absolute paths as values.
-
+        Dict containing config names as keys, absolute paths as values.
     """
     return {file.stem: file for file in list_internal_config_files()}
-
-
-# ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
 
 
 def load_config_file(file: pathlib.Path | str) -> ConfigType:
@@ -127,8 +75,7 @@ def load_config_file(file: pathlib.Path | str) -> ConfigType:
         ValueError: raised if unsupported file suffix passed.
 
     Returns:
-        ConfigType: one of the return structures.
-
+        Parsed config content — dict (yml), str (txt), or DataFrame (csv).
     """
     file = pathlib.Path(file)
     if file.suffix == ".txt":
@@ -140,10 +87,6 @@ def load_config_file(file: pathlib.Path | str) -> ConfigType:
     raise ValueError(f"Unsupported config file type: {file.suffix}")
 
 
-# ------------------------------------------------------------------------------
-
-
-# ------------------------------------------------------------------------------
 def load_config_file_from_name(name: str) -> ConfigType:
     """Load the configuration file via configuration name.
 
@@ -151,15 +94,7 @@ def load_config_file_from_name(name: str) -> ConfigType:
         name: configuration name.
 
     Returns:
-        ConfigType: one of the return structures.
-
+        Parsed config content — dict (yml), str (txt), or DataFrame (csv).
     """
     file = get_file_from_config_name(name=name)
     return load_config_file(file=file)
-
-
-# ------------------------------------------------------------------------------
-
-###############################################################################
-### END FUNCTIONS ###
-###############################################################################

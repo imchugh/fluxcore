@@ -16,10 +16,6 @@ The caller is responsible for ensuring that:
     to all three internally using the fixed TOA5 values ('TIMESTAMP', 'TS', '').
 """
 
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
-
 import pathlib
 from collections.abc import Callable
 
@@ -28,15 +24,6 @@ import pandas as pd
 from domain.constants import DATA_TIME_FORMAT
 from infrastructure import data_conditioning, file_io
 from infrastructure.datetime_utils import format_fast_timestamp
-
-###############################################################################
-### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN CONSTANTS ###
-###############################################################################
 
 _TIMESTAMP_COL = "TIMESTAMP"
 _TIMESTAMP_UNITS = "TS"
@@ -54,17 +41,7 @@ DEFAULT_TOA5_INFO: list[str] = [
     "default_table",
 ]
 
-###############################################################################
-### END CONSTANTS ###
-###############################################################################
 
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-
-# -----------------------------------------------------------------------------
 def _coerce_integer_floats(data: pd.DataFrame) -> pd.DataFrame:
     """Convert float columns that contain only whole-number values to Int64.
 
@@ -87,10 +64,6 @@ def _coerce_integer_floats(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 def write_toa5(
     data: pd.DataFrame | list[pd.DataFrame],
     headers: list[list],
@@ -142,13 +115,13 @@ def write_toa5(
             exactly three lists; or if the variable-name list (``headers[0]``)
             length does not equal the number of DataFrame columns.
     """
-    # --- normalise inputs ----------------------------------------------------
+    # Normalise inputs
 
     if info is None:
         info = DEFAULT_TOA5_INFO
 
     if isinstance(data, list):
-        for i, frame in enumerate(data):
+        for frame in data:
             data_conditioning.check_datetime_index(frame)
         intervals = [data_conditioning.infer_interval(f) for f in data]
         if len(set(intervals)) > 1:
@@ -169,7 +142,7 @@ def write_toa5(
             f"(variables, units, sampling); got {len(headers)}."
         )
 
-    # --- validate header / column consistency --------------------------------
+    # Validate header/column consistency
 
     n_data_cols = len(data.columns)
     n_header_cols = len(headers[0])
@@ -179,7 +152,7 @@ def write_toa5(
             f"{n_data_cols} columns (TIMESTAMP excluded from both)."
         )
 
-    # --- prepare data for output ---------------------------------------------
+    # Prepare data for output
 
     data = data.copy()
 
@@ -206,17 +179,10 @@ def write_toa5(
         [_TIMESTAMP_SAMPLING] + list(headers[2]),
     ]
 
-    # --- delegate write to infrastructure ------------------------------------
+    # Delegate write to infrastructure
 
     file_io.write_toa5_csv(
         file_path=pathlib.Path(file_path),
         headers=[info] + full_headers,
         data=data,
     )
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END FUNCTIONS ###
-###############################################################################

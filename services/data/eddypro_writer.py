@@ -24,40 +24,17 @@ The caller is responsible for ensuring that:
     prepends their fixed EddyPro header values internally.
 """
 
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
-
 import pathlib
 
 import pandas as pd
 
 from infrastructure import data_conditioning, file_io
 
-###############################################################################
-### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN CONSTANTS ###
-###############################################################################
-
 _FIXED_COLS = ["DATAH", "filename", "date", "time"]
 _FIXED_VARIABLE_HEADER = ["DATAH", "filename", "date", "time"]
 _FIXED_UNITS_HEADER = ["DATAU", "", "[yyyy-mm-dd]", "[HH:MM]"]
 
-###############################################################################
-### END CONSTANTS ###
-###############################################################################
 
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-
-# -----------------------------------------------------------------------------
 def write_eddypro(
     data: pd.DataFrame,
     headers: list[list],
@@ -95,7 +72,7 @@ def write_eddypro(
             (``headers[0]``) length does not match the number of remaining
             columns.
     """
-    # --- validate inputs -------------------------------------------------
+    # Validate inputs
 
     data_conditioning.check_datetime_index(data)
 
@@ -119,24 +96,17 @@ def write_eddypro(
             f"excluded from both)."
         )
 
-    # --- prepend fixed header cells ---------------------------------------
+    # Prepend fixed header cells
 
     full_headers = [
         _FIXED_VARIABLE_HEADER + list(headers[0]),
         _FIXED_UNITS_HEADER + list(headers[1]),
     ]
 
-    # --- delegate write to infrastructure ---------------------------------
+    # Delegate write to infrastructure
 
     file_io.write_eddypro_csv(
         file_path=pathlib.Path(file_path),
         headers=full_headers,
         data=data,
     )
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END FUNCTIONS ###
-###############################################################################

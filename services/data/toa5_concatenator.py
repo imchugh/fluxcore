@@ -14,10 +14,6 @@ that appear in at least one input file — no NaN rows are inserted for gaps
 that no file covers.
 """
 
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
-
 import pathlib
 
 import pandas as pd
@@ -29,17 +25,7 @@ from services.data.concat_common import validate_headers, validate_interval
 
 _HEADER_LABELS = ("variable", "units", "sampling")
 
-###############################################################################
-### END IMPORTS ###
-###############################################################################
 
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-
-# -----------------------------------------------------------------------------
 def _load_header(file_path: pathlib.Path) -> tuple[list, list[list]]:
     """Return (info, [variable, units, sampling]) for a TOA5 file."""
     raw = raw_data_loader.load_raw_header(file_path=file_path, file_format="TOA5")
@@ -47,7 +33,6 @@ def _load_header(file_path: pathlib.Path) -> tuple[list, list[list]]:
     return info, list(raw.values())
 
 
-# -----------------------------------------------------------------------------
 def analyse_gap_fill(
     master: str | pathlib.Path,
     slaves: list[str | pathlib.Path],
@@ -124,7 +109,6 @@ def analyse_gap_fill(
     return report
 
 
-# -----------------------------------------------------------------------------
 def concatenate_toa5(
     master: str | pathlib.Path,
     slaves: list[str | pathlib.Path],
@@ -181,7 +165,7 @@ def concatenate_toa5(
     master = pathlib.Path(master)
     slaves = [pathlib.Path(s) for s in slaves]
 
-    # --- load master ---------------------------------------------------------
+    # Load master
 
     master_info, master_headers = _load_header(master)
     combined = raw_data_loader.load_raw_data(file_path=master, file_format="TOA5")
@@ -190,7 +174,7 @@ def concatenate_toa5(
 
     report = {"master_records": len(combined), "slave_contributions": {}}
 
-    # --- load and merge slaves -----------------------------------------------
+    # Load and merge slaves
 
     for slave_path in slaves:
         _, slave_headers = _load_header(slave_path)
@@ -219,7 +203,7 @@ def concatenate_toa5(
 
     report["total_records"] = len(combined)
 
-    # --- write output --------------------------------------------------------
+    # Write output
 
     toa5_writer.write_toa5(
         data=combined,
@@ -229,10 +213,3 @@ def concatenate_toa5(
     )
 
     return report
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END FUNCTIONS ###
-###############################################################################

@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Created on Tue Mar 10 10:54:46 2026
-
-@author: imchugh
-"""
-
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
+"""Load raw TOA5/EddyPro files into time-indexed DataFrames."""
 
 import csv
 import pathlib
@@ -15,15 +8,6 @@ import pandas as pd
 
 from domain.constants import DATA_TIME_FORMAT, TIME_INDEX_NAME
 from infrastructure import file_io
-
-###############################################################################
-### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN INITS ###
-###############################################################################
 
 # TOA5 and EddyPro are fixed industry-standard formats; these constants
 # capture only the fields consumed by this module (header line positions,
@@ -47,17 +31,6 @@ _FILE_FORMATS = {
 
 # Maps the site config's logger system_type to the file format it produces.
 _SYSTEM_TYPE_FORMAT_MAP = {"CSI": "TOA5", "LICOR": "EddyPro"}
-
-###############################################################################
-### END INITS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-# -----------------------------------------------------------------------------
 
 
 def load_raw_data(
@@ -93,22 +66,12 @@ def load_raw_data(
     return df
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def _TOA5_date_formatter(df):
 
     dttm = pd.to_datetime(df["TIMESTAMP"], format=DATA_TIME_FORMAT, errors="coerce")
     return df.drop(columns=["TIMESTAMP"]).set_index(
         pd.Index(data=dttm, name=TIME_INDEX_NAME)
     )
-
-
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
 
 
 def _EddyPro_date_formatter(df):
@@ -119,24 +82,14 @@ def _EddyPro_date_formatter(df):
     return df.set_index(keys=pd.Index(data=dttm, name=TIME_INDEX_NAME))
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def _drop_non_numeric(df, file_format):
 
     cols_to_drop = _FILE_FORMATS[file_format]["non_numeric_cols"]
     return df.drop(columns=cols_to_drop, errors="ignore")
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def get_data_adapter(system_type: str):
-
+    """Return a `load(file_path)` closure bound to `system_type`'s file format."""
     file_format = _SYSTEM_TYPE_FORMAT_MAP[system_type]
 
     def load(file_path):
@@ -145,13 +98,13 @@ def get_data_adapter(system_type: str):
     return load
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def load_raw_header(file_path, file_format: str) -> dict:
+    """Read a raw file's header rows, keyed by line type ('variable', 'units', etc).
 
+    Non-numeric columns (per `_FILE_FORMATS`) are dropped from every header
+    row, matching the columns `load_raw_data` would drop if called with
+    `drop_non_numeric=True`.
+    """
     fmt = _FILE_FORMATS[file_format]
     header_dict = fmt.get("header_lines")
     lines = list(header_dict.values())
@@ -178,23 +131,11 @@ def load_raw_header(file_path, file_format: str) -> dict:
     return result
 
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-
-
 def get_header_adapter(system_type: str):
-
+    """Return a `load(file_path)` closure bound to `system_type`'s file format."""
     file_format = _SYSTEM_TYPE_FORMAT_MAP[system_type]
 
     def load(file_path):
         return load_raw_header(file_path=file_path, file_format=file_format)
 
     return load
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END FUNCTIONS ###
-###############################################################################

@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""Unit-conversion and derived-quantity calculation registries.
+
+`@register_conversion`/`@register_calculation` populate CONVERSION_REGISTRY/
+CALCULATION_REGISTRY, keyed by canonical quantity name; `get_unit_conversion`/
+`get_calculation` look them back up. Each conversion function raises
+ValueError for an unrecognized `from_units` rather than returning None.
+"""
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -10,6 +17,8 @@ CALCULATION_REGISTRY = {}
 
 
 def register_conversion(*quantities):
+    """Register the decorated function in CONVERSION_REGISTRY under each quantity."""
+
     def decorator(func):
         for q in quantities:
             CONVERSION_REGISTRY[q] = func
@@ -19,6 +28,8 @@ def register_conversion(*quantities):
 
 
 def register_calculation(*quantities):
+    """Register the decorated function in CALCULATION_REGISTRY under each quantity."""
+
     def decorator(func):
         for q in quantities:
             CALCULATION_REGISTRY[q] = func
@@ -29,7 +40,7 @@ def register_calculation(*quantities):
 
 @register_conversion("Fco2")
 def convert_CO2_flux(data, from_units="mg/m^2/s"):
-
+    """Convert CO2 flux from mg/m^2/s to canonical umol/m^2/s."""
     if from_units == "mg/m^2/s":
         return data * 1000 / CO2_MOL_MASS
     raise ValueError(f"Unsupported from_units {from_units!r} for CO2 flux conversion")
@@ -37,7 +48,7 @@ def convert_CO2_flux(data, from_units="mg/m^2/s"):
 
 @register_conversion("CO2c")
 def convert_CO2_density(data, from_units="mmol/m^3"):
-
+    """Convert CO2 density from mmol/m^3 to canonical mg/m^3."""
     if from_units == "mmol/m^3":
         return data * CO2_MOL_MASS
     raise ValueError(
@@ -47,7 +58,7 @@ def convert_CO2_density(data, from_units="mmol/m^3"):
 
 @register_conversion("Sig", "SigCO2", "SigH2O", "CO2Sig", "H2OSig")
 def convert_signal_strength(data, from_units="frac"):
-
+    """Convert an IRGA signal-strength fraction (0-1) to canonical percent."""
     if from_units == "frac":
         return data * 100
     raise ValueError(
@@ -71,7 +82,7 @@ def convert_diagnostic(data, n_samples, from_units="valid_count"):
 
 @register_conversion("AH")
 def convert_H2O_density(data, from_units="mmol/m^3"):
-
+    """Convert H2O (absolute humidity) density to canonical g/m^3."""
     if from_units == "mmol/m^3":
         return data * H2O_MOL_MASS / 10**3
     if from_units == "kg/m^3":
@@ -83,7 +94,7 @@ def convert_H2O_density(data, from_units="mmol/m^3"):
 
 @register_conversion("Precip")
 def convert_precipitation(data, from_units="pulse_0.2mm"):
-
+    """Convert tipping-bucket rain-gauge pulse counts to canonical mm."""
     if from_units == "pulse_0.2mm":
         return data * 0.2
     if from_units == "pulse_0.5mm":
@@ -95,7 +106,7 @@ def convert_precipitation(data, from_units="pulse_0.2mm"):
 
 @register_conversion("ps")
 def convert_pressure(data, from_units="Pa"):
-
+    """Convert air pressure to canonical kPa."""
     if from_units == "Pa":
         return data / 10**3
     if from_units == "hPa":
@@ -105,7 +116,7 @@ def convert_pressure(data, from_units="Pa"):
 
 @register_conversion("RH")
 def convert_RH(data, from_units="frac"):
-
+    """Convert relative humidity from a 0-1 fraction to canonical percent."""
     if from_units == "frac":
         return data * 100
     raise ValueError(f"Unsupported from_units {from_units!r} for RH conversion")
@@ -113,7 +124,7 @@ def convert_RH(data, from_units="frac"):
 
 @register_conversion("Sws")
 def convert_Sws(data, from_units="percent"):
-
+    """Convert soil water content from percent to canonical 0-1 fraction."""
     if from_units == "percent":
         return data / 100
     raise ValueError(f"Unsupported from_units {from_units!r} for Sws conversion")
@@ -121,7 +132,7 @@ def convert_Sws(data, from_units="percent"):
 
 @register_conversion("Ta", "Tv", "Tbody")
 def convert_temperature(data, from_units="K"):
-
+    """Convert temperature from Kelvin to canonical degrees Celsius."""
     if from_units == "K":
         return data - K
     raise ValueError(
@@ -130,10 +141,12 @@ def convert_temperature(data, from_units="K"):
 
 
 def get_unit_conversion(quantity):
+    """Return the registered unit-conversion function for `quantity`, or None."""
     return CONVERSION_REGISTRY.get(quantity)
 
 
 def get_calculation(quantity):
+    """Return the registered calculation function for `quantity`, or None."""
     return CALCULATION_REGISTRY.get(quantity)
 
 
@@ -148,7 +161,7 @@ def calculate_AH_from_RH(Ta: ArrayLike, RH: ArrayLike, ps: ArrayLike) -> ArrayLi
 
 @register_calculation("RH")
 def calculate_RH_from_AH(AH: ArrayLike, Ta: ArrayLike, ps: ArrayLike) -> ArrayLike:
-    """Derive relative humidity (%) from absolute humidity, air temperature, and pressure."""
+    """Derive relative humidity (%) from AH, air temperature, and pressure."""
     molar_density = calculate_molar_density(ps=ps, Ta=Ta)
     e = (AH / H2O_MOL_MASS) / molar_density * ps
     es = calculate_es(Ta)
@@ -165,7 +178,7 @@ def calculate_es(Ta: ArrayLike) -> ArrayLike:
 def calculate_CO2_mole_fraction(
     CO2c: ArrayLike, Ta: ArrayLike, ps: ArrayLike
 ) -> ArrayLike:
-    """CO2 mole fraction (umol/mol) from CO2 density (mg/m^3), air temperature (degC) and pressure (kPa)."""
+    """CO2 mole fraction (umol/mol) from CO2 density, air temperature, and pressure."""
     return (CO2c / CO2_MOL_MASS) / calculate_molar_density(Ta=Ta, ps=ps) * 10**3
 
 

@@ -20,10 +20,6 @@ that appear in at least one input file — no NaN rows are inserted for gaps
 that no file covers.
 """
 
-###############################################################################
-### BEGIN IMPORTS ###
-###############################################################################
-
 import os
 import pathlib
 
@@ -34,38 +30,19 @@ from services.data.concat_common import validate_headers, validate_interval
 
 _HEADER_LABELS = ("variable", "units")
 
-###############################################################################
-### END IMPORTS ###
-###############################################################################
-
-
-###############################################################################
-### BEGIN CONSTANTS ###
-###############################################################################
 
 # Bytes read from the end of the master file to recover its last record's
 # timestamp without loading the whole file. Real files average ~1.5 KB/line;
 # this is a wide safety margin for a single data line.
 _TAIL_PEEK_BYTES = 16384
 
-###############################################################################
-### END CONSTANTS ###
-###############################################################################
 
-
-###############################################################################
-### BEGIN FUNCTIONS ###
-###############################################################################
-
-
-# -----------------------------------------------------------------------------
 def _load_header(file_path: pathlib.Path) -> list[list]:
     """Return [variable, units] for an EddyPro file."""
     raw = raw_data_loader.load_raw_header(file_path=file_path, file_format="EddyPro")
     return [raw["variable"], raw["units"]]
 
 
-# -----------------------------------------------------------------------------
 def _peek_last_timestamp(file_path: pathlib.Path) -> pd.Timestamp:
     """Read the last data row's timestamp without loading the full file.
 
@@ -85,7 +62,6 @@ def _peek_last_timestamp(file_path: pathlib.Path) -> pd.Timestamp:
     return pd.Timestamp(f"{fields[2]} {fields[3]}")
 
 
-# -----------------------------------------------------------------------------
 def select_new_slaves(
     master: str | pathlib.Path,
     candidates: list[str | pathlib.Path],
@@ -131,7 +107,6 @@ def select_new_slaves(
     return kept
 
 
-# -----------------------------------------------------------------------------
 def concatenate_eddypro(
     master: str | pathlib.Path,
     slaves: list[str | pathlib.Path],
@@ -167,7 +142,7 @@ def concatenate_eddypro(
     master = pathlib.Path(master)
     slaves = [pathlib.Path(s) for s in slaves]
 
-    # --- load master -----------------------------------------------------
+    # Load master
 
     master_headers = _load_header(master)
     combined = raw_data_loader.load_raw_data(file_path=master, file_format="EddyPro")
@@ -176,7 +151,7 @@ def concatenate_eddypro(
 
     report = {"master_records": len(combined), "slave_contributions": {}}
 
-    # --- load and merge slaves ---------------------------------------------
+    # Load and merge slaves
 
     for slave_path in slaves:
         slave_headers = _load_header(slave_path)
@@ -199,7 +174,7 @@ def concatenate_eddypro(
 
     report["total_records"] = len(combined)
 
-    # --- write output ------------------------------------------------------
+    # Write output
 
     eddypro_writer.write_eddypro(
         data=combined,
@@ -208,10 +183,3 @@ def concatenate_eddypro(
     )
 
     return report
-
-
-# -----------------------------------------------------------------------------
-
-###############################################################################
-### END FUNCTIONS ###
-###############################################################################
