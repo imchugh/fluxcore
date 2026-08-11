@@ -18,7 +18,6 @@ import xarray as xr
 from domain.enums import StatisticType, VariableType
 from orchestration.dataframe_builder import build_dataframe
 from services.metadata import file_group_builder
-from services.metadata.instrument_registry import get_instrument_uri
 from services.metadata.site_registry import SiteContext, SiteRegistry
 from services.metadata.variable_registry import (
     VariableSpec,
@@ -188,20 +187,6 @@ def _build_result(
 # Variable attribute construction
 
 
-def _instrument_uri(instrument: str | dict) -> str | dict | None:
-    """Return URI(s) for an instrument field — str for simple, dict for compound."""
-    if isinstance(instrument, dict):
-        return {alias: _safe_uri(name) for alias, name in instrument.items()}
-    return _safe_uri(instrument)
-
-
-def _safe_uri(name: str) -> str | None:
-    try:
-        return get_instrument_uri(name)
-    except KeyError:
-        return None
-
-
 def _build_var_attrs(
     registry: dict[str, VariableSpec],
     n_samples: int | None = None,
@@ -228,7 +213,7 @@ def _build_var_attrs(
             "height": main_spec.height,
             "height_range": main_spec.height_range,
             "instrument": main_spec.instrument,
-            "instrument_uri": _instrument_uri(main_spec.instrument),
+            "instrument_uri": main_spec.instrument_uri,
             "instrument_history": _history_from_instruments(var_specs),
             "long_name": main_spec.long_name,
             "quantity": main_spec.quantity,

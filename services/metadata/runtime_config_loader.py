@@ -169,6 +169,30 @@ def _validate_instrument_names(validated_config: SiteConfig) -> None:
         )
 
 
+def _resolve_instrument_uri(
+    instrument: str | dict[str, str],
+) -> str | dict[str, str] | None:
+    """Resolve instrument name(s) to TERN vocab URI(s); None if unresolvable.
+
+    Some instrument names pass `_validate_instrument_names` (e.g. "pending"
+    instruments declared via instrument_name_corrections.yml) but have no
+    vocab entry yet, so URI resolution can legitimately fail even for a
+    validated name — that case resolves to None rather than raising.
+    """
+    # Deferred to avoid circular import (see _validate_instrument_names)
+    from services.metadata import instrument_registry
+
+    def _safe(name: str) -> str | None:
+        try:
+            return instrument_registry.get_instrument_uri(name)
+        except KeyError:
+            return None
+
+    if isinstance(instrument, dict):
+        return {alias: _safe(name) for alias, name in instrument.items()}
+    return _safe(instrument)
+
+
 def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
     """Build a SiteRuntimeConfig from a structurally/semantically-validated SiteConfig.
 
@@ -242,6 +266,7 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
                 file=cfg.file,
                 begin=cfg.begin,
                 end=cfg.end,
+                instrument_uri=_resolve_instrument_uri(cfg.instrument),
             )
             for raw_name, cfg in raw_cfg.input_variables.items()
         )
@@ -260,6 +285,7 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
             canonical=quantity_canonical_metadata,
             parsed_name_elems=parsed_name_elems,
             diag_type=first_input.diag_type,
+            instrument_uri=raw_inputs[0].instrument_uri,
         )
 
     return SiteRuntimeConfig(

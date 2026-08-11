@@ -21,6 +21,7 @@ class RawVariableMetadata:
     instrument: str | dict[str, str]
     begin: datetime | str | None = None
     end: datetime | str | None = None
+    instrument_uri: str | dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,7 @@ class VariableDefinition:
     height_range: tuple[float, float] | None = None
     statistic_type: enums.StatisticType | None = None
     diag_type: enums.DiagnosticType | None = None
+    instrument_uri: str | dict[str, str] | None = None
 
 
 class SiteMetadata(dict):

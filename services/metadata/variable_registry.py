@@ -43,6 +43,7 @@ class VariableSpec:
     height: float
     height_range: tuple[float, float] | None
     instrument: str | dict[str, str]
+    instrument_uri: str | dict[str, str] | None
     long_name: str
     standard_name: str | None
     valid_min: float | None
@@ -108,6 +109,7 @@ def build_variable_registry(
                     height=var_cfg.height,
                     height_range=var_cfg.height_range,
                     instrument=raw_input.instrument,
+                    instrument_uri=raw_input.instrument_uri,
                     file_group=group_name,
                     begin=raw_input.begin,
                     end=raw_input.end,
