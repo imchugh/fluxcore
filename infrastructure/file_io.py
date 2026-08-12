@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import tempfile
+from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -183,6 +184,23 @@ def read_lines(
     return [line for line in csv.reader(line_list, delimiter=sep)]
 
 
+def _csv_format_kwargs(file_format: dict) -> dict:
+    """Assemble the pandas.read_csv kwargs shared by full-file and tail reads.
+
+    Derives sep/dtype/na_values/quoting from a file_format dict (see
+    read_csv_data). Excludes header/skiprows/names, which differ between a
+    full read (starts at the file's header) and a tail read (starts
+    mid-file, past a header already consumed elsewhere) — see
+    read_csv_data vs read_csv_tail.
+    """
+    return {
+        "sep": file_format.get("separator", ","),
+        "dtype": {col: str for col in file_format.get("non_numeric_cols", [])},
+        "na_values": file_format.get("na_values", None),
+        "quoting": file_format.get("quoting", 0),
+    }
+
+
 def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
     """Read a CSV/TSV file according to the provided file_format dictionary.
 
@@ -204,29 +222,156 @@ def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
     variable_row = header_lines.get("variable", 0)
     skiprows = set(header_lines.values()) - {variable_row}
 
-    # Handle quoting
-    quoting = file_format.get("quoting", 0)
-
-    # Columns to treat as strings
-    dtype = {col: str for col in file_format.get("non_numeric_cols", [])}
-
-    # Separator
-    sep = file_format.get("separator", ",")
-
-    # NA values
-    na_values = file_format.get("na_values", None)
-
     # Read the file
     return pd.read_csv(
         file_path,
-        sep=sep,
         skiprows=skiprows,
         header=0,
-        dtype=dtype,
-        na_values=na_values,
-        quoting=quoting,
+        **_csv_format_kwargs(file_format),
         **kwargs,  # pass any extra kwargs
     )
+
+
+def read_csv_tail(
+    file_path: str | Path,
+    file_format: dict,
+    names: list[str],
+    seek_offset: int,
+    **kwargs,
+) -> pd.DataFrame:
+    """Read file_path from `seek_offset` to EOF as headerless CSV data rows.
+
+    Sibling to read_csv_data for a file whose header has already been
+    consumed elsewhere (e.g. a binary-search tail read via
+    find_seek_offset) — `names` supplies the column names read_csv_data
+    would otherwise take from the header row.
+
+    Args:
+        file_path: path to the data file.
+        file_format: same shape as read_csv_data's file_format.
+        names: column names, in file order, including the timestamp
+            column(s) (e.g. TOA5's 'TIMESTAMP').
+        seek_offset: byte offset to start reading from; must be a valid
+            line-start offset (e.g. as returned by find_seek_offset or
+            header_end_offset).
+        **kwargs: additional keyword arguments passed directly to
+            pd.read_csv.
+
+    Returns:
+        Parsed DataFrame with `names` as columns.
+    """
+    with open(file_path, "rb") as f:
+        f.seek(seek_offset)
+        return pd.read_csv(
+            f,
+            header=None,
+            names=names,
+            **_csv_format_kwargs(file_format),
+            **kwargs,
+        )
+
+
+def header_end_offset(file_path: str | Path, n_header_lines: int) -> int:
+    """Return the byte offset right after a file's first `n_header_lines` lines."""
+    with open(file_path, "rb") as f:
+        for _ in range(n_header_lines):
+            f.readline()
+        return f.tell()
+
+
+def _next_line_after(
+    f, offset: int, ceiling: int, chunk_size: int = 4096, max_scan: int = 1 << 20
+) -> tuple[int | None, str]:
+    """Return (byte offset, text) of the first full line starting at/after `offset`.
+
+    Scans forward in `chunk_size` steps (handling lines wider than one
+    chunk) for the next newline, then reads the line that begins
+    immediately after it. `f` must be open in binary mode. Returns
+    (None, "") if no such line starts before `ceiling`, or if no newline
+    is found within `max_scan` bytes (a pathologically long line — treated
+    as unparseable rather than scanned indefinitely).
+    """
+    pos = offset
+    scanned = 0
+    while pos < ceiling and scanned < max_scan:
+        f.seek(pos)
+        chunk = f.read(min(chunk_size, ceiling - pos))
+        if not chunk:
+            return None, ""
+        nl = chunk.find(b"\n")
+        if nl != -1:
+            line_start = pos + nl + 1
+            if line_start >= ceiling:
+                return None, ""
+            f.seek(line_start)
+            line = f.readline()
+            if not line:
+                return None, ""
+            return line_start, line.decode(errors="replace").rstrip("\n")
+        pos += len(chunk)
+        scanned += len(chunk)
+    return None, ""
+
+
+def find_seek_offset(
+    file_path: str | Path,
+    low: int,
+    high: int,
+    line_qualifies: Callable[[str], bool | None],
+    margin: int = 8192,
+) -> int:
+    """Binary-search a text file for a byte offset safely at-or-before a boundary.
+
+    Bisects between `low` and `high` (byte offsets) using `line_qualifies`
+    to test probe lines. `low` is only ever advanced to an offset that a
+    line has *proven* itself (`line_qualifies` returned True for that
+    exact line's text), so the returned offset is always safe to read
+    from without skipping wanted data — either `low` unchanged (nothing
+    proven yet) or a line-start offset at or before the target boundary,
+    never past it. A line `line_qualifies` can't parse/compare (returns
+    None) narrows `high` only, never advances `low` past unproven ground.
+
+    Does not attempt to land exactly on the boundary line — stops once
+    `high - low <= margin`, leaving a small number of extra lines for the
+    caller to trim afterward. This keeps the search robust to corrupt or
+    ambiguous lines near the boundary without needing byte-exact
+    precision.
+
+    Args:
+        file_path: file to search.
+        low: starting (minimum) byte offset — must already be a valid
+            line-start offset (e.g. the offset right after a file's header
+            rows, from header_end_offset).
+        high: ending (maximum) byte offset, typically the file size.
+        line_qualifies: given one line of text (no trailing newline),
+            return True if it belongs strictly before the target boundary,
+            False if at/after it, or None if the line can't be
+            parsed/compared.
+        margin: stop bisecting once the search window is this small, in
+            bytes.
+
+    Returns:
+        A byte offset at or before the boundary; either the input `low`
+        or the start of a line `line_qualifies` proved to be before it.
+    """
+    with open(file_path, "rb") as f:
+        while high - low > margin:
+            mid = (low + high) // 2
+            line_start, line_text = _next_line_after(f, mid, ceiling=high)
+            if line_start is None:
+                high = mid
+                continue
+            try:
+                qualifies = line_qualifies(line_text)
+            except Exception:
+                qualifies = None
+            if qualifies is None:
+                high = line_start
+            elif qualifies:
+                low = line_start
+            else:
+                high = line_start
+    return low
 
 
 def read_csv(file_path: Path) -> pd.DataFrame:
@@ -542,6 +687,7 @@ def write_netcdf(
         try:
             ds.to_netcdf(tmp_path, encoding=encoding)
             shutil.move(tmp_path, file_path)
+            file_path.chmod(0o640)
         except Exception:
             tmp_path.unlink(missing_ok=True)
             raise

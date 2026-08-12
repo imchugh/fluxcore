@@ -122,7 +122,9 @@ def build_dataframe(
     dfs = []
     flux_index = None
     for group_name, mapper in file_groups.items():
-        loader = raw_data_loader.get_data_adapter(system_type=mapper.file_format)
+        loader = raw_data_loader.get_data_adapter(
+            system_type=mapper.file_format, start_date=start_date
+        )
         group_df = _build_file_group_dataframe(
             mapper=mapper,
             loader=loader,
@@ -178,7 +180,7 @@ def _build_file_group_dataframe(
         df = loader(file)
 
         if start_date is not None:
-            if df.index.max() < start_date:
+            if df.empty or df.index.max() < start_date:
                 continue
             df = df[df.index >= start_date]
 
