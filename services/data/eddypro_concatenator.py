@@ -20,7 +20,6 @@ that appear in at least one input file — no NaN rows are inserted for gaps
 that no file covers.
 """
 
-import os
 import pathlib
 
 import pandas as pd
@@ -31,35 +30,10 @@ from services.data.concat_common import validate_headers, validate_interval
 _HEADER_LABELS = ("variable", "units")
 
 
-# Bytes read from the end of the master file to recover its last record's
-# timestamp without loading the whole file. Real files average ~1.5 KB/line;
-# this is a wide safety margin for a single data line.
-_TAIL_PEEK_BYTES = 16384
-
-
 def _load_header(file_path: pathlib.Path) -> list[list]:
     """Return [variable, units] for an EddyPro file."""
     raw = raw_data_loader.load_raw_header(file_path=file_path, file_format="EddyPro")
     return [raw["variable"], raw["units"]]
-
-
-def _peek_last_timestamp(file_path: pathlib.Path) -> pd.Timestamp:
-    """Read the last data row's timestamp without loading the full file.
-
-    Relies on the concatenator always writing the master pre-sorted, so the
-    last non-empty line is the most recent record. Assumes the fixed
-    DATAH/filename/date/time column layout (date at field index 2, time at
-    field index 3).
-    """
-    with open(file_path, "rb") as f:
-        f.seek(0, os.SEEK_END)
-        size = f.tell()
-        f.seek(max(0, size - _TAIL_PEEK_BYTES))
-        tail = f.read().decode(errors="ignore")
-
-    lines = [line for line in tail.splitlines() if line.strip()]
-    fields = lines[-1].split("\t")
-    return pd.Timestamp(f"{fields[2]} {fields[3]}")
 
 
 def select_new_slaves(
@@ -72,8 +46,8 @@ def select_new_slaves(
     slave files (e.g. SmartFlux summary files: `YYYY-MM-DD_*.txt`) accumulating
     against a master that already covers most of them. Reads only the
     master's last timestamp (a tail-read, not a full parse — see
-    ``_peek_last_timestamp``) and keeps any candidate whose filename-encoded
-    date is on or after that day.
+    ``raw_data_loader.peek_last_timestamp``) and keeps any candidate whose
+    filename-encoded date is on or after that day.
 
     This is purely a performance optimisation, not a correctness
     requirement: ``concatenate_eddypro`` already discards any record whose
@@ -81,7 +55,9 @@ def select_new_slaves(
     (already-covered) files through unfiltered is always safe — just wasted
     work, since each additional slave costs a full sort/dedup pass over the
     combined frame. A candidate whose filename doesn't start with a
-    parseable `YYYY-MM-DD` date is kept rather than silently dropped.
+    parseable `YYYY-MM-DD` date is kept rather than silently dropped, and
+    if the master itself has no peekable record (e.g. header-only), every
+    candidate is kept — there's nothing to filter against.
 
     Args:
         master: path to the master file (must already exist).
@@ -92,7 +68,10 @@ def select_new_slaves(
         newer than the master's last one.
     """
     master = pathlib.Path(master)
-    master_date = _peek_last_timestamp(master).normalize()
+    master_ts = raw_data_loader.peek_last_timestamp(master, "EddyPro")
+    if master_ts is None:
+        return [pathlib.Path(c) for c in candidates]
+    master_date = master_ts.normalize()
 
     kept = []
     for candidate in candidates:
