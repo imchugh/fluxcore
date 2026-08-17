@@ -97,30 +97,35 @@ class SiteRuntimeConfig:
 
     @cached_property
     def sonic_instrument(self) -> str | None:
-        """Site-wide sonic anemometer instrument name, or None if undeclared."""
-        return self._compound_instrument("sonic_anemometer")
+        """Site-wide flux-system sonic anemometer name, or None if undeclared."""
+        return self._flux_instrument_pair()[0]
 
     @cached_property
     def irga_instrument(self) -> str | None:
-        """Site-wide IRGA instrument name, or None if undeclared."""
-        return self._compound_instrument("irga")
+        """Site-wide flux-system IRGA instrument name, or None if undeclared."""
+        return self._flux_instrument_pair()[1]
 
-    def _compound_instrument(self, key: str) -> str | None:
-        """Get the named compound-instrument slot's instrument name.
+    def _flux_instrument_pair(self) -> tuple[str | None, str | None]:
+        """Get the site's (sonic_anemometer, irga) flux-system instrument names.
 
         Scans all raw inputs' `instrument` fields for dict-shaped (compound)
-        entries containing `key` (e.g. 'sonic_anemometer', 'irga'). Schema
-        validation (`enforce_compound_instrument_consistency`) has already
-        enforced a single distinct value per key site-wide, so no error
+        entries declaring *both* keys together — the flux-system pairing.
+        `sonic_anemometer` alone (e.g. paired with `atmospheric_pressure`) is
+        excluded: that pattern denotes an integrated sensor reused to source
+        an ancillary met variable elsewhere in the config, not the flux
+        system. Schema validation (`enforce_compound_instrument_consistency`)
+        has already enforced a single distinct pair site-wide, so no error
         raising is needed here.
         """
-        instruments = {
-            inst[key]
+        pairs = {
+            (inst["sonic_anemometer"], inst["irga"])
             for var in self.variables.values()
             for raw_input in var.raw_inputs
-            if isinstance(inst := raw_input.instrument, dict) and key in inst
+            if isinstance(inst := raw_input.instrument, dict)
+            and "sonic_anemometer" in inst
+            and "irga" in inst
         }
-        return next(iter(instruments), None)
+        return next(iter(pairs), (None, None))
 
 
 def _check_name_config_consistency(

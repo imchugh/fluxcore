@@ -276,18 +276,29 @@ class SiteConfig(BaseModel):
 
     @model_validator(mode="after")
     def enforce_compound_instrument_consistency(self):
-        """Ensure sonic_anemometer / irga instrument names are consistent site-wide."""
+        """Ensure the flux sonic_anemometer/irga pairing is consistent site-wide.
+
+        Only dict entries declaring *both* keys are treated as a flux-system
+        pairing. `sonic_anemometer` alone (paired with e.g.
+        `atmospheric_pressure`/`temperature`, no `irga`) also occurs where an
+        integrated sensor (e.g. IRGASON) is reused to source an ancillary
+        met variable (TA/RH) elsewhere in the config — that isn't the flux
+        system and must not be compared against it.
+        """
         sonic_instruments = set()
         irga_instruments = set()
 
         for var_cfg in self.variables.values():
             for input_cfg in var_cfg.input_variables.values():
                 inst = input_cfg.instrument
-                if isinstance(inst, dict):
-                    if "sonic_anemometer" in inst:
-                        sonic_instruments.add(inst["sonic_anemometer"])
-                    if "irga" in inst:
-                        irga_instruments.add(inst["irga"])
+                is_flux_pair = (
+                    isinstance(inst, dict)
+                    and "sonic_anemometer" in inst
+                    and "irga" in inst
+                )
+                if is_flux_pair:
+                    sonic_instruments.add(inst["sonic_anemometer"])
+                    irga_instruments.add(inst["irga"])
 
         if len(sonic_instruments) > 1:
             raise ValueError(
