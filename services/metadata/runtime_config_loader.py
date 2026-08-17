@@ -31,6 +31,10 @@ from services.metadata.site_config_schema import (
 )
 from services.metadata.variable_name_parser import NameParser
 
+# Canonical EC flux quantities: the sole source for a site's flux-system
+# sonic/irga instrument identity (see SiteRuntimeConfig._flux_instrument_pair).
+FLUX_QUANTITIES = ("Fco2", "Fh", "Fe")
+
 
 @dataclass(frozen=True)
 class SiteRuntimeConfig:
@@ -108,24 +112,37 @@ class SiteRuntimeConfig:
     def _flux_instrument_pair(self) -> tuple[str | None, str | None]:
         """Get the site's (sonic_anemometer, irga) flux-system instrument names.
 
-        Scans all raw inputs' `instrument` fields for dict-shaped (compound)
-        entries declaring *both* keys together — the flux-system pairing.
-        `sonic_anemometer` alone (e.g. paired with `atmospheric_pressure`) is
-        excluded: that pattern denotes an integrated sensor reused to source
-        an ancillary met variable elsewhere in the config, not the flux
-        system. Schema validation (`enforce_compound_instrument_consistency`)
-        has already enforced a single distinct pair site-wide, so no error
-        raising is needed here.
+        Sourced only from the canonical EC flux quantities (Fco2/Fh/Fe),
+        never from unrelated compound instrument entries elsewhere in the
+        config (e.g. an integrated sensor reused for an ancillary met
+        variable). Split-sensor sites declare Fco2/Fe as a
+        {sonic_anemometer, irga} dict; integrated-sensor sites (single
+        physical instrument does both roles) declare all three as the same
+        plain string, which is then reported for both slots. Schema
+        validation (`enforce_compound_instrument_consistency`) has already
+        enforced consistency within each group, so no error raising is
+        needed here.
         """
-        pairs = {
-            (inst["sonic_anemometer"], inst["irga"])
-            for var in self.variables.values()
-            for raw_input in var.raw_inputs
-            if isinstance(inst := raw_input.instrument, dict)
-            and "sonic_anemometer" in inst
-            and "irga" in inst
-        }
-        return next(iter(pairs), (None, None))
+        dict_pairs = set()
+        string_instruments = set()
+
+        for var in self.variables.values():
+            if var.quantity not in FLUX_QUANTITIES:
+                continue
+            for raw_input in var.raw_inputs:
+                inst = raw_input.instrument
+                if isinstance(inst, dict):
+                    if "sonic_anemometer" in inst and "irga" in inst:
+                        dict_pairs.add((inst["sonic_anemometer"], inst["irga"]))
+                else:
+                    string_instruments.add(inst)
+
+        if dict_pairs:
+            return next(iter(dict_pairs))
+        if string_instruments:
+            name = next(iter(string_instruments))
+            return name, name
+        return None, None
 
 
 def _check_name_config_consistency(

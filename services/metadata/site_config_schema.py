@@ -274,41 +274,50 @@ class SiteConfig(BaseModel):
 
         return self
 
+    # Canonical EC flux quantities: the sole source for the site's flux-system
+    # sonic/irga instrument identity (see enforce_compound_instrument_consistency).
+    flux_quantities: ClassVar[set[str]] = {"Fco2", "Fh", "Fe"}
+
     @model_validator(mode="after")
     def enforce_compound_instrument_consistency(self):
-        """Ensure the flux sonic_anemometer/irga pairing is consistent site-wide.
+        """Ensure Fco2/Fh/Fe agree on the site's flux-system instrument(s).
 
-        Only dict entries declaring *both* keys are treated as a flux-system
-        pairing. `sonic_anemometer` alone (paired with e.g.
-        `atmospheric_pressure`/`temperature`, no `irga`) also occurs where an
-        integrated sensor (e.g. IRGASON) is reused to source an ancillary
-        met variable (TA/RH) elsewhere in the config — that isn't the flux
-        system and must not be compared against it.
+        Only `Fco2`/`Fh`/`Fe` are inspected — not every dict-shaped
+        `instrument` entry in the config — because the same
+        `sonic_anemometer`/other-key combination can legitimately appear
+        elsewhere for unrelated purposes (e.g. an integrated sensor reused
+        to source an ancillary met variable), which is not the flux system
+        and must not be compared against it.
+
+        Split-sensor sites declare `Fco2`/`Fe` as a `{sonic_anemometer,
+        irga}` dict (`Fh` is conventionally single-form — sonic only per
+        `CLAUDE.md` — and is not cross-checked against the pair). Integrated-
+        sensor sites (one physical instrument serves both roles) declare all
+        three as the same plain string.
         """
-        sonic_instruments = set()
-        irga_instruments = set()
+        dict_pairs = set()
+        string_instruments = set()
 
-        for var_cfg in self.variables.values():
+        for var_name, var_cfg in self.variables.items():
+            if var_name not in self.flux_quantities:
+                continue
             for input_cfg in var_cfg.input_variables.values():
                 inst = input_cfg.instrument
-                is_flux_pair = (
-                    isinstance(inst, dict)
-                    and "sonic_anemometer" in inst
-                    and "irga" in inst
-                )
-                if is_flux_pair:
-                    sonic_instruments.add(inst["sonic_anemometer"])
-                    irga_instruments.add(inst["irga"])
+                if isinstance(inst, dict):
+                    if "sonic_anemometer" in inst and "irga" in inst:
+                        dict_pairs.add((inst["sonic_anemometer"], inst["irga"]))
+                else:
+                    string_instruments.add(inst)
 
-        if len(sonic_instruments) > 1:
+        if len(dict_pairs) > 1:
             raise ValueError(
-                "Compound instrument entries must use the same sonic_anemometer "
-                f"instrument site-wide; found {sonic_instruments}"
+                "Fco2/Fh/Fe declare inconsistent sonic_anemometer/irga "
+                f"pairings: {dict_pairs}"
             )
-        if len(irga_instruments) > 1:
+        if not dict_pairs and len(string_instruments) > 1:
             raise ValueError(
-                "Compound instrument entries must use the same irga instrument "
-                f"site-wide; found {irga_instruments}"
+                "Fco2/Fh/Fe declare inconsistent single-instrument names: "
+                f"{string_instruments}"
             )
 
         return self
