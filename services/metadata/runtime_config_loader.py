@@ -22,6 +22,7 @@ from pathlib import Path
 
 from domain.data_models.metadata_classes import RawVariableMetadata, VariableDefinition
 from domain.enums import FileType, FluxSystemType, StatisticType, VariableType
+from services.metadata import instrument_validation_cache
 from services.metadata.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
@@ -183,23 +184,43 @@ def _check_name_config_consistency(
             )
 
 
-def _validate_instrument_names(validated_config: SiteConfig) -> None:
+def _validate_instrument_names(
+    validated_config: SiteConfig, content_hash: str
+) -> dict[str, str | None]:
     """Check every instrument name in the config against the TERN instrument registry.
+
+    A prior clean pass for this exact file content is trusted via
+    `instrument_validation_cache` instead of re-querying the registry —
+    the RDF-backed vocab lookup is the expensive/network-dependent part of
+    config loading, and site configs change rarely. Any edit changes the
+    content hash, so the next load for changed content naturally falls
+    through to a real re-validation; nothing needs to watch for drift.
 
     Collects all failures before raising so the caller sees the complete
     list of unknown instruments in one pass.
 
     Args:
         validated_config: structurally-validated SiteConfig.
+        content_hash: SHA-256 of the source file's exact bytes.
+
+    Returns:
+        Mapping of instrument name -> TERN vocab URI (or None if
+        unresolvable), covering every distinct instrument referenced in
+        the config.
 
     Raises:
         ValueError: if any instrument name is not recognised by the registry.
     """
+    cached = instrument_validation_cache.lookup(content_hash)
+    if cached is not None:
+        return cached["instrument_uris"]
+
     # Deferred to avoid circular import:
     # instrument_registry → site_metadata_repository → site_registry → here
     from services.metadata import instrument_registry
 
     errors = []
+    instrument_uris: dict[str, str | None] = {}
     for variable, var_cfg in validated_config.variables.items():
         for raw_name, input_cfg in var_cfg.input_variables.items():
             inst = input_cfg.instrument
@@ -210,6 +231,13 @@ def _validate_instrument_names(validated_config: SiteConfig) -> None:
                         f"Variable '{variable}' input '{raw_name}': "
                         f"unknown instrument '{name}'"
                     )
+                elif name not in instrument_uris:
+                    try:
+                        instrument_uris[name] = instrument_registry.get_instrument_uri(
+                            name
+                        )
+                    except KeyError:
+                        instrument_uris[name] = None
 
     if errors:
         raise ValueError(
@@ -217,9 +245,15 @@ def _validate_instrument_names(validated_config: SiteConfig) -> None:
             + "\n".join(f"  {e}" for e in errors)
         )
 
+    instrument_validation_cache.record(
+        content_hash, instrument_uris=instrument_uris, label=validated_config.site
+    )
+    return instrument_uris
+
 
 def _resolve_instrument_uri(
     instrument: str | dict[str, str],
+    instrument_uris: dict[str, str | None],
 ) -> str | dict[str, str] | None:
     """Resolve instrument name(s) to TERN vocab URI(s); None if unresolvable.
 
@@ -227,22 +261,20 @@ def _resolve_instrument_uri(
     instruments declared via instrument_name_corrections.yml) but have no
     vocab entry yet, so URI resolution can legitimately fail even for a
     validated name — that case resolves to None rather than raising.
+
+    Args:
+        instrument: raw instrument name(s) from the config.
+        instrument_uris: name -> URI map already resolved by
+            `_validate_instrument_names`.
     """
-    # Deferred to avoid circular import (see _validate_instrument_names)
-    from services.metadata import instrument_registry
-
-    def _safe(name: str) -> str | None:
-        try:
-            return instrument_registry.get_instrument_uri(name)
-        except KeyError:
-            return None
-
     if isinstance(instrument, dict):
-        return {alias: _safe(name) for alias, name in instrument.items()}
-    return _safe(instrument)
+        return {alias: instrument_uris.get(name) for alias, name in instrument.items()}
+    return instrument_uris.get(instrument)
 
 
-def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
+def _build_runtime_config(
+    validated_config: SiteConfig, instrument_uris: dict[str, str | None]
+) -> SiteRuntimeConfig:
     """Build a SiteRuntimeConfig from a structurally/semantically-validated SiteConfig.
 
     Performs name-syntax, quantity-existence, and units checks as part of
@@ -251,6 +283,7 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
     Args:
         validated_config: structurally-validated SiteConfig (instrument names
             already verified by _validate_instrument_names).
+        instrument_uris: name -> URI map resolved by _validate_instrument_names.
 
     Returns:
         Immutable SiteRuntimeConfig.
@@ -315,7 +348,7 @@ def _build_runtime_config(validated_config: SiteConfig) -> SiteRuntimeConfig:
                 file=cfg.file,
                 begin=cfg.begin,
                 end=cfg.end,
-                instrument_uri=_resolve_instrument_uri(cfg.instrument),
+                instrument_uri=_resolve_instrument_uri(cfg.instrument, instrument_uris),
             )
             for raw_name, cfg in raw_cfg.input_variables.items()
         )
@@ -353,6 +386,8 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     Three phases:
         1. Structural validation  — YAML schema (site_config_schema)
         2. Instrument validation  — all instrument names against TERN registry
+           (skipped, per content hash, when a prior clean pass is cached —
+           see instrument_validation_cache)
         3. Build                  — name syntax, quantity/units checks, assembly
 
     Args:
@@ -361,6 +396,8 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     Returns:
         Immutable SiteRuntimeConfig.
     """
+    file_path = Path(file_path)
+    content_hash = instrument_validation_cache.hash_file(file_path)
     validated_config = validate_L1_config_structure(file=file_path)
-    _validate_instrument_names(validated_config)
-    return _build_runtime_config(validated_config)
+    instrument_uris = _validate_instrument_names(validated_config, content_hash)
+    return _build_runtime_config(validated_config, instrument_uris)
