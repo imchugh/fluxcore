@@ -274,6 +274,34 @@ class SiteConfig(BaseModel):
 
         return self
 
+    @model_validator(mode="after")
+    def enforce_compound_instrument_consistency(self):
+        """Ensure sonic_anemometer / irga instrument names are consistent site-wide."""
+        sonic_instruments = set()
+        irga_instruments = set()
+
+        for var_cfg in self.variables.values():
+            for input_cfg in var_cfg.input_variables.values():
+                inst = input_cfg.instrument
+                if isinstance(inst, dict):
+                    if "sonic_anemometer" in inst:
+                        sonic_instruments.add(inst["sonic_anemometer"])
+                    if "irga" in inst:
+                        irga_instruments.add(inst["irga"])
+
+        if len(sonic_instruments) > 1:
+            raise ValueError(
+                "Compound instrument entries must use the same sonic_anemometer "
+                f"instrument site-wide; found {sonic_instruments}"
+            )
+        if len(irga_instruments) > 1:
+            raise ValueError(
+                "Compound instrument entries must use the same irga instrument "
+                f"site-wide; found {irga_instruments}"
+            )
+
+        return self
+
 
 def validate_variable(config_data: dict, key: str) -> tuple[bool, list]:
     """External variable validator, e.g. for testing UI-entered config validity."""

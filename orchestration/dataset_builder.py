@@ -137,9 +137,13 @@ def _apply_global_metadata(
             value = value.isoformat()
         ds.attrs[attr] = value
 
-    flux_system = ctx.runtime_config.flux_system
-    if flux_system is not None:
-        ds.attrs["flux_system"] = flux_system
+    for key, value in [
+            ("irga_type",   ctx.runtime_config.irga_instrument),
+            ("sonic_type",  ctx.runtime_config.sonic_instrument),
+            ("flux_system", ctx.runtime_config.flux_system),
+            ]:
+        if value is not None:
+            ds.attrs[key] = value
 
     return ds
 

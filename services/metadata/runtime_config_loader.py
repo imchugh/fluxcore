@@ -95,6 +95,33 @@ class SiteRuntimeConfig:
 
         return tuple(sorted(rslt))
 
+    @cached_property
+    def sonic_instrument(self) -> str | None:
+        """Site-wide sonic anemometer instrument name, or None if undeclared."""
+        return self._compound_instrument("sonic_anemometer")
+
+    @cached_property
+    def irga_instrument(self) -> str | None:
+        """Site-wide IRGA instrument name, or None if undeclared."""
+        return self._compound_instrument("irga")
+
+    def _compound_instrument(self, key: str) -> str | None:
+        """Get the named compound-instrument slot's instrument name.
+
+        Scans all raw inputs' `instrument` fields for dict-shaped (compound)
+        entries containing `key` (e.g. 'sonic_anemometer', 'irga'). Schema
+        validation (`enforce_compound_instrument_consistency`) has already
+        enforced a single distinct value per key site-wide, so no error
+        raising is needed here.
+        """
+        instruments = {
+            inst[key]
+            for var in self.variables.values()
+            for raw_input in var.raw_inputs
+            if isinstance(inst := raw_input.instrument, dict) and key in inst
+        }
+        return next(iter(instruments), None)
+
 
 def _check_name_config_consistency(
     variable: str,
