@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import yaml
+import zarr
 
 logger = logging.getLogger(__name__)
 
@@ -695,6 +696,89 @@ def write_netcdf(
         ds.to_netcdf(file_path, encoding=encoding)
 
     logger.info("Wrote NetCDF file: %s", file_path.name)
+
+
+def _chmod_tree(root: Path, *, file_mode: int, dir_mode: int) -> None:
+    """Apply file_mode to every file and dir_mode to every directory under root."""
+    root.chmod(dir_mode)
+    for path in root.rglob("*"):
+        path.chmod(dir_mode if path.is_dir() else file_mode)
+
+
+def write_zarr(*, ds: xr.Dataset, store_path: Path, atomic: bool = True) -> None:
+    """Write an xarray Dataset to a Zarr store (a directory).
+
+    Does not serialize attrs — callers must ensure `ds` is already
+    Zarr-writable (see `serialize_dataset_attrs`) before calling this, for
+    the same reason as `write_netcdf`.
+
+    Unlike `write_netcdf`, a Zarr store is a directory tree, not a single
+    file, which changes two things: the atomic-write temp object is a
+    directory (moved into place with `shutil.move`, which nests rather than
+    replaces if the destination already exists as a directory, so an
+    existing store is removed immediately before the move — a small
+    non-atomic window, acceptable for this manually-invoked tool), and
+    permissions must be applied recursively rather than via one chmod call.
+
+    Args:
+        ds: Dataset to write.
+        store_path: Destination directory path (the Zarr store root).
+            Parent directories created automatically.
+        atomic: If True (default), write to a temporary sibling directory
+            then move it into place.
+    """
+    store_path = Path(store_path)
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if atomic:
+        tmp_dir = Path(tempfile.mkdtemp(suffix=".zarr.tmp", dir=store_path.parent))
+        try:
+            ds.to_zarr(tmp_dir, mode="w")
+            if store_path.exists():
+                shutil.rmtree(store_path)
+            shutil.move(str(tmp_dir), str(store_path))
+            _chmod_tree(store_path, file_mode=0o640, dir_mode=0o750)
+        except Exception:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            raise
+    else:
+        ds.to_zarr(store_path, mode="w")
+
+    logger.info("Wrote Zarr store: %s", store_path.name)
+
+
+def append_zarr(*, ds: xr.Dataset, store_path: Path) -> None:
+    """Append a tail slice to an existing Zarr store and refresh its global attrs.
+
+    Does not serialize attrs — see `write_zarr`. Unlike `write_zarr`, this
+    assumes `store_path` already exists with a schema (variables/dims)
+    matching `ds`; a mismatch (e.g. a site-config change adding/removing a
+    variable) raises from `to_zarr` itself — callers should catch that and
+    fall back to a full rebuild via `write_zarr` rather than handling it
+    here.
+
+    `ds.attrs` are not applied to the store by `to_zarr(mode="a")`, so they
+    are written explicitly onto the root group afterward — this is how
+    callers refresh whole-history attrs (record count, time coverage,
+    instrument history) that must reflect the combined store, not just the
+    newly appended slice.
+
+    Args:
+        ds: Tail-slice dataset to append along the existing `time` dim.
+        store_path: Path to the existing Zarr store.
+    """
+    store_path = Path(store_path)
+
+    ds.to_zarr(store_path, mode="a", append_dim="time")
+
+    group = zarr.open_group(str(store_path), mode="a")
+    group.attrs.update(ds.attrs)
+
+    _chmod_tree(store_path, file_mode=0o640, dir_mode=0o750)
+
+    logger.info(
+        "Appended %d record(s) to Zarr store: %s", ds.sizes["time"], store_path.name
+    )
 
 
 def write_yml_file(

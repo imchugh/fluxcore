@@ -139,6 +139,13 @@ def build_dataframe(
             dfs.append(group_df)
 
     # Step 2
+    if not dfs:
+        # No file group had any rows in the requested window (e.g. a
+        # checkpoint-based tail read with no new records since last run) —
+        # nothing to concatenate. Return an empty frame with a properly
+        # typed time index rather than letting pd.concat raise, so callers
+        # can treat "no new data yet" as a normal, empty result.
+        return pd.DataFrame(index=pd.DatetimeIndex([], name="time"))
     df = pd.concat(dfs, axis=1)
 
     # Step 3
@@ -324,6 +331,11 @@ def _merge_block(
     result = pd.Series(index=df.index, dtype=float)
 
     for alias, info in block.items():
+        if alias not in df.columns:
+            # Alias's source file contributed no rows in the requested
+            # window (e.g. a start_date-restricted tail read past this
+            # instrument era) — nothing for this segment to contribute.
+            continue
         segment = df.loc[info["begin"] : info["end"], alias]
         result.loc[segment.index] = segment
 
