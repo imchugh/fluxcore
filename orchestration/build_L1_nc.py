@@ -163,6 +163,18 @@ def build_L1_ds_complete(ds):
     return ds
 
 
+def _year_time_bounds(ds, year) -> list[str]:
+    """Calendar-year time_bounds for slicing ds, as DATA_TIME_FORMAT strings."""
+    time_step = ds.attrs["time_step"]
+    return [
+        bound.strftime(DATA_TIME_FORMAT)
+        for bound in (
+            datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step),
+            datetime.datetime(year + 1, 1, 1),
+        )
+    ]
+
+
 def build_L1_ds_by_year(ds, year):
     """Slice ds to one calendar year and apply the per-year attrs/serialization steps.
 
@@ -173,17 +185,7 @@ def build_L1_ds_by_year(ds, year):
     Returns:
         Sliced, fully attributed and serialized single-year dataset.
     """
-    # Get network-specific valid year data bounds
-    time_step = ds.attrs["time_step"]
-    time_bounds = [
-        bound.strftime(DATA_TIME_FORMAT)
-        for bound in (
-            datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step),
-            datetime.datetime(year + 1, 1, 1),
-        )
-    ]
-
-    year_ds = ds.sel(time=slice(*time_bounds))
+    year_ds = ds.sel(time=slice(*_year_time_bounds(ds, year)))
     year_ds = assign_variable_flags(year_ds)
     year_ds = assign_valid_range(year_ds)
     year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
@@ -215,16 +217,7 @@ def build_L1_year_from_zarr(ds, year):
     Returns:
         Sliced, fully attributed and serialized single-year dataset.
     """
-    time_step = ds.attrs["time_step"]
-    time_bounds = [
-        bound.strftime(DATA_TIME_FORMAT)
-        for bound in (
-            datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step),
-            datetime.datetime(year + 1, 1, 1),
-        )
-    ]
-
-    year_ds = ds.sel(time=slice(*time_bounds))
+    year_ds = ds.sel(time=slice(*_year_time_bounds(ds, year)))
     year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
     year_ds = serialize_inst_history(ds=year_ds, year=year)
     year_ds = file_io.serialize_dataset_attrs(ds=year_ds)

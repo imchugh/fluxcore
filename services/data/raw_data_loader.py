@@ -39,7 +39,6 @@ _SYSTEM_TYPE_FORMAT_MAP = {"CSI": "TOA5", "LICOR": "EddyPro"}
 def load_raw_data(
     file_path: pathlib.Path,
     file_format: str,
-    drop_non_numeric: bool = False,
     **read_csv_kwargs,
 ) -> pd.DataFrame:
     """Load a raw TOA5/EddyPro file into a time-indexed DataFrame.
@@ -56,12 +55,7 @@ def load_raw_data(
         on_bad_lines="skip",
         **read_csv_kwargs,
     )
-    df = DATE_FORMATTERS[file_format](df)
-
-    if drop_non_numeric:
-        df = _drop_non_numeric(df=df, file_format=file_format)
-
-    return df
+    return DATE_FORMATTERS[file_format](df)
 
 
 def _TOA5_date_formatter(df):
@@ -84,12 +78,6 @@ DATE_FORMATTERS = {
     "TOA5": _TOA5_date_formatter,
     "EddyPro": _EddyPro_date_formatter,
 }
-
-
-def _drop_non_numeric(df, file_format):
-
-    cols_to_drop = _FILE_FORMATS[file_format]["non_numeric_cols"]
-    return df.drop(columns=cols_to_drop, errors="ignore")
 
 
 def _toa5_line_timestamp(line: str) -> pd.Timestamp | None:
@@ -160,7 +148,6 @@ def load_raw_data_since(
     file_path: pathlib.Path,
     file_format: str,
     start_date: pd.Timestamp,
-    drop_non_numeric: bool = False,
     **read_csv_kwargs,
 ) -> pd.DataFrame:
     """Load a raw TOA5/EddyPro file, skipping rows before start_date where possible.
@@ -178,7 +165,6 @@ def load_raw_data_since(
         file_path: path to the data file.
         file_format: 'TOA5' or 'EddyPro'.
         start_date: only rows at/after this timestamp are returned.
-        drop_non_numeric: as load_raw_data.
         **read_csv_kwargs: forwarded to load_raw_data on the fallback path
             only; any kwarg given always takes the fallback path.
 
@@ -191,7 +177,6 @@ def load_raw_data_since(
                 file_path=file_path,
                 file_format=file_format,
                 start_date=start_date,
-                drop_non_numeric=drop_non_numeric,
             )
         except Exception:
             logger.debug(
@@ -201,12 +186,7 @@ def load_raw_data_since(
                 exc_info=True,
             )
 
-    df = load_raw_data(
-        file_path=file_path,
-        file_format=file_format,
-        drop_non_numeric=drop_non_numeric,
-        **read_csv_kwargs,
-    )
+    df = load_raw_data(file_path=file_path, file_format=file_format, **read_csv_kwargs)
     return df[df.index >= start_date]
 
 
@@ -214,7 +194,6 @@ def _load_raw_data_since_fast(
     file_path: pathlib.Path,
     file_format: str,
     start_date: pd.Timestamp,
-    drop_non_numeric: bool,
 ) -> pd.DataFrame:
     """Fast path for load_raw_data_since: tail-peek + binary search + seeked read."""
     fmt = _FILE_FORMATS[file_format]
@@ -252,12 +231,7 @@ def _load_raw_data_since_fast(
         on_bad_lines="skip",
     )
     df = DATE_FORMATTERS[file_format](df)
-    df = df[df.index >= start_date]
-
-    if drop_non_numeric:
-        df = _drop_non_numeric(df=df, file_format=file_format)
-
-    return df
+    return df[df.index >= start_date]
 
 
 def get_data_adapter(system_type: str, start_date: pd.Timestamp | None = None):
@@ -283,8 +257,7 @@ def load_raw_header(file_path, file_format: str) -> dict:
     """Read a raw file's header rows, keyed by line type ('variable', 'units', etc).
 
     Non-numeric columns (per `_FILE_FORMATS`) are dropped from every header
-    row, matching the columns `load_raw_data` would drop if called with
-    `drop_non_numeric=True`.
+    row.
     """
     fmt = _FILE_FORMATS[file_format]
     header_dict = fmt.get("header_lines")
