@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Export an L1 xarray Dataset to a single whole-history Zarr store per site.
 
-Not yet wired into the production task registry (tasks/build_tasks.py /
-tasks/registry.py) — see the plan doc for the staged rollout. Mirrors
-build_L1_nc.py's structure and reuses its dataset-preparation functions
-where they aren't year-scoped, writing one Zarr store per site (covering
-all data years) instead of one NetCDF file per calendar year.
+Wired into the production task registry as construct_L1_zarr (30-min
+incremental) and rebuild_L1_zarr (nightly full-rebuild reconciliation) —
+see tasks/build_tasks.py. Runs in parallel with the existing NetCDF export
+(construct_L1_nc); NetCDF still reads raw data directly for now, not this
+store — that cutover is a deferred follow-up once this has been proven
+against real production data. Mirrors build_L1_nc.py's structure and
+reuses its dataset-preparation functions where they aren't year-scoped,
+writing one Zarr store per site (covering all data years) instead of one
+NetCDF file per calendar year.
 
 `build()` does a full rebuild from all raw data (used to seed a new store,
 and for the periodic full-rebuild reconciliation pass). `update()` is the
