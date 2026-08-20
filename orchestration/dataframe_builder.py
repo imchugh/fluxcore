@@ -133,8 +133,11 @@ def build_dataframe(
             start_date=start_date,
             time_step=time_step,
         )
-        if not group_df.empty:
-            if group_name == flux_file:
+        if not group_df.columns.empty:
+            # Only trust flux_index from a group that actually has rows
+            # this cycle — an empty (NaN-placeholder) flux group must not
+            # set it to an empty index, which would break Step 5 below.
+            if group_name == flux_file and not group_df.empty:
                 flux_index = group_df.index
             dfs.append(group_df)
 
@@ -202,7 +205,22 @@ def _build_file_group_dataframe(
         dfs.append(df)
 
     if not dfs:
-        return pd.DataFrame()
+        # No file in this group contributed a row in the requested window
+        # (e.g. this group's source file simply hasn't been touched since
+        # the last incremental checkpoint — a slower-cadence logger, say).
+        # Still register the group's expected columns as an empty frame
+        # rather than dropping them: pd.concat(axis=1) in build_dataframe
+        # then NaN-fills them across whatever time range other groups DID
+        # produce, keeping this group's variables in the result at all —
+        # a real gap, not a silent omission. This matters most for Zarr's
+        # incremental append: without it, a variable that's absent for one
+        # tail cycle never gets its store array appended to at all, and
+        # falls permanently behind the variables that did have new rows.
+        return pd.DataFrame(
+            columns=list(rename_map.values()),
+            index=pd.DatetimeIndex([], name="time"),
+            dtype="float64",
+        )
 
     df = pd.concat(dfs).sort_index()
 
