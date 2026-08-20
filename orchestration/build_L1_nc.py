@@ -3,6 +3,12 @@
 
 Adds spatial dims, QC flags, global/variable metadata, then splits by
 calendar year and writes one NetCDF file per year.
+
+build_from_zarr() is the operational path (construct_L1_nc): reads an
+already-processed site from its Zarr store (orchestration/build_L1_zarr.py)
+rather than rebuilding from raw data. build() (raw-data, from scratch) is
+kept for manual/legacy rebuilds, bootstrapping a site before its Zarr store
+exists, and diagnosing zarr/raw discrepancies.
 """
 
 import datetime
@@ -10,6 +16,7 @@ import pathlib
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT, NC_ENCODING, SITE_PLACEHOLDER
 from infrastructure import file_io, paths
@@ -91,6 +98,62 @@ def build(
     return written
 
 
+def build_from_zarr(
+    site_name: str,
+    zarr_dir: pathlib.Path | str | None = None,
+    output_dir: pathlib.Path | str | None = None,
+    year: int | None = None,
+) -> list[pathlib.Path]:
+    """Build L1 NetCDF files for a site by reading from its Zarr store.
+
+    Replaces build()'s raw-data rebuild for the operational cron path: the
+    store (kept current by construct_L1_zarr/rebuild_L1_zarr — see
+    orchestration/build_L1_zarr.py) is already unit-converted, merged,
+    QC-flagged, and attributed, so this only slices by year, re-derives the
+    year-scoped attrs, and writes NetCDF. See build() for the from-scratch
+    raw-data path (manual/legacy/bootstrap use, or diagnosing zarr/raw
+    discrepancies) — also the fallback if a site's Zarr store doesn't exist
+    yet; this function raises rather than silently falling back to it,
+    matching the fail-closed style already used for tasks.csv.
+
+    Args:
+        site_name: registered site name.
+        zarr_dir: directory containing the site's Zarr store. Defaults to
+            the homogenised_data/zarr/L1 stream path.
+        output_dir: directory to write NetCDF files into. Defaults to the
+            homogenised_data/nc stream path for this site.
+        year: if provided, only build that calendar year's file.
+
+    Returns:
+        List of paths to files written.
+    """
+    if zarr_dir is None:
+        zarr_dir = paths.get_local_stream_path("homogenised_data", "zarr") / "L1"
+    store_path = pathlib.Path(zarr_dir) / f"{site_name}_L1.zarr"
+
+    ds = xr.open_zarr(store_path).load()
+    ds = _rehydrate_instrument_history(ds)
+    ds = _reorder_compound_instrument(ds)
+    # Refresh date_created/history to this NetCDF build's own time, rather
+    # than whenever the Zarr store was last written/appended.
+    ds = assign_L1_global_generic_attrs(ds)
+
+    if output_dir is None:
+        output_dir = paths.get_local_stream_path("homogenised_data", "nc") / site_name
+    output_dir = pathlib.Path(output_dir)
+
+    years = [year] if year is not None else get_ds_years(ds)
+
+    written = []
+    for ds_year in years:
+        year_ds = build_L1_year_from_zarr(ds=ds, year=ds_year)
+        file_path = output_dir / f"{site_name}_{ds_year}_L1.nc"
+        file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
+        written.append(file_path)
+
+    return written
+
+
 def build_L1_ds_complete(ds):
     """Apply spatial dims, CRS variable, and generic global attrs to the dataset."""
     ds = do_dim_ops(ds=ds)
@@ -128,6 +191,42 @@ def build_L1_ds_by_year(ds, year):
     year_ds = serialize_uri(ds=year_ds)
     year_ds = serialize_inst_history(ds=year_ds, year=year)
     year_ds = serialize_units(ds=year_ds)
+    year_ds = file_io.serialize_dataset_attrs(ds=year_ds)
+
+    return year_ds
+
+
+def build_L1_year_from_zarr(ds, year):
+    """Slice a Zarr-sourced (already-processed) dataset to one year.
+
+    Counterpart to build_L1_ds_by_year for data sourced from
+    build_from_zarr rather than freshly built from raw: skips the steps
+    already baked into the Zarr store (QC flags, valid_range, attr
+    filtering, uri/units serialization) and only re-derives what's
+    genuinely year-scoped — title/record-count/time-coverage attrs and
+    instrument-history clipping — reusing the existing
+    assign_L1_data_year_attrs/serialize_inst_history unchanged.
+
+    Args:
+        ds: xarray dataset loaded from a site's Zarr store (already passed
+            through _rehydrate_instrument_history).
+        year: calendar year to slice out.
+
+    Returns:
+        Sliced, fully attributed and serialized single-year dataset.
+    """
+    time_step = ds.attrs["time_step"]
+    time_bounds = [
+        bound.strftime(DATA_TIME_FORMAT)
+        for bound in (
+            datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step),
+            datetime.datetime(year + 1, 1, 1),
+        )
+    ]
+
+    year_ds = ds.sel(time=slice(*time_bounds))
+    year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
+    year_ds = serialize_inst_history(ds=year_ds, year=year)
     year_ds = file_io.serialize_dataset_attrs(ds=year_ds)
 
     return year_ds
@@ -293,6 +392,75 @@ def serialize_uri(ds):
                 f"{uri}" for uri in attrs["instrument_uri"].values()
             )
 
+    return ds
+
+
+def _rehydrate_instrument_history(ds):
+    """Reverse build_L1_zarr._json_safe_instrument_history's ISO-string encoding.
+
+    Parses each variable's instrument_history start_date/end_date back to
+    pd.Timestamp (or None), so serialize_inst_history can run against
+    Zarr-sourced data exactly as it does against freshly built data.
+    """
+    var_list = [var for var in ds.variables if var not in ds.dims]
+    for var in var_list:
+        history = ds[var].attrs.get("instrument_history")
+        if history is None:
+            continue
+
+        first_val = next(iter(history.values()))
+        if "start_date" in first_val:
+            ds[var].attrs["instrument_history"] = _parse_history(history)
+        else:
+            # Compound: alias-level keys need the same reordering as
+            # `instrument` itself — see _reorder_compound_instrument.
+            ds[var].attrs["instrument_history"] = {
+                alias: _parse_history(history[alias])
+                for alias in _COMPOUND_INSTRUMENT_KEY_ORDER
+                if alias in history
+            }
+
+    return ds
+
+
+def _parse_history(history: dict) -> dict:
+    """Parse ISO-string start_date/end_date within a simple instrument-history dict."""
+    return {
+        inst: {
+            "start_date": pd.Timestamp(dates["start_date"])
+            if dates["start_date"] is not None
+            else None,
+            "end_date": pd.Timestamp(dates["end_date"])
+            if dates["end_date"] is not None
+            else None,
+        }
+        for inst, dates in history.items()
+    }
+
+
+_COMPOUND_INSTRUMENT_KEY_ORDER = ("sonic_anemometer", "irga")
+
+
+def _reorder_compound_instrument(ds):
+    """Restore canonical sonic_anemometer/irga key order for compound `instrument`.
+
+    Zarr's attrs round-trip does not preserve dict key insertion order (its
+    JSON attrs encoding is not order-stable — confirmed empirically: a
+    {"sonic_anemometer": ..., "irga": ...} dict comes back key-alphabetised
+    after a to_zarr/open_zarr round trip). Left uncorrected, this would
+    scramble the ",".join(attrs["instrument"].values()) order
+    serialize_inst_history uses for compound-instrument (flux/covariance)
+    variables. `instrument`'s only valid compound keys are these two (see
+    CLAUDE.md's site-config instrument notation), so the canonical order is
+    fixed rather than derived.
+    """
+    var_list = [var for var in ds.variables if var not in ds.dims]
+    for var in var_list:
+        inst = ds[var].attrs.get("instrument")
+        if isinstance(inst, dict):
+            ds[var].attrs["instrument"] = {
+                k: inst[k] for k in _COMPOUND_INSTRUMENT_KEY_ORDER if k in inst
+            }
     return ds
 
 

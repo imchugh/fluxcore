@@ -3,18 +3,22 @@
 
 Wired into the production task registry as construct_L1_zarr (30-min
 incremental) and rebuild_L1_zarr (nightly full-rebuild reconciliation) —
-see tasks/build_tasks.py. Runs in parallel with the existing NetCDF export
-(construct_L1_nc); NetCDF still reads raw data directly for now, not this
-store — that cutover is a deferred follow-up once this has been proven
-against real production data. Mirrors build_L1_nc.py's structure and
-reuses its dataset-preparation functions where they aren't year-scoped,
-writing one Zarr store per site (covering all data years) instead of one
-NetCDF file per calendar year.
+see tasks/build_tasks.py. construct_L1_nc (build_L1_nc.build_from_zarr)
+now reads its NetCDF output from this store instead of rebuilding from raw
+data. Mirrors build_L1_nc.py's structure and reuses its dataset-preparation
+functions where they aren't year-scoped, writing one Zarr store per site
+(covering all data years) instead of one NetCDF file per calendar year.
 
 `build()` does a full rebuild from all raw data (used to seed a new store,
 and for the periodic full-rebuild reconciliation pass). `update()` is the
 cheap 30-minute-cadence path: reads the store's last timestamp as a
 checkpoint, loads and appends only newer records.
+
+Unlike build_L1_nc.py's NetCDF path, `instrument_history` is stored here
+in full structured form (JSON-safe: timestamps as ISO strings), not
+flattened to a year-clipped string — Zarr attrs are JSON-native, so this
+survives the round trip natively. NetCDF export re-hydrates it and
+reproduces the year clipping itself; see `_json_safe_instrument_history`.
 
 Usage (from project root, with ep_cntl activated):
     python -m orchestration.build_L1_zarr SITE_NAME [--update] [--year YEAR] \
@@ -32,8 +36,6 @@ from domain.constants import DATA_TIME_FORMAT
 from infrastructure import file_io, paths
 from orchestration import dataset_builder
 from orchestration.build_L1_nc import (
-    _serialise_compound_history,
-    _serialise_simple_history,
     assign_crs_variable,
     assign_L1_global_generic_attrs,
     assign_valid_range,
@@ -189,7 +191,7 @@ def build_L1_ds_full(ds):
     ds = assign_L1_data_full_attrs(ds=ds)
     ds = filter_variable_attrs(ds=ds)
     ds = serialize_uri(ds=ds)
-    ds = serialize_inst_history_full(ds=ds)
+    ds = _json_safe_instrument_history(ds=ds)
     ds = serialize_units(ds=ds)
     ds = file_io.serialize_dataset_attrs(ds=ds)
 
@@ -200,12 +202,14 @@ def build_L1_ds_tail(ds, store_path: pathlib.Path):
     """Apply the flags/attrs/serialization pipeline to a tail slice being appended.
 
     Same steps as `build_L1_ds_full`, except the whole-history attrs
-    (title, `nc_nrecs`, time coverage, instrument history) are computed
-    against the *combined* range — the existing store's recorded start and
-    record count, plus this tail slice — rather than the tail's own local
-    bounds. Without this, appending would make `time_coverage_start` jump
-    forward to the tail's start and `serialize_inst_history_full` would
-    drop instrument eras that predate the tail entirely.
+    (title, `nc_nrecs`, time coverage) are computed against the *combined*
+    range — the existing store's recorded start and record count, plus
+    this tail slice — rather than the tail's own local bounds. Without
+    this, appending would make `time_coverage_start` jump forward to the
+    tail's start. `instrument_history` needs no such combining: it's
+    config-derived (independent of the queried date range) and stored in
+    full structured form via `_json_safe_instrument_history`, not clipped
+    at write time — see that function's docstring.
 
     Args:
         ds: tail-slice dataset, already passed through `build_L1_ds_complete`.
@@ -223,7 +227,7 @@ def build_L1_ds_tail(ds, store_path: pathlib.Path):
     )
     ds = filter_variable_attrs(ds=ds)
     ds = serialize_uri(ds=ds)
-    ds = serialize_inst_history_full(ds=ds, range_start=range_start)
+    ds = _json_safe_instrument_history(ds=ds)
     ds = serialize_units(ds=ds)
     ds = file_io.serialize_dataset_attrs(ds=ds)
 
@@ -264,75 +268,60 @@ def assign_L1_data_full_attrs(ds, range_start=None, nrecs_base: int = 0):
     return ds
 
 
-def serialize_inst_history_full(ds, range_start=None):
-    """Serialize instrument-changeover history clipped to the dataset's full time range.
+def _json_safe_instrument_history(ds):
+    """Make each variable's instrument_history dict JSON-safe for Zarr attrs.
 
-    Whole-history counterpart of build_L1_nc.serialize_inst_history — same
-    logic, but the clip window is the dataset's actual first/last timestamp
-    instead of one calendar year. Reuses the same private history-formatting
-    helpers as the NetCDF path.
+    Converts nested start_date/end_date timestamps to ISO strings without
+    collapsing or year-clipping the structure — unlike
+    build_L1_nc.serialize_inst_history, which flattens *and* clips to one
+    calendar year. Preserving the structure here (rather than flattening
+    at Zarr-write time) is what lets NetCDF export reproduce that per-year
+    clipping later, from data that's otherwise already fully processed by
+    the time it reaches this store — see build_L1_nc.build_from_zarr and
+    its _rehydrate_instrument_history counterpart.
+
+    Does not touch `instrument`: it's already either a plain string or a
+    {alias: name} dict of strings, both natively JSON-safe already.
 
     Args:
         ds: dataset — the full history for `build()`, or a tail slice for
-            `update()`.
-        range_start: if given, used as the clip window's start instead of
-            `ds.time.values[0]` — pass the *existing* store's recorded
-            start when `ds` is only a tail slice, so instrument eras that
-            predate the tail aren't dropped from the serialized history.
+            `update()`. instrument_history is config-derived and always
+            reflects the site's full history regardless of which slice of
+            data `ds` covers, so no date-range argument is needed here.
     """
-    range_start = (
-        pd.Timestamp(range_start).to_pydatetime()
-        if range_start is not None
-        else pd.Timestamp(ds.time.values[0]).to_pydatetime()
-    )
-    range_end = pd.Timestamp(ds.time.values[-1]).to_pydatetime()
-
     var_list = [var for var in ds.variables if var not in ds.dims]
     for var in var_list:
-        attrs = ds[var].attrs
-
-        if "instrument_history" not in attrs:
-            if isinstance(attrs.get("instrument"), dict):
-                attrs["instrument"] = ",".join(attrs["instrument"].values())
+        history = ds[var].attrs.get("instrument_history")
+        if history is None:
             continue
 
-        history = attrs["instrument_history"]
         first_val = next(iter(history.values()))
-
         if "start_date" in first_val:
             # Simple: {inst_name: {start_date, end_date}}
-            if isinstance(attrs.get("instrument"), dict):
-                attrs["instrument"] = ",".join(attrs["instrument"].values())
-            serialised, last_inst = _serialise_simple_history(
-                history, range_start, range_end
-            )
+            ds[var].attrs["instrument_history"] = _isoformat_history(history)
         else:
             # Compound: {alias: {inst_name: {start_date, end_date}}}
-            serialised, last_inst = _serialise_compound_history(
-                history, range_start, range_end
-            )
-
-        if not serialised:
-            del attrs["instrument_history"]
-        elif "start_date" in first_val:
-            # Simple history
-            if len(serialised) == 1:
-                attrs["instrument"] = last_inst
-                del attrs["instrument_history"]
-            else:
-                attrs["instrument_history"] = "|".join(serialised)
-                if last_inst is not None:
-                    attrs["instrument"] = last_inst
-        else:
-            # Compound history: last_inst is a dict {alias: name}
-            attrs["instrument_history"] = ";".join(serialised)
-            inst = attrs.get("instrument")
-            current = dict(inst) if isinstance(inst, dict) else {}
-            if last_inst:
-                current.update(last_inst)
-            attrs["instrument"] = ",".join(current.values())
+            ds[var].attrs["instrument_history"] = {
+                alias: _isoformat_history(inst_history)
+                for alias, inst_history in history.items()
+            }
 
     return ds
+
+
+def _isoformat_history(history: dict) -> dict:
+    """ISO-format start_date/end_date within a simple instrument-history dict."""
+    return {
+        inst: {
+            "start_date": dates["start_date"].isoformat()
+            if dates["start_date"] is not None
+            else None,
+            "end_date": dates["end_date"].isoformat()
+            if dates["end_date"] is not None
+            else None,
+        }
+        for inst, dates in history.items()
+    }
 
 
 def _parse_args() -> argparse.Namespace:
