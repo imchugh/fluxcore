@@ -470,6 +470,9 @@ def serialize_inst_history(ds, year):
     Collapses the instrument_history dict (simple or compound) built during
     dataset assembly into '|'- and ';'-joined strings clipped to this year's
     date range, and sets 'instrument' to the last instrument used in the year.
+    The open-ended-date resolution itself lives in resolve_instrument_history;
+    this function only adds the calendar-year windowing and NetCDF attr
+    reassembly on top of it.
     """
     time_step = ds.attrs["time_step"]
     year_start = datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step)
@@ -525,28 +528,74 @@ def serialize_inst_history(ds, year):
     return ds
 
 
+def resolve_instrument_history(
+    history: dict,
+    window_start: datetime.datetime,
+    window_end: datetime.datetime,
+) -> list[tuple[str, datetime.datetime, datetime.datetime]]:
+    """Resolve a simple instrument-history dict against a time window.
+
+    This is the piece that actually needs data, not just config: an
+    instrument era with no recorded start_date/end_date in the site config
+    — either because the instrument never changed, or because a changeover
+    boundary was simply never dated — is open-ended, and the only sensible
+    way to resolve "open-ended" into a concrete date is to clamp it to
+    whatever window of actual data is being asked about; there's no
+    config-only answer. Callers are responsible for that clamping (e.g.
+    serialize_inst_history clamps its calendar-year window to the
+    dataset's actual time extent) before calling this.
+
+    Args:
+        history: {instrument_name: {"start_date": Timestamp|None,
+            "end_date": Timestamp|None}}.
+        window_start: window lower bound.
+        window_end: window upper bound.
+
+    Returns:
+        (instrument_name, resolved_start, resolved_end) tuples, in
+        `history`'s order, restricted to eras overlapping the window and
+        clipped to it.
+    """
+    resolved = []
+    for inst, dates in history.items():
+        start = dates["start_date"] if dates["start_date"] is not None else window_start
+        end = dates["end_date"] if dates["end_date"] is not None else window_end
+        if end < window_start or start > window_end:
+            continue
+        resolved.append((inst, max(window_start, start), min(window_end, end)))
+    return resolved
+
+
+def _format_resolved_history(
+    resolved: list[tuple[str, datetime.datetime, datetime.datetime]],
+) -> tuple[list[str], str | None]:
+    """Format resolved (instrument, start, end) tuples into NetCDF attr segments.
+
+    Returns the formatted '(inst,start,end)' segment strings and the name
+    of whichever instrument's resolved era ends latest (the "current"
+    instrument for this window).
+    """
+    serialised = [
+        f"({inst},{start.isoformat()},{end.isoformat()})"
+        for inst, start, end in resolved
+    ]
+    last_inst = None
+    last_end = None
+    for inst, _start, end in resolved:
+        if last_end is None or end > last_end:
+            last_end = end
+            last_inst = inst
+    return serialised, last_inst
+
+
 def _serialise_simple_history(
     history: dict,
     year_start,
     year_end,
 ) -> tuple[list[str], str | None]:
     """Serialise a simple instrument history to a list of formatted strings."""
-    serialised = []
-    last_inst = None
-    last_end = None
-    for inst, dates in history.items():
-        dates = dict(dates)
-        start = dates["start_date"] if dates["start_date"] is not None else year_start
-        end = dates["end_date"] if dates["end_date"] is not None else year_end
-        if end < year_start or start > year_end:
-            continue
-        use_start = max(year_start, start)
-        use_end = min(year_end, end)
-        serialised.append(f"({inst},{use_start.isoformat()},{use_end.isoformat()})")
-        if last_end is None or use_end > last_end:
-            last_end = use_end
-            last_inst = inst
-    return serialised, last_inst
+    resolved = resolve_instrument_history(history, year_start, year_end)
+    return _format_resolved_history(resolved)
 
 
 def _serialise_compound_history(
