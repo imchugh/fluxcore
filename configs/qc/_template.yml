@@ -1,0 +1,70 @@
+# Template for a site's L2 QC config.
+#
+# To configure a real site, copy this file to {site_name}.yml (matching the
+# site name exactly, e.g. MyallValeA.yml) in this same directory. A site with
+# no file here gets no QC applied — build_L2_zarr.build()/update() will still
+# run and produce an L2 store, just with everything passed through unchanged
+# (only the "missing" flag bit, from isnull(), is ever set).
+#
+# Keys are exact L1 Zarr store variable names — canonical names WITH their
+# statistic suffix where one applies, e.g. Ta_Av / Ta_Sd, not bare Ta. Flux
+# quantities (Fco2, Fh, Fe) and a few others carry no suffix. Check the L1
+# store's own variable list (xr.open_zarr(...).data_vars) if unsure — a name
+# that doesn't match one raises at build/update time rather than being
+# silently skipped (services/metadata/qc_config_schema.validate_qc_config_variables).
+#
+# Every check block below is optional and independent — configure only the
+# checks a given variable actually needs. See services/metadata/
+# qc_config_schema.py for the full validation rules, and services/data/
+# qc_service.py for what each check actually does.
+
+# --- range_check ---
+# Flags any value < lower or > upper. Both bounds are required scalars (no
+# monthly variation, unlike PyFluxPro's RangeCheck) and lower must be < upper.
+Ta_Av:
+  range_check:
+    lower: -10
+    upper: 50
+
+# --- exclude_dates ---
+# Flags every record falling within any listed [start, end] range, inclusive
+# on both ends. Give as many ranges as needed; each is an ISO-8601 timestamp
+# pair. Use this for known bad periods (sensor swap, storm damage, etc.).
+Fh:
+  exclude_dates:
+    - ["2023-01-05T00:00:00", "2023-01-07T12:00:00"]
+    - ["2023-06-20T00:00:00", "2023-06-20T00:00:00"]  # a single record
+
+# --- dependency_check ---
+# Flags a variable wherever any listed precursor variable is itself flagged
+# (by any check, including its own dependency_check — chains resolve fully,
+# e.g. A -> B -> C propagates through B to A). A precursor doesn't need its
+# own QC config; if it has none, only isnull() is used as its flag.
+Fco2:
+  range_check:
+    lower: -50
+    upper: 50
+  dependency_check: [Ux, Uy, Uz]
+
+# --- mad_filter ---
+# Median-absolute-deviation despiking (ported from PyFluxPro's do_madfilter).
+# reference_var is required — the day/night reference series (conventionally
+# the canonical shortwave-in variable, e.g. Fsd_Av). All other fields are
+# optional and default to PyFluxPro's own defaults, shown here explicitly:
+#   window_days:    despike window size in days (must be > 0)
+#   fsd_threshold:  W/m^2 splitting day from night in reference_var
+#   zfc:            z-score multiplier on the median-absolute-deviation
+#                    envelope (must be > 0)
+#   edge_threshold: either a single value, or a [low_pctl, high_pctl] pair
+#                    (percentiles of the variable's own distribution, used to
+#                    derive the threshold) for the second-stage gap-edge check
+Fsd_Av:
+  mad_filter:
+    reference_var: Fsd_Av
+    window_days: 13
+    fsd_threshold: 12.0
+    zfc: 5.5
+    edge_threshold: [20.0, 80.0]
+
+# A variable can combine any/all of the four checks above — e.g. Fco2 in this
+# template already combines range_check with dependency_check.
