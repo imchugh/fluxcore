@@ -120,9 +120,13 @@ def update(
     If the store doesn't exist yet, seeds it with a full `build()`. If the
     incremental path fails for any reason — most notably a site-config
     change that added or removed a variable, so the tail's schema no longer
-    matches the store's — falls back to a full rebuild for this cycle
-    rather than leaving the store stale or raising. This mirrors
-    `raw_data_loader.load_raw_data_since`'s fallback-on-exception pattern.
+    matches the store's, or a store that's already internally inconsistent
+    (e.g. a prior cycle appended some variables but not others) — falls
+    back to a full rebuild for this cycle rather than leaving the store
+    stale or raising. This mirrors `raw_data_loader.load_raw_data_since`'s
+    fallback-on-exception pattern. The checkpoint read itself is inside
+    this fallback: a store an earlier bug left inconsistent would otherwise
+    fail there on every cycle, forever, instead of self-healing.
 
     Args:
         site_name: registered site name.
@@ -135,12 +139,12 @@ def update(
         Path to the Zarr store (updated in place, or freshly built).
     """
     store_path = _resolve_store_path(site_name, output_dir)
-    last_ts = _last_store_timestamp(store_path)
 
-    if last_ts is None:
+    if not store_path.exists():
         return build(site_name, output_dir=output_dir, legacy=legacy)
 
     try:
+        last_ts = _last_store_timestamp(store_path)
         time_step = int(xr.open_zarr(store_path).attrs["time_step"])
         start_date = last_ts + pd.Timedelta(minutes=time_step)
 
