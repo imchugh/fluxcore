@@ -183,3 +183,15 @@ def format_fast_timestamp(ts: datetime) -> str:
     if tenths == 0:
         return f"{rounded:%Y-%m-%d %H:%M:%S}"
     return f"{rounded:%Y-%m-%d %H:%M:%S}.{tenths}"
+
+
+def floor_to_interval(dt: datetime, interval_minutes: int) -> datetime:
+    """Round dt down to the most recent interval_minutes boundary since midnight.
+
+    E.g. floor_to_interval(2026-08-25T12:06:08, 30) -> 2026-08-25T12:00:00.
+    """
+    minutes_since_midnight = dt.hour * 60 + dt.minute
+    floored_minutes = (minutes_since_midnight // interval_minutes) * interval_minutes
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
+        minutes=floored_minutes
+    )
