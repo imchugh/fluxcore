@@ -17,14 +17,14 @@ import xarray as xr
 
 from domain.enums import StatisticType, VariableType
 from orchestration.dataframe_builder import build_dataframe
-from services.metadata import file_group_builder
-from services.metadata.site_registry import SiteContext, SiteRegistry
-from services.metadata.variable_registry import (
+from services.metadata.core import file_group_builder
+from services.metadata.core.variable_registry import (
     VariableSpec,
     build_variable_registry,
     canonical_output_name,
     group_by_canonical_name,
 )
+from services.metadata.tern.site_registry import SiteContext, SiteRegistry
 
 
 @dataclass

@@ -11,7 +11,7 @@ Two entry points:
       dependency at all.
     - build_runtime_config(validated_config, instrument_uris=None): an
       already-validated SiteConfig in (e.g. produced/enriched by a TERN
-      adapter such as services/metadata/runtime_config_loader.py), plus an
+      adapter such as services/metadata/tern/runtime_config_loader.py), plus an
       optional name -> URI enrichment map.
 """
 
@@ -21,14 +21,14 @@ from pathlib import Path
 
 from domain.data_models.metadata_classes import RawVariableMetadata, VariableDefinition
 from domain.enums import FileType, FluxSystemType, StatisticType, VariableType
-from services.metadata.canonical_quantity_registry import (
+from services.metadata.core.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
-from services.metadata.site_config_schema import (
+from services.metadata.core.site_config_schema import (
     SiteConfig,
     validate_L1_config_structure,
 )
-from services.metadata.variable_name_parser import NameParser
+from services.metadata.core.variable_name_parser import NameParser
 
 
 @dataclass(frozen=True)
@@ -286,7 +286,7 @@ def build_runtime_config_from_file(
     Generic-core entry point: structural validation plus assembly only, no
     TERN vocab/registry calls of any kind — every variable's instrument_uri
     resolves to None. For TERN's instrument-validated/URI-enriched
-    equivalent, see services.metadata.runtime_config_loader.load_runtime_config.
+    equivalent, see services.metadata.tern.runtime_config_loader.load_runtime_config.
 
     `input_data_path` is optional, caller-supplied data (where this site's
     raw files live) — left None, callers requiring it (e.g.

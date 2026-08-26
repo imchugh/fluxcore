@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from services.metadata.site_metadata_builder import build_site_metadata_from_file
+from services.metadata.core.site_metadata_builder import build_site_metadata_from_file
 
 REAL_RECORD_YAML = """\
 id: https://w3id.org/tern/resources/fd2809a2-e705-4961-b09c-7e9ae1ffa87e

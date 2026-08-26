@@ -56,7 +56,7 @@ class VariableDefinition:
     """Complete definition of one canonical variable.
 
     Assembled from its raw inputs, canonical quantity metadata, and parsed
-    name — the unit that `services/metadata/variable_registry.py` builds
+    name — the unit that `services/metadata/core/variable_registry.py` builds
     per raw-to-canonical mapping.
     """
 

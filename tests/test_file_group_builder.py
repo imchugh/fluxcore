@@ -8,12 +8,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from services.metadata.file_group_builder import FileGroup, build_file_groups
-from services.metadata.runtime_config_builder import (
+from services.metadata.core.file_group_builder import FileGroup, build_file_groups
+from services.metadata.core.runtime_config_builder import (
     build_runtime_config,
     build_runtime_config_from_file,
 )
-from services.metadata.site_config_schema import validate_L1_config_structure
+from services.metadata.core.site_config_schema import validate_L1_config_structure
 
 MASTER = Path("/store/Raw_data/HowardSprings/Flux/Slow/HowardSprings_flux.dat")
 

@@ -4,7 +4,7 @@
 Companion to runtime_config_builder.py, for the other half of a SiteContext.
 TERN's own production pipeline is unaffected by this module — it keeps
 sourcing SiteMetadata as an object via SiteRegistry.get_metadata()
-(services/metadata/site_registry.py), reading configs/site_metadata.yml or
+(services/metadata/tern/site_registry.py), reading configs/site_metadata.yml or
 the RDF endpoint. This module exists purely as a standalone, file-based
 entry point for a non-TERN caller who has no adapter of their own.
 

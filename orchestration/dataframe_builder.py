@@ -19,15 +19,15 @@ import pandas as pd
 from domain.enums import DiagnosticType, StatisticType, VariableType
 from infrastructure.data_conditioning import condition_dataframe
 from services.data import raw_data_loader, transform_service
-from services.metadata.canonical_quantity_registry import resolve_variance_units
-from services.metadata.file_group_builder import FileGroup, build_file_groups
-from services.metadata.site_registry import SiteContext, SiteRegistry
-from services.metadata.variable_registry import (
+from services.metadata.core.canonical_quantity_registry import resolve_variance_units
+from services.metadata.core.file_group_builder import FileGroup, build_file_groups
+from services.metadata.core.variable_registry import (
     VariableSpec,
     build_variable_registry,
     canonical_output_name,
     group_by_canonical_name,
 )
+from services.metadata.tern.site_registry import SiteContext, SiteRegistry
 
 SITE_REGISTRY = SiteRegistry()
 

@@ -19,7 +19,7 @@ import pandas as pd
 from domain.enums import StatisticType
 from orchestration.dataset_builder import DatasetBuildIntermediate
 from services.data.transform_service import get_calculation
-from services.metadata.canonical_quantity_registry import (
+from services.metadata.core.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
 

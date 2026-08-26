@@ -14,9 +14,9 @@ from datetime import datetime
 from pydantic.dataclasses import dataclass
 
 from domain.enums import DiagnosticType, StatisticType, VariableType
-from services.metadata.canonical_quantity_registry import resolve_variance_units
-from services.metadata.file_group_builder import FileGroup
-from services.metadata.runtime_config_builder import SiteRuntimeConfig
+from services.metadata.core.canonical_quantity_registry import resolve_variance_units
+from services.metadata.core.file_group_builder import FileGroup
+from services.metadata.core.runtime_config_builder import SiteRuntimeConfig
 
 
 @dataclass(frozen=True)
