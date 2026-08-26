@@ -375,15 +375,20 @@ def serialize_units(ds):
 
 
 def serialize_uri(ds):
-    """Flatten a compound-instrument instrument_uri dict to a comma-joined string."""
+    """Flatten a compound-instrument instrument_uri dict to a comma-joined string.
+
+    Unresolved (None) entries are dropped; a dict with no resolved URIs at
+    all serializes to None, consistent with a scalar unresolved
+    instrument_uri, so the later None-attr filter drops the attribute
+    rather than writing a literal "None" string.
+    """
     var_list = [var for var in ds.variables if var not in ds.dims]
     for var in var_list:
         attrs = ds[var].attrs
 
         if isinstance(attrs.get("instrument_uri"), dict):
-            attrs["instrument_uri"] = ",".join(
-                f"{uri}" for uri in attrs["instrument_uri"].values()
-            )
+            uris = [uri for uri in attrs["instrument_uri"].values() if uri is not None]
+            attrs["instrument_uri"] = ",".join(uris) if uris else None
 
     return ds
 

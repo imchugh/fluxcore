@@ -7,7 +7,7 @@ from pathlib import Path
 from domain.enums import FileType
 from infrastructure import file_io, paths
 from services.data import raw_data_loader
-from services.metadata.runtime_config_loader import SiteRuntimeConfig
+from services.metadata.runtime_config_builder import SiteRuntimeConfig
 
 
 @dataclass
