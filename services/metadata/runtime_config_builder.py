@@ -277,7 +277,10 @@ def build_runtime_config(
     )
 
 
-def build_runtime_config_from_file(file_path: Path) -> SiteRuntimeConfig:
+def build_runtime_config_from_file(
+    file_path: Path,
+    input_data_path: Path | None = None,
+) -> SiteRuntimeConfig:
     """Assemble a SiteRuntimeConfig from a site YAML file.
 
     Generic-core entry point: structural validation plus assembly only, no
@@ -285,11 +288,18 @@ def build_runtime_config_from_file(file_path: Path) -> SiteRuntimeConfig:
     resolves to None. For TERN's instrument-validated/URI-enriched
     equivalent, see services.metadata.runtime_config_loader.load_runtime_config.
 
+    `input_data_path` is optional, caller-supplied data (where this site's
+    raw files live) — left None, callers requiring it (e.g.
+    file_group_builder.build_file_groups) will raise. A non-TERN caller who
+    wants a fully runnable config from a single call passes their own path
+    here directly.
+
     Args:
         file_path: absolute path to the site config YAML.
+        input_data_path: optional path to this site's raw input files.
 
     Returns:
         Immutable SiteRuntimeConfig.
     """
     validated_config = validate_L1_config_structure(file=file_path)
-    return build_runtime_config(validated_config)
+    return build_runtime_config(validated_config, input_data_path=input_data_path)

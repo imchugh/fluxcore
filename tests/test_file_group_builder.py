@@ -88,6 +88,23 @@ class TestBuildFileGroups(unittest.TestCase):
 
         self.assertEqual(groups["flux"].master, input_data_path / "flux.dat")
 
+    def test_from_file_wrapper_accepts_input_data_path_directly(self):
+        """build_runtime_config_from_file itself takes input_data_path, so a
+        standalone caller doesn't need to drop down to validate_L1_config_structure
+        + build_runtime_config just to get a runnable config from one call."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "TestSite.yml"
+            config_path.write_text(VALID_YAML)
+
+            input_data_path = Path("/some/arbitrary/data/dir")
+            runtime_cfg = build_runtime_config_from_file(
+                config_path, input_data_path=input_data_path
+            )
+
+            groups = build_file_groups(runtime_cfg)
+
+        self.assertEqual(groups["flux"].master, input_data_path / "flux.dat")
+
     def test_raises_when_input_data_path_not_set(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "TestSite.yml"
