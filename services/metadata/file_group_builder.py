@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from domain.enums import FileType
-from infrastructure import file_io, paths
+from infrastructure import file_io
 from services.data import raw_data_loader
 from services.metadata.runtime_config_builder import SiteRuntimeConfig
 
@@ -96,10 +96,20 @@ def get_variables_from_file(
 
 
 def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
-    """Build FileGroup objects for all variable groups in the runtime config."""
-    base_path = paths.get_local_stream_path(
-        resource="raw_data", stream="flux_slow", site=runtime_cfg.site_name
-    )
+    """Build FileGroup objects for all variable groups in the runtime config.
+
+    Raises:
+        ValueError: if runtime_cfg.input_data_path is None — this function
+            needs to know where the site's raw files live, but has no
+            opinion of its own about where that is; the caller (typically
+            a TERN-adapter loader) must have resolved and set it.
+    """
+    if runtime_cfg.input_data_path is None:
+        raise ValueError(
+            f"Cannot build file groups for site '{runtime_cfg.site_name}': "
+            "no input_data_path set on this SiteRuntimeConfig."
+        )
+    base_path = runtime_cfg.input_data_path
     groups: dict[str, FileGroup] = {}
 
     for var_def in runtime_cfg.variables.values():

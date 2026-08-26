@@ -47,6 +47,11 @@ class SiteRuntimeConfig:
 
     variables: dict[str, VariableDefinition]
 
+    # Adapter-populated: where this site's raw input files live. None on the
+    # pure-core path (build_runtime_config_from_file) — same pattern as
+    # instrument_uri. Required by file_group_builder.build_file_groups.
+    input_data_path: Path | None = None
+
     # File format helpers
 
     def get_file_format(self, file_group: str) -> str:
@@ -156,6 +161,7 @@ def _resolve_instrument_uri(
 def build_runtime_config(
     validated_config: SiteConfig,
     instrument_uris: dict[str, str | None] | None = None,
+    input_data_path: Path | None = None,
 ) -> SiteRuntimeConfig:
     """Build a SiteRuntimeConfig from a structurally-validated SiteConfig.
 
@@ -163,11 +169,15 @@ def build_runtime_config(
     assembly, raising on the first failure found. No TERN/instrument-vocab
     calls are made here — `instrument_uris` is optional, adapter-supplied
     enrichment; instruments referenced in `validated_config` but absent
-    from the map simply resolve to instrument_uri=None.
+    from the map simply resolve to instrument_uri=None. Likewise,
+    `input_data_path` is optional adapter-supplied data (where this site's
+    raw files live); left None, callers requiring it (e.g.
+    file_group_builder.build_file_groups) will raise.
 
     Args:
         validated_config: structurally-validated SiteConfig.
         instrument_uris: optional name -> URI map for enrichment.
+        input_data_path: optional path to this site's raw input files.
 
     Returns:
         Immutable SiteRuntimeConfig.
@@ -263,6 +273,7 @@ def build_runtime_config(
         flux_file=validated_config.flux_file,
         custom_metadata=custom_metadata,
         variables=site_variables,
+        input_data_path=input_data_path,
     )
 
 

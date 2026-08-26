@@ -6,17 +6,20 @@ services.metadata.runtime_config_builder):
     - instrument name validation against the TERN instrument registry
       (via instrument_registry)
     - instrument URI resolution against the TERN RDF vocab
+    - resolving where the site's raw input files live, via
+      infrastructure.paths / configs/paths.yml
     - delegating structural validation and object assembly to
       runtime_config_builder
 
 load_runtime_config(file_path) is the TERN-integrated equivalent of
 runtime_config_builder.build_runtime_config_from_file(file_path): same
-structural validation, plus TERN instrument-name/URI resolution threaded
-through as enrichment.
+structural validation, plus TERN instrument-name/URI resolution and
+raw-data path resolution threaded through as enrichment.
 """
 
 from pathlib import Path
 
+from infrastructure import paths
 from services.metadata import instrument_validation_cache
 from services.metadata.runtime_config_builder import (
     SiteRuntimeConfig,
@@ -98,12 +101,14 @@ def _validate_instrument_names(
 def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     """Assemble a SiteRuntimeConfig from a site YAML config file.
 
-    Three phases:
+    Four phases:
         1. Structural validation  — YAML schema (site_config_schema)
         2. Instrument validation  — all instrument names against TERN registry
            (skipped, per content hash, when a prior clean pass is cached —
            see instrument_validation_cache)
-        3. Build                  — delegated to runtime_config_builder
+        3. Path resolution        — site's raw-data directory, via
+           infrastructure.paths / configs/paths.yml
+        4. Build                  — delegated to runtime_config_builder
 
     Args:
         file_path: absolute path to the site config YAML.
@@ -115,4 +120,9 @@ def load_runtime_config(file_path: Path) -> SiteRuntimeConfig:
     content_hash = instrument_validation_cache.hash_file(file_path)
     validated_config = validate_L1_config_structure(file=file_path)
     instrument_uris = _validate_instrument_names(validated_config, content_hash)
-    return build_runtime_config(validated_config, instrument_uris)
+    input_data_path = paths.get_local_stream_path(
+        resource="raw_data", stream="flux_slow", site=validated_config.site
+    )
+    return build_runtime_config(
+        validated_config, instrument_uris, input_data_path=input_data_path
+    )
