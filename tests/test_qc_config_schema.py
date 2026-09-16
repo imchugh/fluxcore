@@ -56,6 +56,34 @@ class QCConfigStructureTestCase(unittest.TestCase):
             qc_config_schema.validate_qc_config_structure(path)
 
 
+class RangeDefaultsTestCase(unittest.TestCase):
+    def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp_dir.cleanup)
+        self.config_dir = Path(self._tmp_dir.name)
+
+    def test_missing_file_returns_empty_dict(self):
+        result = qc_config_schema.load_range_defaults(config_dir=self.config_dir)
+        self.assertEqual(result, {})
+
+    def test_flat_and_nested_entries_load(self):
+        (self.config_dir / "_range_defaults.yml").write_text(
+            "Fco2: [-50, 30]\nTa:\n  Av: [-10, 50]\n  Sd: [0, 5]\n"
+        )
+        result = qc_config_schema.load_range_defaults(config_dir=self.config_dir)
+        self.assertEqual(result["Fco2"], [-50, 30])
+        self.assertEqual(result["Ta"]["Av"], [-10, 50])
+
+    def test_real_repo_range_defaults_file_loads(self):
+        # Regression guard for the actual hand-maintained
+        # configs/qc/_range_defaults.yml -- catches YAML/duplicate-key
+        # errors without needing to know its exact contents.
+        result = qc_config_schema.load_range_defaults()
+        self.assertIn("Fco2", result)
+        self.assertIn("Diag", result)
+        self.assertIsInstance(result["Diag"], dict)
+
+
 class ValidateVariablesTestCase(unittest.TestCase):
     def test_raises_for_all_unresolved_names(self):
         cfg = qc_config_schema.SiteQCConfig(

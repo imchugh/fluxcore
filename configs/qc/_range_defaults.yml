@@ -63,11 +63,17 @@
 # lower bound below 0 is corrected to 0 rather than ported verbatim; see the
 # Ux/Uy/Uz Vr note below.
 #
-# Note for the eventual loader: the L1 store's ds[var].attrs["statistic_type"]
-# round-trips through zarr/netCDF as the StatisticType enum's plain string
-# value ("average", "standard_deviation", "variance", ...), not its Av/Sd/Vr
-# suffix -- convert via StatisticType(attrs_value).suffix before using it to
-# index into this file's Av/Sd/Vr keys.
+# Loaded by services.metadata.qc_config_schema.load_range_defaults() and
+# consumed by orchestration.qc_pipeline.apply_qc's range_defaults arg (see
+# that module's _lookup_default_range) for every checkable L1 variable with
+# no explicit entry in the site's own configs/qc/{site}.yml -- an explicit
+# per-site range_check always takes precedence over a default here. Lookup
+# is quantity -> flat [min,max], or qualifier, or StatisticType suffix (in
+# that order) -- see the keying convention above. Note: the L1 store's
+# ds[var].attrs["statistic_type"] round-trips through zarr/netCDF as the
+# StatisticType enum's plain string value ("average", "standard_deviation",
+# "variance", ...), not its Av/Sd/Vr suffix -- apply_qc converts via
+# StatisticType(attrs_value).suffix before indexing into this file.
 #
 # CORRECTED FROM SOURCE:
 #   - Ux_SONIC_Vr, Uy_SONIC_Vr, Uz_SONIC_Vr: PyFluxPro's file gives these a

@@ -169,6 +169,25 @@ def load_qc_config(site_name: str, config_dir: Path | None = None) -> SiteQCConf
     return SiteQCConfig(site_name=site_name, variables=dict(schema.root))
 
 
+def load_range_defaults(config_dir: Path | None = None) -> dict:
+    """Load the shared range_check defaults table (configs/qc/_range_defaults.yml).
+
+    No structural validation beyond plain YAML parsing -- this file is
+    maintained in-repo, not per-site, so it doesn't need the same
+    unknown-key/type strictness as a site's own QC config. Each entry is
+    either a [min, max] pair, or a dict keyed by qualifier (Diag only) or
+    StatisticType suffix (Av/Sd/Vr/...) -- see the file's own header comment
+    for the full keying convention. Returns {} if the file doesn't exist.
+    """
+    config_dir = config_dir or (paths.CONFIG_PATH / "qc")
+    file_path = Path(config_dir) / "_range_defaults.yml"
+
+    if not file_path.exists():
+        return {}
+
+    return read_yml(file_path=file_path, enforce_unique_keys=True) or {}
+
+
 def validate_qc_config_variables(
     qc_config: SiteQCConfig, available_variables: Iterable[str]
 ) -> None:

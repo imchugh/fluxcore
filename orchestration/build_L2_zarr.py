@@ -60,11 +60,6 @@ def _last_store_timestamp(store_path: pathlib.Path) -> pd.Timestamp | None:
     return pd.Timestamp(xr.open_zarr(store_path)["time"].values[-1])
 
 
-def _checkable_variables(ds: xr.Dataset) -> set[str]:
-    """Data variables eligible to be QC-checked: excludes flags and crs."""
-    return {var for var in ds.data_vars if not var.endswith("_QCFlag") and var != "crs"}
-
-
 def build(
     site_name: str,
     output_dir: pathlib.Path | str | None = None,
@@ -92,9 +87,12 @@ def build(
 
     ds = xr.open_zarr(l1_path)
     qc_config = qc_config_schema.load_qc_config(site_name)
-    qc_config_schema.validate_qc_config_variables(qc_config, _checkable_variables(ds))
+    qc_config_schema.validate_qc_config_variables(
+        qc_config, qc_pipeline.checkable_variables(ds)
+    )
 
-    ds = qc_pipeline.apply_qc(ds, qc_config)
+    range_defaults = qc_config_schema.load_range_defaults()
+    ds = qc_pipeline.apply_qc(ds, qc_config, range_defaults=range_defaults)
     file_io.write_zarr(ds=ds, store_path=store_path)
 
     return store_path
@@ -163,9 +161,10 @@ def update(
             return store_path
 
         qc_config_schema.validate_qc_config_variables(
-            qc_config, _checkable_variables(ds)
+            qc_config, qc_pipeline.checkable_variables(ds)
         )
-        ds = qc_pipeline.apply_qc(ds, qc_config)
+        range_defaults = qc_config_schema.load_range_defaults()
+        ds = qc_pipeline.apply_qc(ds, qc_config, range_defaults=range_defaults)
 
         ds = ds.sel(time=slice(tail_start, None))
         if ds.sizes["time"] == 0:

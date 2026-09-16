@@ -12,7 +12,12 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from domain.enums import StatisticType
 from services.data.qc_service import get_check
+from services.metadata.core.variable_name_parser import (
+    NameParser,
+    VariableNameParseError,
+)
 from services.metadata.qc_config_schema import SiteQCConfig
 
 # One bit per check, summed into {var}_QCFlag. 0 = OK. CF flag_masks/
@@ -30,7 +35,16 @@ QC_FLAG_BITS = {
 }
 
 
-def apply_qc(ds: xr.Dataset, qc_config: SiteQCConfig) -> xr.Dataset:
+def checkable_variables(ds: xr.Dataset) -> set[str]:
+    """Data variables eligible to be QC-checked: excludes flags and crs."""
+    return {var for var in ds.data_vars if not var.endswith("_QCFlag") and var != "crs"}
+
+
+def apply_qc(
+    ds: xr.Dataset,
+    qc_config: SiteQCConfig,
+    range_defaults: dict | None = None,
+) -> xr.Dataset:
     """Run qc_config's checks over ds, masking flagged values and writing flags.
 
     Processes configured variables in qc_config.dependency_graph_order() —
@@ -39,8 +53,18 @@ def apply_qc(ds: xr.Dataset, qc_config: SiteQCConfig) -> xr.Dataset:
     propagate correctly in a single ordered pass, unlike PyFluxPro's own flat
     two-pass local/dependency split. A dependency that isn't itself a
     configured variable is resolved directly from isnull() rather than an
-    ordered flag. Variables not present in qc_config.variables pass through
-    unchanged.
+    ordered flag — this holds even where that same variable gets a default
+    range_check below; defaults are not woven into dependency resolution, to
+    keep that one documented, predictable rule rather than two.
+
+    If range_defaults is given (see qc_config_schema.load_range_defaults),
+    every checkable variable NOT in qc_config.variables is also looked up
+    there (by quantity, then qualifier or statistic — see
+    configs/qc/_range_defaults.yml's header) and, if a bound is found, gets
+    an implicit range_check + isnull() (nothing else — no dependency_check/
+    mad_filter/exclude_dates for a default-only variable). A variable with
+    no explicit config AND no resolvable default passes through unchanged,
+    same as when range_defaults is omitted entirely.
     """
     ds = ds.copy()
     resolved_bad: dict[str, pd.Series] = {}
@@ -88,7 +112,63 @@ def apply_qc(ds: xr.Dataset, qc_config: SiteQCConfig) -> xr.Dataset:
         resolved_bad[var_name] = flag_bits != 0
         ds = _write_flag_and_mask(ds, var_name, flag_bits)
 
+    if range_defaults:
+        name_parser = NameParser()
+        unconfigured = checkable_variables(ds) - set(qc_config.variables)
+        for var_name in sorted(unconfigured):
+            bounds = _lookup_default_range(ds, var_name, range_defaults, name_parser)
+            if bounds is None:
+                continue
+
+            series = _extract_series(ds, var_name)
+            flag_bits = pd.Series(np.zeros(len(series), dtype=int), index=series.index)
+            flag_bits += series.isnull().astype(int) * QC_FLAG_BITS["missing"]
+
+            bad = get_check("range_check")(series, bounds[0], bounds[1])
+            flag_bits += bad.astype(int) * QC_FLAG_BITS["range_check"]
+
+            ds = _write_flag_and_mask(ds, var_name, flag_bits)
+
     return ds
+
+
+def _lookup_default_range(
+    ds: xr.Dataset,
+    var_name: str,
+    range_defaults: dict,
+    name_parser: NameParser,
+) -> tuple[float, float] | None:
+    """Resolve var_name's default [min, max] from range_defaults, or None.
+
+    quantity and qualifier come from parsing var_name itself; statistic
+    comes from ds[var_name].attrs["statistic_type"] (the authoritative
+    source — required for every continuous variable by site_config_schema,
+    not something to re-derive from the name, which fails on several real
+    canonical names). Returns None (no default, pass through) wherever the
+    name doesn't parse, the quantity has no entry, or the entry is a dict
+    with no matching qualifier or statistic key.
+    """
+    try:
+        parsed = name_parser.parse_variable_name(var_name)
+    except VariableNameParseError:
+        return None
+
+    entry = range_defaults.get(parsed.quantity)
+    if entry is None:
+        return None
+    if isinstance(entry, list):
+        return tuple(entry)
+
+    if parsed.qualifier is not None and parsed.qualifier in entry:
+        return tuple(entry[parsed.qualifier])
+
+    statistic_attr = ds[var_name].attrs.get("statistic_type")
+    if statistic_attr is not None:
+        statistic_suffix = StatisticType(statistic_attr).suffix
+        if statistic_suffix in entry:
+            return tuple(entry[statistic_suffix])
+
+    return None
 
 
 def _extract_series(ds: xr.Dataset, var_name: str) -> pd.Series:
