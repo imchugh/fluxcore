@@ -1,0 +1,233 @@
+# Default L2 range_check bounds, per canonical quantity.
+#
+# Each leaf value is a [min, max] pair (in that order) -- always exactly
+# two numbers, so no valid_min/valid_max keys are needed; the position
+# carries the meaning.
+#
+# Two sources, distinguished per-entry by comment where it matters:
+#   1. /opt/TERN_EP/site_configs/templates/L2_ozflux.txt (PyFluxPro's
+#      OzFlux-network default control file) -- vetted operational sanity
+#      bounds. Covers AH, AGC, CO2, Fg, Fld, Flu, Fn, Fsd, Fsu, Precip, RH,
+#      Sws, Ta, Tpanel, Ts, Tv, Ux/Uy/Uz (+Sd/Vr), the raw covariance terms
+#      (UxA..UzT), Vbat, Wd, Ws, ps.
+#   2. canonical_quantities.yml's own valid_min/valid_max fields, migrated
+#      here in full -- that file is now quantity identity/units only, with
+#      no range data of its own (see project memory l2-qc-pipeline.md).
+#      Covers every other entry below. These were never statistic-specific
+#      (canonical_quantities.yml had no such treatment), so they're filed
+#      as a single flat [min, max] per quantity regardless of statistic.
+#
+# Keying convention, matching services.metadata.core.variable_name_parser's
+# ParsedVariableName.quantity and the L1 store's own ds[var].attrs
+# ["statistic_type"] (the authoritative source for statistic -- required
+# for every continuous variable by site_config_schema.py, not something to
+# re-derive by parsing the variable name, which fails on several real
+# canonical names -- e.g. Ta_Sd_2m):
+#   - Quantity with no statistic variants -> [min, max] directly under the
+#     quantity (e.g. Fld, Ta, UxA).
+#   - Quantity whose bounds vary by statistic -> nest one level, keyed by
+#     the StatisticType suffix (Av / Sd / Vr / ...).
+#   - Quantity keyed by INSTRUMENT QUALIFIER instead of statistic (Diag
+#     only -- see note below): nest one level under the qualifier
+#     (IRGA / SONIC), read off the variable name via NameParser (there is
+#     no separate short-form qualifier attr on the L1 store; ds[var].attrs
+#     ["instrument"] is the full model string, e.g. "LI-COR LI-7500RS").
+#
+# No quantity needs BOTH qualifier and statistic keying. PyFluxPro's source
+# file distinguishes AH_<inst>_<height>m (unqualified) from AH_IRGA_Av/Sd/Vr
+# (IRGA-qualified) by instrument, but that's a precision distinction
+# between two measurements of the *same* physical quantity -- not
+# meaningful for a coarse default sanity bound, so the two Av entries
+# (0,30) and (0,35) are merged to the wider bound below rather than kept
+# apart by qualifier. CO2/Tv/Ux/Uy/Uz/Wd/Ws/AGC were only ever qualified by
+# one instrument in the source file with no competing unqualified value, so
+# their qualifier was never load-bearing either -- keyed by statistic (or
+# flat) directly, same as AH.
+#
+# Diag is the one real exception: Diag_IRGA and Diag_SONIC are not two
+# measurements of one physical quantity -- they're two unrelated,
+# instrument-specific diagnostic codes that happen to share the name
+# "Diag", with no statistic dimension at all. There's no principled single
+# number to merge them into, so qualifier is genuinely load-bearing there.
+#
+# Sd/Vr completeness: a site config uses either _Sd or _Vr for a given
+# variable, never both, but which one varies by site -- L2_ozflux.txt only
+# ever specified one of the pair for Tv/Ux/Uy/Uz (Vr only). Rather than
+# leave the other statistic with no default, the missing side is filled in
+# using the fixed relationship Sd = sqrt(Vr) (equivalently Vr = Sd**2), so
+# every quantity below has both regardless of which one PyFluxPro's source
+# file happened to specify. A variance/stdev's true lower bound is always 0
+# -- there is no physical reading for which a negative value is meaningful
+# (unlike, say, a radiometer's small negative nocturnal offset, which is a
+# real sensor characteristic, not a defect -- see Fsd/Fsu below). Any source
+# lower bound below 0 is corrected to 0 rather than ported verbatim; see the
+# Ux/Uy/Uz Vr note below.
+#
+# Note for the eventual loader: the L1 store's ds[var].attrs["statistic_type"]
+# round-trips through zarr/netCDF as the StatisticType enum's plain string
+# value ("average", "standard_deviation", "variance", ...), not its Av/Sd/Vr
+# suffix -- convert via StatisticType(attrs_value).suffix before using it to
+# index into this file's Av/Sd/Vr keys.
+#
+# CORRECTED FROM SOURCE:
+#   - Ux_SONIC_Vr, Uy_SONIC_Vr, Uz_SONIC_Vr: PyFluxPro's file gives these a
+#     negative lower bound (e.g. -10 to 10), almost certainly a copy-paste
+#     of the corresponding covariance/Av range rather than an intentional
+#     variance bound. Corrected to a 0 lower bound here (a variance cannot
+#     be negative) rather than ported verbatim. The derived Sd entries use
+#     the same 0 lower bound and max = sqrt(Vr max).
+#   - H2O: canonical_quantities.yml had valid_min: 80.0, valid_max: 0.0 --
+#     reversed (min > max), clearly a data-entry error rather than an
+#     intentional bound. Corrected to [0, 80] here.
+#
+# FLAGGED FOR REVIEW before this is wired into the pipeline:
+#   - Fn: PyFluxPro's entry is actually "Fn_NR" (a qualified variable, "NR"
+#     net radiometer) which doesn't parse under this pipeline's NameParser
+#     (NR isn't a recognised instrument qualifier) and doesn't match any
+#     canonical name in current site configs (real names are Fn, Fn_2,
+#     Fn_RAD). Filed under bare "Fn" here as the closest equivalent --
+#     confirm this is the intended target before relying on it.
+#   - Fg: no site currently has an Fg_* variable in
+#     /opt/TERN_EP/site_configs/operational/, so this entry is currently
+#     unused, kept for completeness/future sites.
+#   - AGC: PyFluxPro only specifies AGC_IRGA (0, 70), tighter than
+#     canonical_quantities.yml's old generic AGC bounds (0, 100), which are
+#     now superseded.
+#   - Diag_IRGA / Diag_SONIC: NOT ported from PyFluxPro. PyFluxPro's L1
+#     template (controlfiles/templates/L1/L1_ozflux_csv.txt) declares these
+#     statistic_type=average, sourced from logger fields (7500_Warn,
+#     CSAT_Warn) -- consistent with a per-scan (10 Hz) decoded
+#     diagnostic-bit population count, time-averaged over the period, which
+#     is why PyFluxPro's bounds are small (0-10 / 0-20). This pipeline's
+#     equivalent variable is a raw count of scans with any flag raised
+#     (0-18000 at 10 Hz/30 min) -- a different quantity entirely, and there
+#     is no per-scan decoded value available to average instead, so
+#     PyFluxPro's bounds don't transfer. Instead, the upper bound below is
+#     carried over from services/data/data_monitor.py's THRESHOLD_SPECS
+#     (max: 1000 for both), an independently-chosen dashboard threshold
+#     already in production use. Manual inspection of Whroo_2026_L1.nc
+#     confirmed the failure mode is bimodal -- good periods have a handful
+#     of flagged scans at most, bad periods jump straight to several
+#     thousand -- so the exact cutoff barely matters as long as it sits
+#     in that gap; 1000 does.
+#   - FsdDiff, FsdDir: migrated from canonical_quantities.yml as-is
+#     (-20, 1412), not harmonized with Fsd's own PyFluxPro-sourced bound
+#     (-10, 1500) even though these are components of the same downwelling
+#     shortwave signal -- worth reconsidering together if Fsd's bound is
+#     ever revisited.
+
+AH:
+  Av: [0, 35]                   # merged: PyFluxPro's unqualified (0,30) vs IRGA (0,35) -- see note above
+  Sd: [0, 10]
+  Vr: [0, 100]
+
+AGC: [0, 70]
+
+CO2:
+  Av: [500, 2000]
+  Sd: [0, 50]
+  Vr: [0, 2500]
+
+CO2Sig: [0, 102.5]                # migrated from canonical_quantities.yml
+CO2c: [400, 1600]                 # migrated from canonical_quantities.yml
+
+Diag:
+  IRGA: [0, 1000]                # source: data_monitor.THRESHOLD_SPECS, not PyFluxPro
+  SONIC: [0, 1000]                # source: data_monitor.THRESHOLD_SPECS, not PyFluxPro
+
+ER: [0, 30]                       # migrated from canonical_quantities.yml
+
+FAPAR: [0, 1]                     # migrated from canonical_quantities.yml
+Fa: [-300, 1000]                  # migrated from canonical_quantities.yml
+Fco2: [-50, 30]                   # migrated from canonical_quantities.yml
+Fe: [-200, 1000]                  # migrated from canonical_quantities.yml
+Fg: [-100, 150]                   # Fg_<depth>cm[a|b|c]
+Fh: [-200, 1000]                  # migrated from canonical_quantities.yml
+Fld: [250, 700]
+Flu: [300, 700]
+Fn: [-100, 1000]                  # see FLAGGED note above
+Fsd: [-10, 1500]
+FsdDiff: [-20, 1412]              # migrated from canonical_quantities.yml -- see FLAGGED note above
+FsdDir: [-20, 1412]               # migrated from canonical_quantities.yml -- see FLAGGED note above
+Fsu: [-10, 500]
+
+GPP: [-60, 0]                     # migrated from canonical_quantities.yml
+
+H2O: [0, 80]                      # migrated from canonical_quantities.yml -- see CORRECTED note above
+H2OSig: [0, 102.5]                # migrated from canonical_quantities.yml
+
+NEE: [-50, 30]                    # migrated from canonical_quantities.yml
+NEP: [-50, 30]                    # migrated from canonical_quantities.yml
+
+Precip: [0, 50]
+
+RH: [0, 110]                      # RH_<inst>_<height>m
+RHint: [0, 100]                   # migrated from canonical_quantities.yml
+Rhoa: [0.4, 1.4]                  # migrated from canonical_quantities.yml
+Rhod: [0.6, 1.6]                  # migrated from canonical_quantities.yml
+
+Sig: [0, 102.5]                   # migrated from canonical_quantities.yml
+SigCO2: [0, 102.5]                # migrated from canonical_quantities.yml
+SigH2O: [0, 102.5]                # migrated from canonical_quantities.yml
+Swp: [-10000, 0]                  # migrated from canonical_quantities.yml
+Sws: [0, 0.5]                     # Sws_<depth>cm[a|b|c]
+
+Ta: [-10, 50]                     # Ta_<inst>_<height>m
+Tbody: [-40, 60]                  # migrated from canonical_quantities.yml
+Tcanopy: [-40, 60]                # migrated from canonical_quantities.yml
+Td: [-65, 40]                     # migrated from canonical_quantities.yml
+Tint: [-40, 60]                   # migrated from canonical_quantities.yml
+Tpanel: [-20, 60]
+Ts: [0, 60]                       # Ts_<depth>cm[a|b|c]
+Tstar: [-50, 50]                  # migrated from canonical_quantities.yml
+
+Tv:
+  Av: [-10, 50]
+  Sd: [0, 2.236]                 # derived: sqrt(Vr max) = sqrt(5)
+  Vr: [0, 5]
+
+Ux:
+  Av: [-20, 20]
+  Sd: [0, 3.162]                 # derived: sqrt(Vr max) = sqrt(10)
+  Vr: [0, 10]                    # corrected from source, see note above
+
+Uy:
+  Av: [-20, 20]
+  Sd: [0, 3.162]                 # derived: sqrt(Vr max) = sqrt(10)
+  Vr: [0, 10]                    # corrected from source, see note above
+
+Uz:
+  Av: [-1, 1]
+  Sd: [0, 1.414]                 # derived: sqrt(Vr max) = sqrt(2)
+  Vr: [0, 2]                     # corrected from source, see note above
+
+UxA: [-1, 1]
+UxC: [-4, 4]
+UxT: [-2, 2]
+UxUy: [-1, 1]
+UxUz: [-10, 10]
+
+UyA: [-1, 1]
+UyC: [-4, 4]
+UyT: [-2, 2]
+UyUz: [-10, 10]
+
+UzA: [-0.01, 0.5]
+UzC: [-2, 2]
+UzT: [-0.2, 1]
+
+Vbat: [0, 15]
+
+Wd:
+  Av: [0, 360]
+
+Ws:
+  Av: [0, 20]
+
+pitch: [0, 90]                    # migrated from canonical_quantities.yml
+ps: [95, 105]
+
+roll: [0, 90]                     # migrated from canonical_quantities.yml
+
+tau: [0, 5]                       # migrated from canonical_quantities.yml
+ustar: [0, 5]                     # migrated from canonical_quantities.yml
