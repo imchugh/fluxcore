@@ -176,7 +176,15 @@ Sig: [0, 102.5]                   # migrated from canonical_quantities.yml
 SigCO2: [0, 102.5]                # migrated from canonical_quantities.yml
 SigH2O: [0, 102.5]                # migrated from canonical_quantities.yml
 Swp: [-10000, 0]                  # migrated from canonical_quantities.yml
-Sws: [0, 0.5]                     # Sws_<depth>cm[a|b|c]
+Sws: [0.001, 0.5]                 # Sws_<depth>cm[a|b|c] -- lower bound raised from
+                                   # PyFluxPro's 0: a reading of exactly 0.0 is
+                                   # typically a stuck/disconnected sensor, not
+                                   # real soil moisture (residual bound water
+                                   # means real readings essentially never hit
+                                   # exactly 0). Generalized from Calperum's own
+                                   # autogen-derived value (site_configs/templates/
+                                   # L2_autogen.txt), since the reasoning applies
+                                   # to any soil-moisture probe, not just that site.
 
 Ta: [-10, 50]                     # Ta_<inst>_<height>m
 Tbody: [-40, 60]                  # migrated from canonical_quantities.yml
