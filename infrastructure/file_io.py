@@ -752,10 +752,18 @@ def append_zarr(*, ds: xr.Dataset, store_path: Path) -> None:
 
     Does not serialize attrs — see `write_zarr`. Unlike `write_zarr`, this
     assumes `store_path` already exists with a schema (variables/dims)
-    matching `ds`; a mismatch (e.g. a site-config change adding/removing a
-    variable) raises from `to_zarr` itself — callers should catch that and
-    fall back to a full rebuild via `write_zarr` rather than handling it
-    here.
+    matching `ds`; a variable-set mismatch (e.g. a site-config change adding
+    or removing a variable) is checked explicitly before to_zarr runs and
+    raises ValueError here, rather than being left to to_zarr's own
+    behavior — which is inconsistent across mismatch kinds: some raise
+    immediately, but adding a variable that doesn't yet exist in the store
+    does not raise at all. to_zarr silently creates the new array at
+    whatever length the tail happens to be, leaving the store internally
+    inconsistent (existing variables at the full combined length, the new
+    one only at the tail's length) until something next tries to open the
+    store as a whole and fails on the dimension-size conflict. Callers
+    should catch this ValueError (or the pre-existing to_zarr failure modes
+    this doesn't change) and fall back to a full rebuild via `write_zarr`.
 
     `ds.attrs` are not applied to the store by `to_zarr(mode="a")`, so they
     are written explicitly onto the root group afterward — this is how
@@ -766,8 +774,21 @@ def append_zarr(*, ds: xr.Dataset, store_path: Path) -> None:
     Args:
         ds: Tail-slice dataset to append along the existing `time` dim.
         store_path: Path to the existing Zarr store.
+
+    Raises:
+        ValueError: if ds's data variables don't exactly match the existing
+            store's (added and/or removed variables are named in the message).
     """
     store_path = Path(store_path)
+
+    existing_vars = set(xr.open_zarr(store_path).data_vars)
+    new_vars = set(ds.data_vars)
+    if new_vars != existing_vars:
+        raise ValueError(
+            f"Cannot append to {store_path.name}: variable set mismatch "
+            f"(added: {sorted(new_vars - existing_vars)}, "
+            f"removed: {sorted(existing_vars - new_vars)})"
+        )
 
     ds.to_zarr(store_path, mode="a", append_dim="time")
 
