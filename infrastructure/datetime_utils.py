@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Sun-position and timezone helpers, built on ephem and timezonefinder."""
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone, time
 from zoneinfo import ZoneInfo
 
 import ephem
+import pandas as pd
 from timezonefinder import TimezoneFinder
 
 tzf = TimezoneFinder()
@@ -61,8 +62,17 @@ class SunTime:
         )
 
     def _get_rise_set(self, date, rise_or_set, next_or_last, as_local=True):
-        """Look up the requested rise/set event and convert to local time if asked."""
-        self.obs.date = date
+        """Look up the requested rise/set event and convert to local time if asked.
+
+        `date` is treated as this site's local (standard, no-DST) time when
+        naive — ephem.Observer.date is always UTC, so a naive local value
+        must be converted before being handed to ephem, or a query near
+        the UTC offset boundary silently resolves against the wrong day
+        (e.g. local noon at UTC+9:30 is 21:30 UTC, already past sunset).
+        """
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=self.tz)
+        self.obs.date = date.astimezone(UTC)
 
         func = self.FUNC_MAP[(rise_or_set, next_or_last)]
 
@@ -72,6 +82,47 @@ class SunTime:
             return dt_utc.astimezone(self.tz)
 
         return dt_utc
+
+
+def get_day_night_binary(
+    lat: float, lon: float, elev: float, dates: list[datetime]
+    ) -> pd.Series:
+    """Return a 1/0 (day/night) series aligned to `dates`, for (lat, lon, elev).
+
+    Sunrise/sunset is computed once per unique calendar day spanned by
+    `dates` (not once per record) and used to mask that day's own slice.
+    Both the sunrise and sunset instants themselves are classified as
+    night — day is the open interval strictly between them — which is
+    immaterial in practice at typical data cadences, since a real
+    timestamp essentially never lands exactly on the sunrise/sunset second.
+    """
+    if len(dates) == 0:
+        raise ValueError('dates arg must not be empty')
+
+    if not all(isinstance(elem, datetime) for elem in dates):
+        raise TypeError('All elements of dates must be datetimes!')
+
+    sun = SunTime(lat, lon, elev)
+    bin_series = pd.Series(data=1, index=dates)
+
+    start = datetime.combine(date=min(dates).date(), time=time(12))
+    end = datetime.combine(date=max(dates).date(), time=time(12))
+    day_dates = pd.date_range(start=start, end=end, freq='D').to_pydatetime()
+
+    for date in day_dates:
+        
+        rises = sun.get_last_sunrise(date=date, as_local=True).replace(tzinfo=None)
+        sets = sun.get_next_sunset(date=date, as_local=True).replace(tzinfo=None)
+
+        day_start = datetime.combine(date.date(), time.min)
+        day_end = day_start + timedelta(days=1)
+        in_day = (bin_series.index >= day_start) & (bin_series.index < day_end)
+
+        bin_series.loc[in_day & (bin_series.index <= rises)] = 0
+        bin_series.loc[in_day & (bin_series.index >= sets)] = 0
+
+    return bin_series
+
 
 
 def get_standard_timezone(tz_name: str) -> timezone:
