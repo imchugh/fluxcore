@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Derive and pad missing quantities in a DatasetBuildIntermediate.
+"""Derive and pad missing quantities not directly measured.
 
 pad_humidity: for each (instrument, height) group with Ta and exactly one of
 {RH, AH}, derives the missing variable from the other plus Ta and ps.
@@ -8,20 +8,33 @@ pad_co2: for each CO2c column (Av and Sd only), derives the corresponding CO2
 dry mole fraction if not already present. Ta_Av and ps_Av are used as
 period-representative inputs for both Av and Sd derivations.
 
+add_day_night_indicator: adds a day_night (1/0) indicator variable derived
+purely from ds's own time/latitude/longitude/elevation attrs — independent of
+any measured variable (deliberately: using a QC-dependent variable like Fsd as
+the day/night determinant would be circular for a day/night-aware QC check on
+that same variable).
+
 Public API
 ----------
 pad_humidity(result) -> DatasetBuildIntermediate
 pad_co2(result)      -> DatasetBuildIntermediate
+add_day_night_indicator(ds) -> xr.Dataset
 """
 
+import logging
+
 import pandas as pd
+import xarray as xr
 
 from domain.enums import StatisticType
+from infrastructure import datetime_utils
 from orchestration.dataset_builder import DatasetBuildIntermediate
 from services.data.transform_service import get_calculation
 from services.metadata.core.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
+
+logger = logging.getLogger(__name__)
 
 _HUMIDITY_QUANTITIES = frozenset({"Ta", "RH", "AH"})
 
@@ -104,6 +117,42 @@ def pad_co2(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:
         var_attrs[new_col] = _build_attrs(source_attrs=attrs, quantity="CO2")
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
+
+
+def add_day_night_indicator(ds: xr.Dataset) -> xr.Dataset:
+    """Add a day_night (1=day, 0=night) indicator, from ds's own attrs and time.
+
+    Purely astronomical (time + lat/lon/elevation via
+    infrastructure.datetime_utils.get_day_night_binary) — not derived from any
+    measured variable. Not routed through the canonical-quantity/VariableSpec
+    machinery (it's not measured, has no instrument/height); added directly,
+    same precedent as the 'crs' variable. Returns ds unchanged (with a logged
+    warning) if latitude/longitude/elevation aren't all present, rather than
+    failing the whole build over one derived convenience variable.
+    """
+    lat = ds.attrs.get("latitude")
+    lon = ds.attrs.get("longitude")
+    elev = ds.attrs.get("elevation")
+    if lat is None or lon is None or elev is None:
+        logger.warning(
+            "Missing latitude/longitude/elevation attrs; skipping day_night indicator"
+        )
+        return ds
+
+    binary = datetime_utils.get_day_night_binary(
+        lat=lat, lon=lon, elev=elev, dates=ds.time.values
+    )
+    ds["day_night"] = (
+        "time",
+        binary.to_numpy(),
+        {
+            "long_name": "Day/night indicator",
+            "units": "1",
+            "flag_values": [0, 1],
+            "flag_meanings": "night day",
+        },
+    )
+    return ds
 
 
 def _find_quantity_av(

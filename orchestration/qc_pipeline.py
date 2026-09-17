@@ -116,7 +116,7 @@ def apply_qc(
         name_parser = NameParser()
         unconfigured = checkable_variables(ds) - set(qc_config.variables)
         for var_name in sorted(unconfigured):
-            bounds = _lookup_default_range(ds, var_name, range_defaults, name_parser)
+            bounds = lookup_default_range(ds, var_name, range_defaults, name_parser)
             if bounds is None:
                 continue
 
@@ -132,7 +132,7 @@ def apply_qc(
     return ds
 
 
-def _lookup_default_range(
+def lookup_default_range(
     ds: xr.Dataset,
     var_name: str,
     range_defaults: dict,
@@ -147,6 +147,9 @@ def _lookup_default_range(
     canonical names). Returns None (no default, pass through) wherever the
     name doesn't parse, the quantity has no entry, or the entry is a dict
     with no matching qualifier or statistic key.
+
+    Public (used by both apply_qc's default-fallback and
+    orchestration.legacy_rtmc_export's range-limiting step).
     """
     try:
         parsed = name_parser.parse_variable_name(var_name)

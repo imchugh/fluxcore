@@ -38,7 +38,6 @@ from orchestration import dataset_builder
 from orchestration.build_L1_nc import (
     assign_crs_variable,
     assign_L1_global_generic_attrs,
-    assign_valid_range,
     assign_variable_flags,
     do_dim_ops,
     filter_variable_attrs,
@@ -191,7 +190,6 @@ def build_L1_ds_full(ds):
     existing store rather than from `ds` itself.
     """
     ds = assign_variable_flags(ds)
-    ds = assign_valid_range(ds)
     ds = assign_L1_data_full_attrs(ds=ds)
     ds = filter_variable_attrs(ds=ds)
     ds = serialize_uri(ds=ds)
@@ -225,7 +223,6 @@ def build_L1_ds_tail(ds, store_path: pathlib.Path):
     nrecs_base = int(existing_attrs["nc_nrecs"])
 
     ds = assign_variable_flags(ds)
-    ds = assign_valid_range(ds)
     ds = assign_L1_data_full_attrs(
         ds=ds, range_start=range_start, nrecs_base=nrecs_base
     )

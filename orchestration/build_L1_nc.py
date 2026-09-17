@@ -36,7 +36,8 @@ VARIABLE_NC_ATTRS = {
     "instrument_history",
     "instrument_uri",
     "statistic_type",
-    "valid_range",
+    "flag_values",
+    "flag_meanings",
 }
 
 
@@ -187,7 +188,6 @@ def build_L1_ds_by_year(ds, year):
     """
     year_ds = ds.sel(time=slice(*_year_time_bounds(ds, year)))
     year_ds = assign_variable_flags(year_ds)
-    year_ds = assign_valid_range(year_ds)
     year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
     year_ds = filter_variable_attrs(ds=year_ds)
     year_ds = serialize_uri(ds=year_ds)
@@ -203,8 +203,8 @@ def build_L1_year_from_zarr(ds, year):
 
     Counterpart to build_L1_ds_by_year for data sourced from
     build_from_zarr rather than freshly built from raw: skips the steps
-    already baked into the Zarr store (QC flags, valid_range, attr
-    filtering, uri/units serialization) and only re-derives what's
+    already baked into the Zarr store (QC flags, attr filtering,
+    uri/units serialization) and only re-derives what's
     genuinely year-scoped — title/record-count/time-coverage attrs and
     instrument-history clipping — reusing the existing
     assign_L1_data_year_attrs/serialize_inst_history unchanged.
@@ -321,35 +321,17 @@ def assign_variable_flags(ds):
     Returns:
         ds, with a '{var}_QCFlag' variable added for every data variable.
     """
-    var_list = [var for var in ds.variables if var not in ds.dims and var != "crs"]
+    var_list = [
+        var
+        for var in ds.variables
+        if var not in ds.dims and var not in ("crs", "day_night")
+    ]
     for var in var_list:
         ds[f"{var}_QCFlag"] = (
             ["time", "latitude", "longitude"],
             pd.isnull(ds[var]).astype(int),
             {"long_name": f"{var} QC flag", "units": "1"},
         )
-    return ds
-
-
-def assign_valid_range(ds):
-    """Assign the CF `valid_range` attribute to variables carrying valid bounds.
-
-    Cast to the variable's own dtype so it matches what is written to disk.
-
-    Args:
-        ds: xarray dataset.
-
-    Returns:
-        ds.
-
-    """
-    for var in ds.variables:
-        attrs = ds[var].attrs
-        vmin = attrs.get("valid_min")
-        vmax = attrs.get("valid_max")
-        if vmin is None or vmax is None:
-            continue
-        ds[var].attrs["valid_range"] = np.array([vmin, vmax], dtype=ds[var].dtype)
     return ds
 
 

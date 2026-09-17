@@ -87,6 +87,12 @@ def build_dataset_from_context(
     ds = _apply_variable_metadata(ds, result.var_attrs)
     ds = _apply_global_metadata(ds, ctx)
 
+    # Lazy import: derived_quantities imports DatasetBuildIntermediate from
+    # this module, so a top-level import here would be circular.
+    from orchestration.derived_quantities import add_day_night_indicator
+
+    ds = add_day_night_indicator(ds)
+
     return ds
 
 
