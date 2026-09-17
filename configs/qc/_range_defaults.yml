@@ -85,6 +85,19 @@
 #   - H2O: canonical_quantities.yml had valid_min: 80.0, valid_max: 0.0 --
 #     reversed (min > max), clearly a data-entry error rather than an
 #     intentional bound. Corrected to [0, 80] here.
+#   - CO2 / CO2c swap: found via real-PyFluxPro-output benchmarking
+#     (Calperum, 2026-09). PyFluxPro's own "CO2_IRGA_Av" output is CO2 mass
+#     concentration (mg/m^3, values ~700-920), not mole fraction, despite
+#     the name -- confirmed by direct comparison against this pipeline's
+#     CO2c_IRGA_Av (near-exact match). The original CO2.IRGA bounds here
+#     (500,2000 / 0,50 / 0,2500, ported from PyFluxPro's L2_ozflux.txt
+#     template under the CO2_IRGA_Av name) were therefore mass-concentration
+#     bounds mislabeled as mole fraction -- moved to CO2c below, which also
+#     needed splitting by statistic (it was a single flat [400,1600] from
+#     the canonical_quantities.yml migration, wrongly applying an Av-scale
+#     bound to Sd/Vr too -- this masked 12459/12462 of Calperum's real
+#     CO2c_IRGA_Sd records via range_check before the fix). CO2 (true mole
+#     fraction) now has its own evidence-based bounds instead.
 #
 # FLAGGED FOR REVIEW before this is wired into the pipeline:
 #   - Fn: PyFluxPro's entry is actually "Fn_NR" (a qualified variable, "NR"
@@ -129,13 +142,16 @@ AH:
 
 AGC: [0, 70]
 
-CO2:
+CO2:                              # CO2 mole fraction (umol/mol) -- see CORRECTED note above
+  Av: [350, 1500]                 # migrated from canonical_quantities.yml
+  Sd: [0, 20]                     # evidence-based: real Calperum CO2_IRGA_Sd, median 0.74, 98% <= 20
+  Vr: [0, 400]                    # derived: sqrt(Vr max) = sqrt(400) = 20 = Sd max
+
+CO2Sig: [0, 102.5]                # migrated from canonical_quantities.yml
+CO2c:                             # CO2 mass concentration (mg/m^3) -- see CORRECTED note above
   Av: [500, 2000]
   Sd: [0, 50]
   Vr: [0, 2500]
-
-CO2Sig: [0, 102.5]                # migrated from canonical_quantities.yml
-CO2c: [400, 1600]                 # migrated from canonical_quantities.yml
 
 Diag:
   IRGA: [0, 1000]                # source: data_monitor.THRESHOLD_SPECS, not PyFluxPro
