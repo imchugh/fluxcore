@@ -84,10 +84,13 @@ class SunTime:
         return dt_utc
 
 
-def get_day_night_binary(
-    lat: float, lon: float, elev: float, dates: list[datetime]
-    ) -> pd.Series:
+def get_day_night_binary(lat: float, lon: float, elev: float, dates) -> pd.Series:
     """Return a 1/0 (day/night) series aligned to `dates`, for (lat, lon, elev).
+
+    dates: anything pd.DatetimeIndex(...) accepts — a list of datetime, a
+        list/array of numpy.datetime64 (e.g. ds.time.values), an existing
+        DatetimeIndex, ISO strings, etc. Normalized once at entry so the
+        rest of this function only ever deals with pd.Timestamp.
 
     Sunrise/sunset is computed once per unique calendar day spanned by
     `dates` (not once per record) and used to mask that day's own slice.
@@ -96,17 +99,15 @@ def get_day_night_binary(
     immaterial in practice at typical data cadences, since a real
     timestamp essentially never lands exactly on the sunrise/sunset second.
     """
+    dates = pd.DatetimeIndex(dates)
     if len(dates) == 0:
         raise ValueError('dates arg must not be empty')
-
-    if not all(isinstance(elem, datetime) for elem in dates):
-        raise TypeError('All elements of dates must be datetimes!')
 
     sun = SunTime(lat, lon, elev)
     bin_series = pd.Series(data=1, index=dates)
 
-    start = datetime.combine(date=min(dates).date(), time=time(12))
-    end = datetime.combine(date=max(dates).date(), time=time(12))
+    start = datetime.combine(date=dates.min().date(), time=time(12))
+    end = datetime.combine(date=dates.max().date(), time=time(12))
     day_dates = pd.date_range(start=start, end=end, freq='D').to_pydatetime()
 
     for date in day_dates:
