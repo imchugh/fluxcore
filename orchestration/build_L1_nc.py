@@ -9,6 +9,12 @@ already-processed site from its Zarr store (orchestration/build_L1_zarr.py)
 rather than rebuilding from raw data. build() (raw-data, from scratch) is
 kept for manual/legacy rebuilds, bootstrapping a site before its Zarr store
 exists, and diagnosing zarr/raw discrepancies.
+
+build_L1_year_from_zarr, _rehydrate_instrument_history,
+assign_L1_global_generic_attrs, and get_ds_years are also reused by
+orchestration/build_L2_nc.py -- their content is generic to any
+Zarr-sourced, already-processed dataset, not specific to L1, despite the
+naming.
 """
 
 import datetime
@@ -134,7 +140,6 @@ def build_from_zarr(
 
     ds = xr.open_zarr(store_path).load()
     ds = _rehydrate_instrument_history(ds)
-    ds = _reorder_compound_instrument(ds)
     # Refresh date_created/history to this NetCDF build's own time, rather
     # than whenever the Zarr store was last written/appended.
     ds = assign_L1_global_generic_attrs(ds)
@@ -376,29 +381,37 @@ def serialize_uri(ds):
 
 
 def _rehydrate_instrument_history(ds):
-    """Reverse build_L1_zarr._json_safe_instrument_history's ISO-string encoding.
+    """Reverse build_L1_zarr._json_safe_instrument_history's Zarr-safe encoding.
 
     Parses each variable's instrument_history start_date/end_date back to
     pd.Timestamp (or None), so serialize_inst_history can run against
-    Zarr-sourced data exactly as it does against freshly built data.
+    Zarr-sourced data exactly as it does against freshly built data. Also
+    reconstructs `instrument`/instrument_history's alias-level structure
+    from the [key, value]-pair lists written at Zarr-build time back into
+    plain dicts, in their original order — a compound instrument_history is
+    a list at this point (never a dict), which is what tells this apart
+    from a simple one, so no key-order guessing is needed the way
+    _reorder_compound_instrument used to do it.
     """
     var_list = [var for var in ds.variables if var not in ds.dims]
     for var in var_list:
-        history = ds[var].attrs.get("instrument_history")
+        attrs = ds[var].attrs
+
+        inst = attrs.get("instrument")
+        if isinstance(inst, list):
+            attrs["instrument"] = dict(inst)
+
+        history = attrs.get("instrument_history")
         if history is None:
             continue
 
-        first_val = next(iter(history.values()))
-        if "start_date" in first_val:
-            ds[var].attrs["instrument_history"] = _parse_history(history)
-        else:
-            # Compound: alias-level keys need the same reordering as
-            # `instrument` itself — see _reorder_compound_instrument.
-            ds[var].attrs["instrument_history"] = {
-                alias: _parse_history(history[alias])
-                for alias in _COMPOUND_INSTRUMENT_KEY_ORDER
-                if alias in history
+        if isinstance(history, list):
+            # Compound: [[alias, {inst_name: {start_date, end_date}}], ...]
+            attrs["instrument_history"] = {
+                alias: _parse_history(inst_history) for alias, inst_history in history
             }
+        else:
+            attrs["instrument_history"] = _parse_history(history)
 
     return ds
 
@@ -416,32 +429,6 @@ def _parse_history(history: dict) -> dict:
         }
         for inst, dates in history.items()
     }
-
-
-_COMPOUND_INSTRUMENT_KEY_ORDER = ("sonic_anemometer", "irga")
-
-
-def _reorder_compound_instrument(ds):
-    """Restore canonical sonic_anemometer/irga key order for compound `instrument`.
-
-    Zarr's attrs round-trip does not preserve dict key insertion order (its
-    JSON attrs encoding is not order-stable — confirmed empirically: a
-    {"sonic_anemometer": ..., "irga": ...} dict comes back key-alphabetised
-    after a to_zarr/open_zarr round trip). Left uncorrected, this would
-    scramble the ",".join(attrs["instrument"].values()) order
-    serialize_inst_history uses for compound-instrument (flux/covariance)
-    variables. `instrument`'s only valid compound keys are these two (see
-    CLAUDE.md's site-config instrument notation), so the canonical order is
-    fixed rather than derived.
-    """
-    var_list = [var for var in ds.variables if var not in ds.dims]
-    for var in var_list:
-        inst = ds[var].attrs.get("instrument")
-        if isinstance(inst, dict):
-            ds[var].attrs["instrument"] = {
-                k: inst[k] for k in _COMPOUND_INSTRUMENT_KEY_ORDER if k in inst
-            }
-    return ds
 
 
 def serialize_inst_history(ds, year):

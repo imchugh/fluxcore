@@ -75,7 +75,7 @@ class BuildL2ZarrTestCase(unittest.TestCase):
 
         out = xr.open_zarr(store_path)
         flags = out["Ta_Av_QCFlag"].squeeze(("latitude", "longitude")).values
-        self.assertEqual(flags[5], 2)  # range_check bit
+        self.assertEqual(flags[5], 2)  # range_check code
         ta = out["Ta_Av"].squeeze(("latitude", "longitude")).values
         self.assertTrue(np.isnan(ta[5]))
         self.assertFalse(np.isnan(ta[0]))

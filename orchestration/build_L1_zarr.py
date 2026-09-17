@@ -270,7 +270,7 @@ def assign_L1_data_full_attrs(ds, range_start=None, nrecs_base: int = 0):
 
 
 def _json_safe_instrument_history(ds):
-    """Make each variable's instrument_history dict JSON-safe for Zarr attrs.
+    """Make each variable's instrument/instrument_history attrs Zarr-safe.
 
     Converts nested start_date/end_date timestamps to ISO strings without
     collapsing or year-clipping the structure — unlike
@@ -281,8 +281,16 @@ def _json_safe_instrument_history(ds):
     the time it reaches this store — see build_L1_nc.build_from_zarr and
     its _rehydrate_instrument_history counterpart.
 
-    Does not touch `instrument`: it's already either a plain string or a
-    {alias: name} dict of strings, both natively JSON-safe already.
+    Also converts any alias-keyed dict — the compound-instrument
+    `instrument` attr itself ({"sonic_anemometer": name, "irga": name}),
+    and instrument_history's alias-level structure — to an ordered list of
+    [key, value] pairs. Zarr's attrs JSON writer alphabetizes dict keys but
+    preserves list order (confirmed empirically: a {"sonic_anemometer":
+    ..., "irga": ...} dict comes back key-alphabetised after a
+    to_zarr/open_zarr round trip, silently swapping which value is which
+    instrument once downstream code joins .values() positionally). A list
+    of pairs round-trips exactly as written, so this is a real fix rather
+    than a guessed fixed key order applied after the fact.
 
     Args:
         ds: dataset — the full history for `build()`, or a tail slice for
@@ -292,20 +300,26 @@ def _json_safe_instrument_history(ds):
     """
     var_list = [var for var in ds.variables if var not in ds.dims]
     for var in var_list:
-        history = ds[var].attrs.get("instrument_history")
+        attrs = ds[var].attrs
+
+        inst = attrs.get("instrument")
+        if isinstance(inst, dict):
+            attrs["instrument"] = list(inst.items())
+
+        history = attrs.get("instrument_history")
         if history is None:
             continue
 
         first_val = next(iter(history.values()))
         if "start_date" in first_val:
             # Simple: {inst_name: {start_date, end_date}}
-            ds[var].attrs["instrument_history"] = _isoformat_history(history)
+            attrs["instrument_history"] = _isoformat_history(history)
         else:
             # Compound: {alias: {inst_name: {start_date, end_date}}}
-            ds[var].attrs["instrument_history"] = {
-                alias: _isoformat_history(inst_history)
+            attrs["instrument_history"] = [
+                [alias, _isoformat_history(inst_history)]
                 for alias, inst_history in history.items()
-            }
+            ]
 
     return ds
 

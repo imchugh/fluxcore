@@ -60,7 +60,7 @@ class ApplyQCTestCase(unittest.TestCase):
         self.assertFalse(np.isnan(ta_values[0]))
 
         flags = out["Ta_Av_QCFlag"].squeeze(("latitude", "longitude")).values
-        self.assertEqual(flags[3], qc_pipeline.QC_FLAG_BITS["range_check"])
+        self.assertEqual(flags[3], qc_pipeline.QC_FLAG_CODES["range_check"])
         self.assertEqual(flags[0], 0)
 
     def test_unconfigured_variable_passes_through(self):
@@ -89,7 +89,7 @@ class ApplyQCTestCase(unittest.TestCase):
         self.assertTrue(np.isnan(fco2_values[3]))
 
         flags = out["Fco2_QCFlag"].squeeze(("latitude", "longitude")).values
-        self.assertEqual(flags[3], qc_pipeline.QC_FLAG_BITS["dependency_check"])
+        self.assertEqual(flags[3], qc_pipeline.QC_FLAG_CODES["dependency_check"])
 
     def test_missing_bit_set_for_nan_input(self):
         ds = _build_dataset()
@@ -100,7 +100,45 @@ class ApplyQCTestCase(unittest.TestCase):
         )
         out = qc_pipeline.apply_qc(ds, qc_config)
         flags = out["Ta_Av_QCFlag"].squeeze(("latitude", "longitude")).values
-        self.assertEqual(flags[5], qc_pipeline.QC_FLAG_BITS["missing"])
+        self.assertEqual(flags[5], qc_pipeline.QC_FLAG_CODES["missing"])
+
+    def test_later_check_wins_when_multiple_fail(self):
+        ds = _build_dataset()  # Ta_Av[3] = 200.0, out of range
+        qc_config = SiteQCConfig(
+            site_name="TestSite",
+            variables={
+                "Ta_Av": VariableQCSpec(
+                    range_check=RangeCheckSpec(lower=-10, upper=50),
+                    exclude_dates=[
+                        ("2020-01-01T01:30:00", "2020-01-01T01:30:00"),
+                    ],
+                ),
+            },
+        )
+        out = qc_pipeline.apply_qc(ds, qc_config)
+        flags = out["Ta_Av_QCFlag"].squeeze(("latitude", "longitude")).values
+        # Index 3 fails both range_check and exclude_dates. PyFluxPro's own
+        # execution order runs exclude_dates after range_check and
+        # unconditionally overwrites -- so its code wins, not a sum of both.
+        self.assertEqual(flags[3], qc_pipeline.QC_FLAG_CODES["exclude_dates"])
+
+    def test_dependency_check_can_overwrite_missing(self):
+        ds = _build_dataset()
+        ds["Fco2"][3, 0, 0] = np.nan  # Fco2 itself missing at index 3
+        qc_config = SiteQCConfig(
+            site_name="TestSite",
+            variables={
+                "Ta_Av": VariableQCSpec(range_check=RangeCheckSpec(lower=-10, upper=50)),
+                "Fco2": VariableQCSpec(dependency_check=["Ta_Av"]),
+            },
+        )
+        out = qc_pipeline.apply_qc(ds, qc_config)
+        flags = out["Fco2_QCFlag"].squeeze(("latitude", "longitude")).values
+        # Fco2[3] is itself NaN (would be "missing"=1) AND its precursor
+        # Ta_Av[3] fails range_check -- dependency_check only tests the
+        # precursor's flag, not Fco2's own value, and (matching PyFluxPro's
+        # general unconditional-overwrite pattern) overwrites regardless.
+        self.assertEqual(flags[3], qc_pipeline.QC_FLAG_CODES["dependency_check"])
 
 
 class ApplyQCRangeDefaultsTestCase(unittest.TestCase):
@@ -118,7 +156,7 @@ class ApplyQCRangeDefaultsTestCase(unittest.TestCase):
         self.assertFalse(np.isnan(fco2[0]))
 
         flags = out["Fco2_QCFlag"].squeeze(("latitude", "longitude")).values
-        self.assertEqual(flags[4], qc_pipeline.QC_FLAG_BITS["range_check"])
+        self.assertEqual(flags[4], qc_pipeline.QC_FLAG_CODES["range_check"])
         self.assertEqual(flags[0], 0)
 
     def test_explicit_config_takes_precedence_over_default(self):
