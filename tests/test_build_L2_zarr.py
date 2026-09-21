@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from infrastructure import file_io
+from infrastructure import file_io, paths
 from orchestration import build_L2_zarr
 
 
@@ -60,6 +60,21 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         patcher = mock.patch("infrastructure.paths.CONFIG_PATH", self.root)
         patcher.start()
         self.addCleanup(patcher.stop)
+
+        # Per-site QC configs resolve via the site_config_files_L2 stream;
+        # redirect just that one to the temp dir, leave other streams real.
+        real_stream_path = paths.get_local_stream_path
+
+        def _stream_path(resource, stream, site=None):
+            if stream == "site_config_files_L2":
+                return self.qc_dir
+            return real_stream_path(resource, stream, site)
+
+        stream_patcher = mock.patch(
+            "infrastructure.paths.get_local_stream_path", side_effect=_stream_path
+        )
+        stream_patcher.start()
+        self.addCleanup(stream_patcher.stop)
 
     def _write_l1(self, ds):
         file_io.write_zarr(ds=ds, store_path=self.l1_dir / "TestSite_L1.zarr")

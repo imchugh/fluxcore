@@ -1,10 +1,12 @@
 # Template for a site's L2 QC config.
 #
 # To configure a real site, copy this file to {site_name}.yml (matching the
-# site name exactly, e.g. MyallValeA.yml) in this same directory. A site with
-# no file here gets no QC applied — build_L2_zarr.build()/update() will still
-# run and produce an L2 store, just with everything passed through unchanged
-# (only the "missing" flag bit, from isnull(), is ever set).
+# site name exactly, e.g. MyallValeA.yml) in site_configs/operational/L2/ --
+# the site_config_files_L2 stream in paths.yml, beside the L1 site configs, NOT
+# this directory (only the shared _range_defaults.yml and this template live
+# in-repo). A site with no file there still gets the shared default ranges from
+# _range_defaults.yml applied to every variable that has one; only variables
+# with no default either pass through unchanged (just isnull() -> "missing").
 #
 # Keys are exact L1 Zarr store variable names — canonical names WITH their
 # statistic suffix where one applies, e.g. Ta_Av / Ta_Sd, not bare Ta. Flux

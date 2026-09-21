@@ -7,9 +7,11 @@ loader: QC config content (canonical variable names + numeric thresholds) needs
 no TERN-specific resolution, so the whole load path stays in tier 1 (generic
 core) — see CLAUDE.md's "Generic-core / TERN-adapter / ops boundary".
 
-QC config files live in-repo at configs/qc/{site_name}.yml, alongside the other
-tier-1 config content (canonical_quantities.yml etc.) — not in TERN's externally
-managed site_configs/ tree, since QC thresholds are pure generic-core content.
+Per-site QC config files live beside the L1 site configs, in the
+site_config_files_L2 stream (site_configs/operational/L2/{site_name}.yml), so
+site-specific configs stay separate from code. The shared, site-independent
+defaults table (configs/qc/_range_defaults.yml) stays in-repo: it changes with
+the code and applies to every site.
 """
 
 from dataclasses import dataclass
@@ -156,10 +158,11 @@ def load_qc_config(site_name: str, config_dir: Path | None = None) -> SiteQCConf
 
     Args:
         site_name: registered site name.
-        config_dir: directory containing {site_name}.yml. Defaults to
-            infrastructure.paths.CONFIG_PATH / "qc".
+        config_dir: directory containing {site_name}.yml. Defaults to the
+            site_config_files_L2 stream (site_configs/operational/L2).
     """
-    config_dir = config_dir or (paths.CONFIG_PATH / "qc")
+    if config_dir is None:
+        config_dir = paths.get_local_stream_path("configs", "site_config_files_L2")
     file_path = Path(config_dir) / f"{site_name}.yml"
 
     if not file_path.exists():
