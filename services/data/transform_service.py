@@ -56,7 +56,7 @@ def convert_CO2_density(data, from_units="mmol/m^3"):
     )
 
 
-@register_conversion("Sig", "SigCO2", "SigH2O", "CO2Sig", "H2OSig")
+@register_conversion("Sig", "SigCO2", "SigH2O")
 def convert_signal_strength(data, from_units="frac"):
     """Convert an IRGA signal-strength fraction (0-1) to canonical percent."""
     if from_units == "frac":

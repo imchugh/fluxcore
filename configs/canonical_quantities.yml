@@ -49,14 +49,6 @@ CO2:
   standard_units: umol/mol
   valid_input_units:
   - umol/mol
-CO2Sig:
-  long_name: CO2 signal strength
-  valid_max: 102.5
-  valid_min: 0.0
-  standard_name: null
-  standard_units: percent
-  valid_input_units:
-  - frac
   - percent
 CO2c:
   long_name: CO2 concentration
@@ -257,14 +249,6 @@ H2O:
   standard_units: mmol/mol
   valid_input_units:
   - mmol/mol
-H2OSig:
-  long_name: H2O signal strength
-  valid_max: 102.5
-  valid_min: 0.0
-  standard_name: null
-  standard_units: percent
-  valid_input_units:
-  - percent
 L:
   long_name: Monin-Obukhov length
   valid_max: null

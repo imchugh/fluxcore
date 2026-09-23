@@ -7,6 +7,7 @@ import pandas as pd
 import xarray as xr
 
 from orchestration import qc_pipeline
+from services.metadata import qc_config_schema
 from services.metadata.qc_config_schema import (
     RangeCheckSpec,
     SiteQCConfig,
@@ -141,82 +142,47 @@ class ApplyQCTestCase(unittest.TestCase):
         self.assertEqual(flags[3], qc_pipeline.QC_FLAG_CODES["dependency_check"])
 
 
-class ApplyQCRangeDefaultsTestCase(unittest.TestCase):
-    """Tests for apply_qc's default-fallback path (range_defaults arg)."""
+class ApplyQCWithResolvedDefaultsIntegrationTestCase(unittest.TestCase):
+    """apply_qc no longer knows about defaults at all -- range_defaults and
+    _dependency_defaults.yml resolution now happen upstream, in
+    qc_config_schema.resolve_qc_config, before apply_qc ever runs (see
+    tests/test_qc_config_schema.py for resolve_qc_config's own tests).
+    This is the one integration behavior worth covering here: a merged-in
+    default range_check on a dependency_check *source* has to correctly
+    propagate through dependency_graph_order()/resolved_bad to whatever
+    depends on it, exactly as if it had been explicitly configured -- easy
+    to get subtly wrong even though no per-check logic in apply_qc itself
+    changed.
+    """
 
-    def test_default_applies_to_unconfigured_variable(self):
-        ds = _build_dataset()
-        ds["Fco2"][4, 0, 0] = 999.0  # out of range under the default, not the fixture's value
-        qc_config = SiteQCConfig(site_name="TestSite", variables={})
-
-        out = qc_pipeline.apply_qc(ds, qc_config, range_defaults={"Fco2": [-50, 50]})
-
-        fco2 = out["Fco2"].squeeze(("latitude", "longitude")).values
-        self.assertTrue(np.isnan(fco2[4]))
-        self.assertFalse(np.isnan(fco2[0]))
-
-        flags = out["Fco2_QCFlag"].squeeze(("latitude", "longitude")).values
-        self.assertEqual(flags[4], qc_pipeline.QC_FLAG_CODES["range_check"])
-        self.assertEqual(flags[0], 0)
-
-    def test_explicit_config_takes_precedence_over_default(self):
-        ds = _build_dataset()  # Ta_Av[3] = 200.0
-        qc_config = SiteQCConfig(
-            site_name="TestSite",
-            variables={
-                "Ta_Av": VariableQCSpec(range_check=RangeCheckSpec(lower=-10, upper=50)),
-            },
-        )
-        # A much looser default that would NOT flag index 3 on its own —
-        # if this were applied instead of/on top of the explicit config,
-        # index 3 would not end up masked.
-        out = qc_pipeline.apply_qc(
-            ds, qc_config, range_defaults={"Ta": {"Av": [-1000, 1000]}}
-        )
-        ta = out["Ta_Av"].squeeze(("latitude", "longitude")).values
-        self.assertTrue(np.isnan(ta[3]))
-
-    def test_statistic_keyed_default_uses_attrs_statistic_type(self):
-        ds = _build_dataset()
-        ds["Ta_Av"].attrs["statistic_type"] = "average"
-        ds["Ta_Av"][4, 0, 0] = 999.0
-        qc_config = SiteQCConfig(site_name="TestSite", variables={})
-
-        out = qc_pipeline.apply_qc(
-            ds, qc_config, range_defaults={"Ta": {"Av": [-10, 50]}}
-        )
-        ta = out["Ta_Av"].squeeze(("latitude", "longitude")).values
-        self.assertTrue(np.isnan(ta[4]))
-        self.assertFalse(np.isnan(ta[0]))
-
-    def test_qualifier_keyed_default_resolves_by_name(self):
+    def test_default_range_check_on_dependency_source_propagates(self):
         idx = pd.date_range("2020-01-01", periods=5, freq="30min")
-        values = np.array([1.0, 1.0, 1.0, 5000.0, 1.0]).reshape(5, 1, 1)
+        diag = np.array([0.0, 0.0, 0.0, 5000.0, 0.0]).reshape(5, 1, 1)
+        fco2 = np.array([1.0, 1.0, 1.0, 1.0, 1.0]).reshape(5, 1, 1)
         ds = xr.Dataset(
-            {"Diag_IRGA": (("time", "latitude", "longitude"), values), "crs": 0},
+            {
+                "Diag_SONIC": (("time", "latitude", "longitude"), diag),
+                "Fco2": (("time", "latitude", "longitude"), fco2),
+                "crs": 0,
+            },
             coords={"time": idx, "latitude": [0.0], "longitude": [0.0]},
         )
         ds.attrs["time_step"] = 30
-        qc_config = SiteQCConfig(site_name="TestSite", variables={})
 
-        out = qc_pipeline.apply_qc(
-            ds, qc_config, range_defaults={"Diag": {"IRGA": [0, 1000]}}
+        site_config = SiteQCConfig(site_name="TestSite", variables={})
+        dependency_defaults = {
+            "Fco2": VariableQCSpec(dependency_check=["Diag_SONIC"]),
+        }
+        range_defaults = {"Diag": {"SONIC": [0, 1000]}}
+
+        merged = qc_config_schema.resolve_qc_config(
+            site_config, dependency_defaults, range_defaults, ds
         )
-        values_out = out["Diag_IRGA"].squeeze(("latitude", "longitude")).values
-        self.assertTrue(np.isnan(values_out[3]))
-        self.assertFalse(np.isnan(values_out[0]))
+        out = qc_pipeline.apply_qc(ds, merged)
 
-    def test_no_matching_default_passes_through(self):
-        ds = _build_dataset()
-        qc_config = SiteQCConfig(site_name="TestSite", variables={})
-        out = qc_pipeline.apply_qc(ds, qc_config, range_defaults={"SomeOtherQuantity": [0, 1]})
-        xr.testing.assert_identical(out["Fco2"], ds["Fco2"])
-
-    def test_no_range_defaults_arg_behaves_as_before(self):
-        ds = _build_dataset()
-        qc_config = SiteQCConfig(site_name="TestSite", variables={})
-        out = qc_pipeline.apply_qc(ds, qc_config)
-        xr.testing.assert_identical(out["Fco2"], ds["Fco2"])
+        fco2_flags = out["Fco2_QCFlag"].squeeze(("latitude", "longitude")).values
+        self.assertEqual(fco2_flags[3], qc_pipeline.QC_FLAG_CODES["dependency_check"])
+        self.assertEqual(fco2_flags[0], 0)
 
 
 if __name__ == "__main__":

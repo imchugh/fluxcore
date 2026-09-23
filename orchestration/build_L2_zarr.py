@@ -91,8 +91,12 @@ def build(
         qc_config, qc_pipeline.checkable_variables(ds)
     )
 
+    dependency_defaults = qc_config_schema.load_dependency_defaults()
     range_defaults = qc_config_schema.load_range_defaults()
-    ds = qc_pipeline.apply_qc(ds, qc_config, range_defaults=range_defaults)
+    qc_config = qc_config_schema.resolve_qc_config(
+        qc_config, dependency_defaults, range_defaults, ds
+    )
+    ds = qc_pipeline.apply_qc(ds, qc_config)
     file_io.write_zarr(ds=ds, store_path=store_path)
 
     return store_path
@@ -163,8 +167,12 @@ def update(
         qc_config_schema.validate_qc_config_variables(
             qc_config, qc_pipeline.checkable_variables(ds)
         )
+        dependency_defaults = qc_config_schema.load_dependency_defaults()
         range_defaults = qc_config_schema.load_range_defaults()
-        ds = qc_pipeline.apply_qc(ds, qc_config, range_defaults=range_defaults)
+        qc_config = qc_config_schema.resolve_qc_config(
+            qc_config, dependency_defaults, range_defaults, ds
+        )
+        ds = qc_pipeline.apply_qc(ds, qc_config)
 
         ds = ds.sel(time=slice(tail_start, None))
         if ds.sizes["time"] == 0:

@@ -145,6 +145,51 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         out = xr.open_zarr(store_path)
         self.assertEqual(out.sizes["time"], 20)
 
+    def test_dependency_default_applies_from_shared_file(self):
+        # configs/qc/_dependency_defaults.yml resolves via the same
+        # paths.CONFIG_PATH patch as _range_defaults.yml -- both default to
+        # {CONFIG_PATH}/qc, which this fixture already points at self.qc_dir
+        # (alongside the site's own TestSite.yml, a different filename in
+        # the same directory).
+        (self.qc_dir / "_dependency_defaults.yml").write_text(
+            "Diag_SONIC:\n"
+            "  range_check: {lower: 0, upper: 500}\n"
+            "Fco2:\n"
+            "  dependency_check: [Diag_SONIC]\n"
+        )
+        n = 10
+        idx = pd.date_range("2020-01-01", periods=n, freq="30min")
+        diag = np.zeros((n, 1, 1))
+        diag[5, 0, 0] = 5000.0  # exceeds the default [0, 500] bound
+        fco2 = np.ones((n, 1, 1))
+        ds = xr.Dataset(
+            {
+                "Ta_Av": (("time", "latitude", "longitude"), np.full((n, 1, 1), 10.0)),
+                "Diag_SONIC": (("time", "latitude", "longitude"), diag),
+                "Fco2": (("time", "latitude", "longitude"), fco2),
+                "crs": 0,
+            },
+            coords={"time": idx, "latitude": [0.0], "longitude": [0.0]},
+        )
+        ds.attrs.update(
+            {
+                "time_step": 30,
+                "site_name": "TestSite",
+                "nc_nrecs": n,
+                "time_coverage_start": idx[0].strftime("%Y-%m-%d %H:%M:%S"),
+                "time_coverage_end": idx[-1].strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+        self._write_l1(ds)
+
+        store_path = build_L2_zarr.build(
+            "TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir
+        )
+        out = xr.open_zarr(store_path)
+        fco2_flags = out["Fco2_QCFlag"].squeeze(("latitude", "longitude")).values
+        self.assertEqual(fco2_flags[5], 23)  # dependency_check code
+        self.assertEqual(fco2_flags[0], 0)
+
     def test_mad_filter_configured_update_completes(self):
         (self.qc_dir / "TestSite.yml").write_text(
             "Ta_Av:\n"

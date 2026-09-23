@@ -147,7 +147,6 @@ CO2:                              # CO2 mole fraction (umol/mol) -- see CORRECTE
   Sd: [0, 20]                     # evidence-based: real Calperum CO2_IRGA_Sd, median 0.74, 98% <= 20
   Vr: [0, 400]                    # derived: sqrt(Vr max) = sqrt(400) = 20 = Sd max
 
-CO2Sig: [0, 102.5]                # migrated from canonical_quantities.yml
 CO2c:                             # CO2 mass concentration (mg/m^3) -- see CORRECTED note above
   Av: [500, 2000]
   Sd: [0, 50]
@@ -176,7 +175,6 @@ Fsu: [-10, 500]
 GPP: [-60, 0]                     # migrated from canonical_quantities.yml
 
 H2O: [0, 80]                      # migrated from canonical_quantities.yml -- see CORRECTED note above
-H2OSig: [0, 102.5]                # migrated from canonical_quantities.yml
 
 NEE: [-50, 30]                    # migrated from canonical_quantities.yml
 NEP: [-50, 30]                    # migrated from canonical_quantities.yml

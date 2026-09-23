@@ -4,6 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+import xarray as xr
 from pydantic import ValidationError
 
 from services.metadata import qc_config_schema
@@ -144,6 +147,165 @@ class DependencyGraphOrderTestCase(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             cfg.dependency_graph_order()
+
+
+class DependencyDefaultsTestCase(unittest.TestCase):
+    def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp_dir.cleanup)
+        self.config_dir = Path(self._tmp_dir.name)
+
+    def test_missing_file_returns_empty_dict(self):
+        result = qc_config_schema.load_dependency_defaults(config_dir=self.config_dir)
+        self.assertEqual(result, {})
+
+    def test_valid_file_loads(self):
+        (self.config_dir / "_dependency_defaults.yml").write_text(
+            "Diag_SONIC:\n  range_check: {lower: 0, upper: 500}\n"
+            "UxA:\n  dependency_check: [Diag_SONIC]\n"
+        )
+        result = qc_config_schema.load_dependency_defaults(config_dir=self.config_dir)
+        self.assertEqual(result["Diag_SONIC"].range_check.upper, 500)
+        self.assertEqual(result["UxA"].dependency_check, ["Diag_SONIC"])
+
+    def test_malformed_file_raises_same_as_a_site_file(self):
+        (self.config_dir / "_dependency_defaults.yml").write_text(
+            "UxA:\n  bogus_check: [1, 2]\n"
+        )
+        with self.assertRaises(ValidationError):
+            qc_config_schema.load_dependency_defaults(config_dir=self.config_dir)
+
+    def test_real_repo_dependency_defaults_file_loads(self):
+        # Regression guard for the actual hand-maintained
+        # configs/qc/_dependency_defaults.yml.
+        result = qc_config_schema.load_dependency_defaults()
+        self.assertIn("Diag_SONIC", result)
+        self.assertIn("Diag_IRGA", result)
+        self.assertIn("Fco2", result)
+
+
+def _resolve_ds(var_names):
+    """Minimal xr.Dataset with the given data_vars, no real values needed
+    for resolve_qc_config's merge logic beyond variable presence."""
+    idx = pd.date_range("2020-01-01", periods=3, freq="30min")
+    data_vars = {name: (("time",), np.array([1.0, 2.0, 3.0])) for name in var_names}
+    return xr.Dataset(data_vars, coords={"time": idx})
+
+
+class ResolveQCConfigTestCase(unittest.TestCase):
+    def test_default_dependency_check_added_when_site_silent(self):
+        ds = _resolve_ds(["Fco2", "Diag_SONIC"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        defaults = {
+            "Fco2": qc_config_schema.VariableQCSpec(dependency_check=["Diag_SONIC"]),
+        }
+        merged = qc_config_schema.resolve_qc_config(site_config, defaults, {}, ds)
+        self.assertEqual(merged.variables["Fco2"].dependency_check, ["Diag_SONIC"])
+
+    def test_site_range_check_kept_default_dependency_check_still_added(self):
+        ds = _resolve_ds(["Fco2", "Diag_SONIC"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test",
+            variables={
+                "Fco2": qc_config_schema.VariableQCSpec(
+                    range_check=qc_config_schema.RangeCheckSpec(lower=-10, upper=10)
+                ),
+            },
+        )
+        defaults = {
+            "Fco2": qc_config_schema.VariableQCSpec(dependency_check=["Diag_SONIC"]),
+        }
+        merged = qc_config_schema.resolve_qc_config(site_config, defaults, {}, ds)
+        self.assertEqual(merged.variables["Fco2"].range_check.lower, -10)
+        self.assertEqual(merged.variables["Fco2"].dependency_check, ["Diag_SONIC"])
+
+    def test_site_dependency_check_kept_range_default_still_added(self):
+        ds = _resolve_ds(["Fco2"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test",
+            variables={
+                "Fco2": qc_config_schema.VariableQCSpec(dependency_check=["Something"]),
+            },
+        )
+        range_defaults = {"Fco2": [-50, 30]}
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, range_defaults, ds)
+        self.assertEqual(merged.variables["Fco2"].dependency_check, ["Something"])
+        self.assertEqual(merged.variables["Fco2"].range_check.lower, -50)
+        self.assertEqual(merged.variables["Fco2"].range_check.upper, 30)
+
+    def test_default_entry_dropped_when_own_variable_absent(self):
+        ds = _resolve_ds(["Ta_Av"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        defaults = {
+            "Fco2": qc_config_schema.VariableQCSpec(dependency_check=["Diag_SONIC"]),
+        }
+        merged = qc_config_schema.resolve_qc_config(site_config, defaults, {}, ds)
+        self.assertNotIn("Fco2", merged.variables)
+
+    def test_unavailable_dependency_source_dropped_individually(self):
+        ds = _resolve_ds(["Fco2", "SigCO2_IRGA"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        defaults = {
+            "Fco2": qc_config_schema.VariableQCSpec(
+                dependency_check=["Diag_SONIC", "SigCO2_IRGA"]
+            ),
+        }
+        merged = qc_config_schema.resolve_qc_config(site_config, defaults, {}, ds)
+        self.assertEqual(merged.variables["Fco2"].dependency_check, ["SigCO2_IRGA"])
+
+    def test_all_dependency_sources_unavailable_collapses_whole_entry(self):
+        # The CumberlandPlain / EddyPro-only shape: the dependent exists but
+        # every one of its default conditionals is absent, and there's no
+        # range default either -- the variable should end up untouched.
+        ds = _resolve_ds(["Fco2"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        defaults = {
+            "Fco2": qc_config_schema.VariableQCSpec(
+                dependency_check=["Diag_SONIC", "Uz_SONIC_Sd"]
+            ),
+        }
+        merged = qc_config_schema.resolve_qc_config(site_config, defaults, {}, ds)
+        self.assertNotIn("Fco2", merged.variables)
+
+    def test_all_sources_unavailable_but_range_default_still_applies(self):
+        ds = _resolve_ds(["Fco2"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        defaults = {
+            "Fco2": qc_config_schema.VariableQCSpec(dependency_check=["Diag_SONIC"]),
+        }
+        range_defaults = {"Fco2": [-50, 30]}
+        merged = qc_config_schema.resolve_qc_config(
+            site_config, defaults, range_defaults, ds
+        )
+        self.assertIn("Fco2", merged.variables)
+        self.assertIsNone(merged.variables["Fco2"].dependency_check)
+        self.assertEqual(merged.variables["Fco2"].range_check.lower, -50)
+
+    def test_default_range_check_used_for_quality_flag_variable(self):
+        # e.g. Diag_SONIC/Fco2_QC -- no _range_defaults.yml quantity entry;
+        # the bound comes from the dependency_defaults entry itself.
+        ds = _resolve_ds(["Fco2_QC"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        defaults = {
+            "Fco2_QC": qc_config_schema.VariableQCSpec(
+                range_check=qc_config_schema.RangeCheckSpec(lower=-0.5, upper=1.5)
+            ),
+        }
+        merged = qc_config_schema.resolve_qc_config(site_config, defaults, {}, ds)
+        self.assertEqual(merged.variables["Fco2_QC"].range_check.lower, -0.5)
+
+    def test_qcflag_and_crs_excluded_from_merge(self):
+        ds = _resolve_ds(["Fco2", "Fco2_QCFlag", "crs"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertNotIn("Fco2_QCFlag", merged.variables)
+        self.assertNotIn("crs", merged.variables)
+
+    def test_untouched_variable_omitted_from_result(self):
+        ds = _resolve_ds(["SomeRandomVar"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables, {})
 
 
 if __name__ == "__main__":
