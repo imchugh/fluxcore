@@ -48,6 +48,19 @@ Fco2:
     upper: 50
   dependency_check: [Ux, Uy, Uz]
 
+# --- flag_check ---
+# Masks a variable wherever a logger-supplied quality flag equals a listed
+# value (ported from PyFluxPro's EPQCFlagCheck, code 9). The flag variable(s)
+# in `source` are only read -- never masked, and their own {var}_QCFlag is
+# dropped from the L2 store. Matching is exact; a missing flag never matches.
+# The flag scheme varies by flux system, so this is configured per site, not
+# defaulted: e.g. Campbell EasyFlux uses 1-9 (reject 8, 9), LI-COR SmartFlux
+# 0/1/2 (reject 2). The checked variable's default range_check still applies.
+Fe:
+  flag_check:
+    source: [Fe_QC]
+    reject: [8, 9]
+
 # --- mad_filter ---
 # Median-absolute-deviation despiking (ported from PyFluxPro's do_madfilter).
 # reference_var is required — the day/night reference series (conventionally
@@ -68,5 +81,5 @@ Fsd_Av:
     zfc: 5.5
     edge_threshold: [20.0, 80.0]
 
-# A variable can combine any/all of the four checks above — e.g. Fco2 in this
+# A variable can combine any/all of the checks above — e.g. Fco2 in this
 # template already combines range_check with dependency_check.

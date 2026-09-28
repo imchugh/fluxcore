@@ -142,6 +142,59 @@ class ApplyQCTestCase(unittest.TestCase):
         self.assertEqual(flags[3], qc_pipeline.QC_FLAG_CODES["dependency_check"])
 
 
+class FlagCheckTestCase(unittest.TestCase):
+    def _ds(self):
+        n = 10
+        idx = pd.date_range("2020-01-01", periods=n, freq="30min")
+        dims = ("time", "latitude", "longitude")
+        flag = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, np.nan]).reshape(n, 1, 1)
+        ds = xr.Dataset(
+            {
+                "Fco2": (dims, np.ones((n, 1, 1))),
+                "Fco2_QC": (dims, flag),
+                "Fco2_QC_QCFlag": (dims, np.zeros((n, 1, 1), dtype=int)),
+                "crs": 0,
+            },
+            coords={"time": idx, "latitude": [0.0], "longitude": [0.0]},
+        )
+        ds.attrs["time_step"] = 30
+        return ds
+
+    def _config(self, **extra):
+        spec = VariableQCSpec(
+            flag_check=qc_config_schema.FlagCheckSpec(
+                source=["Fco2_QC"], reject=[8, 9]
+            ),
+            **extra,
+        )
+        return SiteQCConfig(site_name="TestSite", variables={"Fco2": spec})
+
+    def test_rejected_flags_mask_target_with_code_9(self):
+        out = qc_pipeline.apply_qc(self._ds(), self._config())
+        flags = out["Fco2_QCFlag"].squeeze(("latitude", "longitude")).values
+        self.assertEqual(flags.tolist(), [0] * 7 + [9, 9, 0])
+        fco2 = out["Fco2"].squeeze(("latitude", "longitude")).values
+        self.assertTrue(np.isnan(fco2[7]) and np.isnan(fco2[8]))
+        self.assertFalse(np.isnan(fco2[0]))
+
+    def test_flag_variable_left_unmasked_and_its_qcflag_dropped(self):
+        ds = self._ds()
+        out = qc_pipeline.apply_qc(ds, self._config())
+        xr.testing.assert_identical(out["Fco2_QC"], ds["Fco2_QC"])
+        self.assertNotIn("Fco2_QC_QCFlag", out)
+
+    def test_later_exclude_dates_overrides_flag_check(self):
+        cfg = self._config(
+            exclude_dates=[("2020-01-01T03:30:00", "2020-01-01T03:30:00")]
+        )
+        out = qc_pipeline.apply_qc(self._ds(), cfg)
+        flags = out["Fco2_QCFlag"].squeeze(("latitude", "longitude")).values
+        # Record 7 (03:30) is flagged by both; PyFluxPro order lets the later
+        # exclude_dates check win.
+        self.assertEqual(flags[7], qc_pipeline.QC_FLAG_CODES["exclude_dates"])
+        self.assertEqual(flags[8], qc_pipeline.QC_FLAG_CODES["flag_check"])
+
+
 class ApplyQCWithResolvedDefaultsIntegrationTestCase(unittest.TestCase):
     """apply_qc no longer knows about defaults at all -- range_defaults and
     _dependency_defaults.yml resolution now happen upstream, in

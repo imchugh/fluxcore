@@ -190,6 +190,52 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         self.assertEqual(fco2_flags[5], 23)  # dependency_check code
         self.assertEqual(fco2_flags[0], 0)
 
+    def test_flag_check_build_then_update_keeps_consistent_variable_set(self):
+        (self.qc_dir / "TestSite.yml").write_text(
+            "Fco2:\n  flag_check: {source: [Fco2_QC], reject: [8, 9]}\n"
+        )
+
+        def _make(n, start, flag):
+            idx = pd.date_range(start, periods=n, freq="30min")
+            dims = ("time", "latitude", "longitude")
+            ds = xr.Dataset(
+                {
+                    "Fco2": (dims, np.ones((n, 1, 1))),
+                    "Fco2_QC": (dims, np.full((n, 1, 1), float(flag))),
+                    "Fco2_QC_QCFlag": (dims, np.zeros((n, 1, 1), dtype=int)),
+                    "crs": 0,
+                },
+                coords={"time": idx, "latitude": [0.0], "longitude": [0.0]},
+            )
+            ds.attrs.update({"time_step": 30, "site_name": "TestSite"})
+            return ds
+
+        first = _make(10, "2020-01-01", flag=9)
+        first.attrs.update(
+            {
+                "nc_nrecs": 10,
+                "time_coverage_start": "2020-01-01 00:00:00",
+                "time_coverage_end": "2020-01-01 04:30:00",
+            }
+        )
+        self._write_l1(first)
+        store_path = build_L2_zarr.build(
+            "TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir
+        )
+        built = xr.open_zarr(store_path)
+        self.assertNotIn("Fco2_QC_QCFlag", built)
+        self.assertTrue(bool((built["Fco2_QCFlag"] == 9).all()))
+
+        file_io.append_zarr(
+            ds=_make(5, first.time.values[-1] + pd.Timedelta(minutes=30), flag=1),
+            store_path=self.l1_dir / "TestSite_L1.zarr",
+        )
+        build_L2_zarr.update("TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir)
+        out = xr.open_zarr(store_path)
+        self.assertEqual(out.sizes["time"], 15)
+        self.assertNotIn("Fco2_QC_QCFlag", out)
+        self.assertEqual(int(out["Fco2_QCFlag"].squeeze().values[-1]), 0)
+
     def test_mad_filter_configured_update_completes(self):
         (self.qc_dir / "TestSite.yml").write_text(
             "Ta_Av:\n"

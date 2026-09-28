@@ -64,10 +64,11 @@
 # Ux/Uy/Uz Vr note below.
 #
 # Loaded by services.metadata.qc_config_schema.load_range_defaults() and
-# consumed by orchestration.qc_pipeline.apply_qc's range_defaults arg (see
-# that module's _lookup_default_range) for every checkable L1 variable with
-# no explicit entry in the site's own configs/qc/{site}.yml -- an explicit
-# per-site range_check always takes precedence over a default here. Lookup
+# merged in by qc_config_schema.resolve_qc_config (via lookup_default_range)
+# for every checkable L1 variable whose site config sets no range_check --
+# an explicit per-site range_check always takes precedence over a default
+# here, field by field (a site entry with only a dependency_check still gets
+# the default range_check). Lookup
 # is quantity -> flat [min,max], or qualifier, or StatisticType suffix (in
 # that order) -- see the keying convention above. Note: the L1 store's
 # ds[var].attrs["statistic_type"] round-trips through zarr/netCDF as the
@@ -121,14 +122,17 @@
 #     equivalent variable is a raw count of scans with any flag raised
 #     (0-18000 at 10 Hz/30 min) -- a different quantity entirely, and there
 #     is no per-scan decoded value available to average instead, so
-#     PyFluxPro's bounds don't transfer. Instead, the upper bound below is
-#     carried over from services/data/data_monitor.py's THRESHOLD_SPECS
-#     (max: 1000 for both), an independently-chosen dashboard threshold
-#     already in production use. Manual inspection of Whroo_2026_L1.nc
-#     confirmed the failure mode is bimodal -- good periods have a handful
-#     of flagged scans at most, bad periods jump straight to several
-#     thousand -- so the exact cutoff barely matters as long as it sits
-#     in that gap; 1000 does.
+#     PyFluxPro's bounds don't transfer. Instead, the upper bound below was
+#     first carried over from services/data/data_monitor.py's THRESHOLD_SPECS
+#     (max: 1000, a dashboard monitoring threshold), then set to 500 by user
+#     decision as the masking tolerance (these bounds also gate the implicit
+#     SONIC/IRGA dependency checks in _dependency_defaults.yml). Manual
+#     inspection of Whroo_2026_L1.nc confirmed the failure mode is bimodal --
+#     good periods have a handful of flagged scans at most, bad periods jump
+#     straight to several thousand -- so the exact cutoff barely matters as
+#     long as it sits in that gap. NOT normalized for 10 vs 20 Hz sampling
+#     (20 Hz sites have twice the scans, so 500 is twice as strict there in
+#     percentage terms) -- freq_hz isn't in the L1 store's ds.attrs.
 #   - FsdDiff, FsdDir: migrated from canonical_quantities.yml as-is
 #     (-20, 1412), not harmonized with Fsd's own PyFluxPro-sourced bound
 #     (-10, 1500) even though these are components of the same downwelling
@@ -153,8 +157,9 @@ CO2c:                             # CO2 mass concentration (mg/m^3) -- see CORRE
   Vr: [0, 2500]
 
 Diag:
-  IRGA: [0, 1000]                # source: data_monitor.THRESHOLD_SPECS, not PyFluxPro
-  SONIC: [0, 1000]                # source: data_monitor.THRESHOLD_SPECS, not PyFluxPro
+  IRGA: [0, 500]                 # invalid-sample-count masking bound (user choice); NOT normalized
+  SONIC: [0, 500]                # for 10 vs 20 Hz sampling. data_monitor.THRESHOLD_SPECS (1000) is
+                                 # a separate monitoring threshold
 
 ER: [0, 30]                       # migrated from canonical_quantities.yml
 

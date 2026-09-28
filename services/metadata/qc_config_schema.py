@@ -49,6 +49,28 @@ class RangeCheckSpec(BaseModel):
         return self
 
 
+class FlagCheckSpec(BaseModel):
+    """Reject values where a logger-supplied quality flag equals a listed value.
+
+    Ported from PyFluxPro's EPQCFlagCheck: the flag variable(s) in `source`
+    are only read (never masked); the checked variable is masked wherever any
+    source equals any value in `reject`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: list[str]
+    reject: list[float]
+
+    @field_validator("source", "reject")
+    @classmethod
+    def check_nonempty(cls, v):
+        """Reject an explicitly-empty source or reject list."""
+        if len(v) == 0:
+            raise ValueError("flag_check source and reject must be non-empty")
+        return v
+
+
 class MADFilterSpec(BaseModel):
     """Median-absolute-deviation despiking, ported from PyFluxPro's do_madfilter."""
 
@@ -85,6 +107,7 @@ class VariableQCSpec(BaseModel):
     range_check: RangeCheckSpec | None = None
     exclude_dates: list[tuple[datetime, datetime]] | None = None
     dependency_check: list[str] | None = None
+    flag_check: FlagCheckSpec | None = None
     mad_filter: MADFilterSpec | None = None
 
     @field_validator("exclude_dates")
@@ -216,6 +239,8 @@ def validate_qc_config_variables(
         for dep in spec.dependency_check or ():
             if dep not in available:
                 missing.add(dep)
+        if spec.flag_check is not None:
+            missing.update(s for s in spec.flag_check.source if s not in available)
         if spec.mad_filter is not None and spec.mad_filter.reference_var not in available:
             missing.add(spec.mad_filter.reference_var)
 
@@ -330,9 +355,22 @@ def resolve_qc_config(
     name_parser = NameParser()
     merged: dict[str, VariableQCSpec] = {}
 
+    # Logger quality-flag variables named as a flag_check source are gate-only
+    # inputs: no default range (NameParser reads e.g. Fco2_QC as quantity Fco2,
+    # which would wrongly apply the flux range) and no default dependency.
+    flag_sources = {
+        src
+        for spec in qc_config.variables.values()
+        if spec.flag_check is not None
+        for src in spec.flag_check.source
+    }
+
     for var_name in available:
         site_spec = qc_config.variables.get(var_name)
         default_spec = dependency_defaults.get(var_name)
+
+        if var_name in flag_sources and site_spec is None:
+            continue
 
         range_check = site_spec.range_check if site_spec else None
         if range_check is None and default_spec is not None:
@@ -353,12 +391,14 @@ def resolve_qc_config(
                 dependency_check = gated
 
         exclude_dates = site_spec.exclude_dates if site_spec else None
+        flag_check = site_spec.flag_check if site_spec else None
         mad_filter = site_spec.mad_filter if site_spec else None
 
         if (
             range_check is None
             and dependency_check is None
             and exclude_dates is None
+            and flag_check is None
             and mad_filter is None
         ):
             continue
@@ -367,6 +407,7 @@ def resolve_qc_config(
             range_check=range_check,
             exclude_dates=exclude_dates,
             dependency_check=dependency_check,
+            flag_check=flag_check,
             mad_filter=mad_filter,
         )
 

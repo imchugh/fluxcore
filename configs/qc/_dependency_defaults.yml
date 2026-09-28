@@ -12,21 +12,25 @@
 # conditional is Uz_SONIC_Sd only, never W_SONIC_Sd (different physical
 # quantities here -- sonic-instrument-frame vs rotated/meteorological-frame
 # -- and this pipeline has no rotation stage).
+#
+# dependency_check entries only -- no numeric bounds live here. The Diag_SONIC/
+# Diag_IRGA bound is in _range_defaults.yml (picked up by the field-level
+# merge, which is what makes those variables visible to these dependencies).
+# Logger-supplied flux QC flags (EasyFlux/SmartFlux/EddyPro) are NOT defaulted
+# here: the flag scheme differs by flux system, so each site configures a
+# flag_check on its own fluxes (see _template.yml).
 
 # --- Group A: SONIC-implicit dependency check (ported from PyFluxPro's
 # do_SONICcheck, pfp_ck.py -- its own docstring calls it "an implicit
 # dependency check using the sonic diagnostic") ---
 #
-# PROVISIONAL: [0, 500] is a flat invalid-sample-count bound, not normalized
-# for sample rate -- the network runs a mix of 10 Hz (26 sites) and 20 Hz
+# PROVISIONAL: the Diag bound ([0, 500] in _range_defaults.yml) is a flat
+# invalid-sample-count bound, not normalized for sample rate -- the network runs a mix of 10 Hz (26 sites) and 20 Hz
 # (8 sites) sampling, so this is roughly twice as strict in
 # percentage-of-interval terms at 20 Hz sites. freq_hz isn't available in
 # the L1 store's own ds.attrs (only time_step is) -- normalizing properly
 # would mean piping freq_hz through as a new TERN-adapter-supplied field,
 # deferred by explicit user decision.
-Diag_SONIC:
-  range_check: {lower: 0, upper: 500}
-
 UxT: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd]}
 UxUy: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd]}
 UxUz: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd]}
@@ -50,7 +54,7 @@ W_SONIC_Sd: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd]}
 # do_IRGAcheck/do_li7500check/do_EC155check, pfp_ck.py -- same "implicit
 # dependency check" pattern, gated on the IRGA diagnostic instead) ---
 #
-# Same PROVISIONAL [0, 500] sample-rate caveat as Diag_SONIC above.
+# Same PROVISIONAL sample-rate caveat as the Diag_SONIC bound above.
 #
 # Signal-strength conditional lists every real variant name in the network
 # (SigCO2_IRGA/SigH2O_IRGA at compound-signal EC150/EC155/IRGASON sites,
@@ -64,9 +68,6 @@ W_SONIC_Sd: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd]}
 # good IRGA), so their dependency_check here is the union of both groups'
 # conditionals rather than living in Group A above (QCConfigSchema is a
 # flat {var: spec} map -- one entry per variable, not one per group).
-Diag_IRGA:
-  range_check: {lower: 0, upper: 500}
-
 UzA: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd, Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IRGA, SigH2O_IRGA, Sig_IRGA]}
 UxA: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd, Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IRGA, SigH2O_IRGA, Sig_IRGA]}
 UyA: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd, Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IRGA, SigH2O_IRGA, Sig_IRGA]}
@@ -79,30 +80,3 @@ CO2_IRGA_Av: {dependency_check: [Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IR
 CO2_IRGA_Sd: {dependency_check: [Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IRGA, SigH2O_IRGA, Sig_IRGA]}
 CO2c_IRGA_Av: {dependency_check: [Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IRGA, SigH2O_IRGA, Sig_IRGA]}
 H2O_IRGA_Av: {dependency_check: [Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IRGA, SigH2O_IRGA, Sig_IRGA]}
-
-# --- Group C: EddyPro/EasyFlux flux QC-flag pattern ---
-# Precedent extracted directly from PyFluxPro's own CumberlandPlain control
-# file (source: /home/imchugh/Documents/L2_files/L2_autogen_CumberlandPlain
-# .txt, lines ~31-50): DependencyCheck exists there only for Fco2/Fe
-# (compound sonic+irga fluxes); Fh/Fm (sonic-only) have their _QC flag
-# range-checked but no DependencyCheck wired to the flux itself. Ported
-# faithfully.
-#
-# PROVISIONAL: both the [-0.5, 1.5] bound and the Fh/Fm omission rest on
-# this one site's extracted precedent -- worth checking against the other 5
-# EasyFlux sites' real flag conventions (MyallValeA, MyallValeB,
-# SilverPlains, SnowGum, Wedgetail -- confirmed all 6 of these sites carry
-# uniform Fco2_QC/Fe_QC/Fh_QC/Fm_QC companions) once there's real flagged
-# output to inspect.
-#
-# No range_check needed here for Fco2/Fe/Fh/Fm themselves -- those already
-# have quantity-level bounds in _range_defaults.yml and get picked up
-# automatically by the field-level merge for any site lacking its own
-# override, same as every other quantity.
-Fco2_QC: {range_check: {lower: -0.5, upper: 1.5}}
-Fe_QC: {range_check: {lower: -0.5, upper: 1.5}}
-Fh_QC: {range_check: {lower: -0.5, upper: 1.5}}
-Fm_QC: {range_check: {lower: -0.5, upper: 1.5}}
-
-Fco2: {dependency_check: [Fco2_QC, SigCO2_IRGA, Sig_IRGA, AH_IRGA_Sd]}
-Fe: {dependency_check: [Fe_QC, SigCO2_IRGA, Sig_IRGA, AH_IRGA_Sd]}

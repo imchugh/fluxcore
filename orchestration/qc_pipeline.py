@@ -19,9 +19,9 @@ from services.metadata.qc_config_schema import SiteQCConfig
 # from memory), so {var}_QCFlag is directly comparable against real PyFluxPro
 # output for benchmarking. 0 = OK. Combination is PyFluxPro's own scheme too:
 # each check unconditionally overwrites the code wherever it fires, applied in
-# PyFluxPro's own execution order (range_check -> exclude_dates -> mad_filter,
-# dependency_check as a separate later pass) -- the *last* check to fire wins,
-# not a sum. A missing value's comparisons never evaluate true (NaN < lower is
+# PyFluxPro's own execution order (range_check -> flag_check ->
+# exclude_dates -> mad_filter, dependency_check as a separate later pass) -- the *last* check to
+# fire wins, not a sum. A missing value's comparisons never evaluate true (NaN < lower is
 # False, same as PyFluxPro's masked-array behaviour), so "missing" survives
 # being run through the other checks with no special-casing needed.
 #
@@ -36,6 +36,7 @@ QC_FLAG_CODES = {
     "missing": 1,
     "range_check": 2,
     "exclude_dates": 6,
+    "flag_check": 9,
     "dependency_check": 23,
     "mad_filter": 24,
 }
@@ -88,6 +89,11 @@ def apply_qc(
             )
             code[bad] = QC_FLAG_CODES["range_check"]
 
+        if spec.flag_check is not None:
+            flag_series = [_extract_series(ds, src) for src in spec.flag_check.source]
+            bad = get_check("flag_check")(flag_series, spec.flag_check.reject)
+            code[bad] = QC_FLAG_CODES["flag_check"]
+
         if spec.exclude_dates is not None:
             bad = get_check("exclude_dates")(series.index, spec.exclude_dates)
             code[bad] = QC_FLAG_CODES["exclude_dates"]
@@ -117,6 +123,19 @@ def apply_qc(
 
         resolved_bad[var_name] = code != 0
         ds = _write_flag_and_mask(ds, var_name, code)
+
+    # Logger quality-flag sources are gate-only: left unmasked, and L1's own
+    # placeholder {src}_QCFlag is dropped rather than left looking like a real
+    # L2 flag -- unless the site explicitly configured the flag variable itself.
+    flag_sources = {
+        src
+        for spec in qc_config.variables.values()
+        if spec.flag_check is not None
+        for src in spec.flag_check.source
+    }
+    for src in sorted(flag_sources - set(qc_config.variables)):
+        if f"{src}_QCFlag" in ds:
+            ds = ds.drop_vars(f"{src}_QCFlag")
 
     return ds
 

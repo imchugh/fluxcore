@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""L2 QC check registry: RangeCheck, ExcludeDates, DependencyCheck, MADFilter.
+"""L2 QC check registry: Range, ExcludeDates, Dependency, Flag, MADFilter checks.
 
 Ported from PyFluxPro's scripts/pfp_ck.py (do_rangecheck, do_excludedates,
-do_dependencycheck, do_madfilter/_1/_2), reimplemented as small pure functions
-against this pipeline's own pd.Series/numpy rather than PyFluxPro's
-configobj/DataStructure/masked-array machinery.
+do_dependencycheck, do_EPQCFlagCheck, do_madfilter/_1/_2), reimplemented as
+small pure functions against this pipeline's own pd.Series/numpy rather than
+PyFluxPro's configobj/DataStructure/masked-array machinery.
 
 `@register_check` populates CHECK_REGISTRY, keyed by check name; `get_check`
 looks it back up. Every check function returns a boolean "bad" mask (True =
@@ -64,6 +64,23 @@ def dependency_check(dependency_flags: list[pd.Series]) -> pd.Series:
     for flags in dependency_flags[1:]:
         combined = combined | flags
     return combined
+
+
+@register_check("flag_check")
+def flag_check(flag_series: list[pd.Series], reject: list[float]) -> pd.Series:
+    """Boolean mask, True where any source flag equals any rejected value.
+
+    Ported from PyFluxPro's do_EPQCFlagCheck (exact match via isclose; a
+    missing flag never matches, so it is not rejected here).
+    """
+    if not flag_series:
+        raise ValueError("flag_check requires at least one flag series")
+    bad = pd.Series(False, index=flag_series[0].index)
+    for flags in flag_series:
+        values = flags.to_numpy(dtype=float)
+        for value in reject:
+            bad |= pd.Series(np.isclose(values, float(value)), index=flags.index)
+    return bad
 
 
 @register_check("mad_filter")

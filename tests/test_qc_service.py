@@ -60,6 +60,27 @@ class DependencyCheckTestCase(unittest.TestCase):
             qc_service.dependency_check([])
 
 
+class FlagCheckTestCase(unittest.TestCase):
+    def _flags(self, values):
+        idx = pd.date_range("2020-01-01", periods=len(values), freq="30min")
+        return pd.Series(values, index=idx, dtype=float)
+
+    def test_rejects_listed_values_only(self):
+        flags = self._flags([1, 7, 8, 9, np.nan, -2147483648])
+        bad = qc_service.flag_check([flags], [8, 9])
+        self.assertEqual(bad.tolist(), [False, False, True, True, False, False])
+
+    def test_any_source_rejecting_is_enough(self):
+        a = self._flags([1, 1, 1])
+        b = self._flags([1, 9, 1])
+        bad = qc_service.flag_check([a, b], [9])
+        self.assertEqual(bad.tolist(), [False, True, False])
+
+    def test_requires_a_source(self):
+        with self.assertRaises(ValueError):
+            qc_service.flag_check([], [1])
+
+
 class MADFilterTestCase(unittest.TestCase):
     def _build_series(self, n=48 * 20, spike_idx=48 * 10, spike_size=1000.0):
         idx = pd.date_range("2020-01-01", periods=n, freq="30min")

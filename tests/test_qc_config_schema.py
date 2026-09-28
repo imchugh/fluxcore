@@ -123,6 +123,43 @@ class ValidateVariablesTestCase(unittest.TestCase):
         )
 
 
+class FlagCheckSchemaTestCase(unittest.TestCase):
+    def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp_dir.cleanup)
+        self.path = Path(self._tmp_dir.name) / "Site.yml"
+
+    def test_loads(self):
+        self.path.write_text(
+            "Fco2:\n  flag_check: {source: [Fco2_QC], reject: [8, 9]}\n"
+        )
+        cfg = qc_config_schema.validate_qc_config_structure(self.path)
+        spec = cfg.root["Fco2"].flag_check
+        self.assertEqual(spec.source, ["Fco2_QC"])
+        self.assertEqual(spec.reject, [8.0, 9.0])
+
+    def test_empty_lists_rejected(self):
+        for body in ("source: [], reject: [9]", "source: [Fco2_QC], reject: []"):
+            self.path.write_text(f"Fco2:\n  flag_check: {{{body}}}\n")
+            with self.assertRaises(ValidationError):
+                qc_config_schema.validate_qc_config_structure(self.path)
+
+    def test_missing_source_variable_fails_strict_validation(self):
+        cfg = qc_config_schema.SiteQCConfig(
+            site_name="TestSite",
+            variables={
+                "Fco2": qc_config_schema.VariableQCSpec(
+                    flag_check=qc_config_schema.FlagCheckSpec(
+                        source=["Fco2_QC"], reject=[9]
+                    )
+                ),
+            },
+        )
+        with self.assertRaises(ValueError) as ctx:
+            qc_config_schema.validate_qc_config_variables(cfg, {"Fco2"})
+        self.assertIn("Fco2_QC", str(ctx.exception))
+
+
 class DependencyGraphOrderTestCase(unittest.TestCase):
     def test_topological_order(self):
         cfg = qc_config_schema.SiteQCConfig(
@@ -179,9 +216,14 @@ class DependencyDefaultsTestCase(unittest.TestCase):
         # Regression guard for the actual hand-maintained
         # configs/qc/_dependency_defaults.yml.
         result = qc_config_schema.load_dependency_defaults()
-        self.assertIn("Diag_SONIC", result)
-        self.assertIn("Diag_IRGA", result)
-        self.assertIn("Fco2", result)
+        self.assertIn("UxA", result)
+        self.assertIn("AH_IRGA_Av", result)
+        # Only dependency checks live here: no numeric bounds, and no
+        # per-flux-system logger QC flag defaults (those are per-site).
+        for spec in result.values():
+            self.assertIsNone(spec.range_check)
+            self.assertIsNone(spec.flag_check)
+        self.assertNotIn("Fco2", result)
 
 
 def _resolve_ds(var_names):
@@ -300,6 +342,27 @@ class ResolveQCConfigTestCase(unittest.TestCase):
         merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
         self.assertNotIn("Fco2_QCFlag", merged.variables)
         self.assertNotIn("crs", merged.variables)
+
+    def test_flag_check_kept_and_source_gets_no_default_range(self):
+        # Fco2_QC parses as quantity Fco2, so without gate-only handling it
+        # would wrongly receive the flux range default.
+        ds = _resolve_ds(["Fco2", "Fco2_QC"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test",
+            variables={
+                "Fco2": qc_config_schema.VariableQCSpec(
+                    flag_check=qc_config_schema.FlagCheckSpec(
+                        source=["Fco2_QC"], reject=[8, 9]
+                    )
+                ),
+            },
+        )
+        merged = qc_config_schema.resolve_qc_config(
+            site_config, {}, {"Fco2": [-50, 30]}, ds
+        )
+        self.assertEqual(merged.variables["Fco2"].flag_check.reject, [8.0, 9.0])
+        self.assertEqual(merged.variables["Fco2"].range_check.lower, -50)
+        self.assertNotIn("Fco2_QC", merged.variables)
 
     def test_untouched_variable_omitted_from_result(self):
         ds = _resolve_ds(["SomeRandomVar"])
