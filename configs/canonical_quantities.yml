@@ -6,15 +6,6 @@ AC:
   standard_units: mg.g/m^3
   valid_input_units:
   - mg.g/m^3
-AGC:
-  long_name: IRGA automatic gain control value
-  valid_max: 100.0
-  valid_min: 0.0
-  standard_name: null
-  standard_units: percent
-  valid_input_units:
-  - frac
-  - percent
 AH:
   long_name: Absolute humidity
   valid_max: 50.0

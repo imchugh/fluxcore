@@ -7,7 +7,7 @@
 # Two sources, distinguished per-entry by comment where it matters:
 #   1. /opt/TERN_EP/site_configs/templates/L2_ozflux.txt (PyFluxPro's
 #      OzFlux-network default control file) -- vetted operational sanity
-#      bounds. Covers AH, AGC, CO2, Fg, Fld, Flu, Fn, Fsd, Fsu, Precip, RH,
+#      bounds. Covers AH, CO2, Fg, Fld, Flu, Fn, Fsd, Fsu, Precip, RH,
 #      Sws, Ta, Tpanel, Ts, Tv, Ux/Uy/Uz (+Sd/Vr), the raw covariance terms
 #      (UxA..UzT), Vbat, Wd, Ws, ps.
 #   2. canonical_quantities.yml's own valid_min/valid_max fields, migrated
@@ -39,7 +39,7 @@
 # between two measurements of the *same* physical quantity -- not
 # meaningful for a coarse default sanity bound, so the two Av entries
 # (0,30) and (0,35) are merged to the wider bound below rather than kept
-# apart by qualifier. CO2/Tv/Ux/Uy/Uz/Wd/Ws/AGC were only ever qualified by
+# apart by qualifier. CO2/Tv/Ux/Uy/Uz/Wd/Ws were only ever qualified by
 # one instrument in the source file with no competing unqualified value, so
 # their qualifier was never load-bearing either -- keyed by statistic (or
 # flat) directly, same as AH.
@@ -110,9 +110,10 @@
 #   - Fg: no site currently has an Fg_* variable in
 #     /opt/TERN_EP/site_configs/operational/, so this entry is currently
 #     unused, kept for completeness/future sites.
-#   - AGC: PyFluxPro only specifies AGC_IRGA (0, 70), tighter than
-#     canonical_quantities.yml's old generic AGC bounds (0, 100), which are
-#     now superseded.
+#   - AGC: deliberately absent. PyFluxPro's AGC_IRGA (0, 70) is not carried
+#     because no site produces an AGC variable -- the raw "AGC" logger columns
+#     in use are really signal strength (canonical Sig_IRGA); see project
+#     memory li7500-agc-vs-signal-strength.
 #   - Diag_IRGA / Diag_SONIC: NOT ported from PyFluxPro. PyFluxPro's L1
 #     template (controlfiles/templates/L1/L1_ozflux_csv.txt) declares these
 #     statistic_type=average, sourced from logger fields (7500_Warn,
@@ -143,8 +144,6 @@ AH:
   Av: [0, 35]                   # merged: PyFluxPro's unqualified (0,30) vs IRGA (0,35) -- see note above
   Sd: [0, 10]
   Vr: [0, 100]
-
-AGC: [0, 70]
 
 CO2:                              # CO2 mole fraction (umol/mol) -- see CORRECTED note above
   Av: [350, 1500]                 # migrated from canonical_quantities.yml
