@@ -104,6 +104,9 @@ def mad_filter(
     edges) against `edge_threshold`. Uses numpy.nanmedian/nanpercentile in
     place of PyFluxPro's masked-array operations, since this pipeline
     represents missing data as NaN rather than a masked array.
+
+    Deviation from PyFluxPro: the first and last records (untestable, no
+    neighbour on one side) pass rather than being masked.
     """
     values = series.to_numpy(dtype=float)
     ref = reference.reindex(series.index).to_numpy(dtype=float)
@@ -190,4 +193,13 @@ def mad_filter(
 
     bad = cidx != 3
     bad[~np.isfinite(values)] = False  # missing handled separately by qc_pipeline
+    # The first and last records have no neighbour on one side, so the second
+    # difference can't be formed and neither stage tests them. PyFluxPro's
+    # cidx != 3 rule masks them anyway; we deliberately pass them instead --
+    # otherwise every incremental update would flag its newest record
+    # permanently. build_L2_zarr.update() holds the newest record back until
+    # its successor exists so it is tested before it is appended.
+    for edge in (0, nrecs - 1):
+        if cidx[edge] == 0:
+            bad[edge] = False
     return pd.Series(bad, index=series.index)

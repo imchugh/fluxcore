@@ -120,7 +120,10 @@ def update(
     still won't line up exactly — but it's bounded drift of the same kind the
     periodic full-rebuild reconciliation pass already exists to correct, not
     a correctness bug. Sites/variables with no mad_filter configured pay no
-    cost: lookback_days is 0 and this degenerates to a tail-only read.
+    cost: lookback_days is 0 and this degenerates to a tail-only read. When a
+    mad_filter is configured the newest L1 record is held back (not appended)
+    until its successor arrives, since the filter can't test a record with no
+    later neighbour -- the L2 store then lags L1 by one record.
 
     If the store doesn't exist yet, seeds it with a full build(). If the
     incremental path fails for any reason, falls back to a full rebuild for
@@ -175,6 +178,12 @@ def update(
         ds = qc_pipeline.apply_qc(ds, qc_config)
 
         ds = ds.sel(time=slice(tail_start, None))
+        if lookback_days > 0:
+            # The mad_filter can't test the newest record (its second
+            # difference needs a successor), and an appended record is never
+            # re-evaluated, so hold it back until the next cycle when it is
+            # no longer the last record of the QC input.
+            ds = ds.isel(time=slice(None, -1))
         if ds.sizes["time"] == 0:
             return store_path
 

@@ -102,6 +102,29 @@ class MADFilterTestCase(unittest.TestCase):
         self.assertTrue(bool(bad.iloc[spike_idx]))
         self.assertFalse(bool(bad.iloc[spike_idx - 100]))
 
+    def test_clean_series_flags_nothing_including_boundary_records(self):
+        # PyFluxPro masks the untestable first/last records (cidx != 3); we
+        # pass them so incremental updates don't flag their newest record.
+        series, reference = self._build_series(spike_size=0.0)
+        for length in (len(series), len(series) - 1, len(series) - 7):
+            bad = qc_service.mad_filter(
+                series.iloc[:length],
+                reference.iloc[:length],
+                time_step_minutes=30,
+                window_days=5,
+            )
+            self.assertFalse(bool(bad.any()), f"flagged with length {length}")
+
+    def test_spike_in_penultimate_record_is_still_flagged(self):
+        series, reference = self._build_series(
+            n=48 * 20, spike_idx=48 * 20 - 2, spike_size=1000.0
+        )
+        bad = qc_service.mad_filter(
+            series, reference, time_step_minutes=30, window_days=5
+        )
+        self.assertTrue(bool(bad.iloc[-2]))
+        self.assertFalse(bool(bad.iloc[-1]))
+
     def test_short_series_no_crash(self):
         idx = _index(2)
         series = pd.Series([1.0, 2.0], index=idx)

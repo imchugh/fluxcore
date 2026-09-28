@@ -261,7 +261,26 @@ class BuildL2ZarrTestCase(unittest.TestCase):
             "TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir
         )
         out = xr.open_zarr(store_path)
+        # The newest L1 record is held back: the MAD filter can't test a
+        # record with no successor, and an appended record is never re-tested.
+        self.assertEqual(out.sizes["time"], n + 2)
+        self.assertEqual(int(out["Ta_Av_QCFlag"].squeeze().values[-1]), 0)
+
+        # A no-op update must not append the held-back record either.
+        build_L2_zarr.update("TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir)
+        self.assertEqual(xr.open_zarr(store_path).sizes["time"], n + 2)
+
+        # Once its successor arrives, the held-back record is appended.
+        successor = _build_l1_dataset(
+            1, start=more.time.values[-1] + pd.Timedelta(minutes=30), value=10.0
+        )
+        for key in ("nc_nrecs", "time_coverage_start", "time_coverage_end"):
+            successor.attrs.pop(key, None)
+        file_io.append_zarr(ds=successor, store_path=self.l1_dir / "TestSite_L1.zarr")
+        build_L2_zarr.update("TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir)
+        out = xr.open_zarr(store_path)
         self.assertEqual(out.sizes["time"], n + 3)
+        self.assertEqual(int(out["Ta_Av_QCFlag"].squeeze().values[-1]), 0)
 
 
 if __name__ == "__main__":
