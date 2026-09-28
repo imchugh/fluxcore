@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Registry of canonical quantity metadata: units, naming, and valid range."""
+"""Registry of canonical quantity metadata: units and naming."""
 
 from dataclasses import asdict
 from functools import cache
@@ -83,9 +83,6 @@ class CanonicalQuantityRegistry:
             attrs["standard_units"] = "dimensionless"
             attrs["valid_input_units"] = ["dimensionless"]
 
-            attrs["valid_max"] = None
-            attrs["valid_min"] = None
-
             if attrs["long_name"]:
                 attrs["long_name"] = f"{attrs['long_name']} quality flag"
 
@@ -101,8 +98,6 @@ class CanonicalQuantityRegistry:
             attrs["standard_units"] = "dimensionless"
             attrs["valid_input_units"] = ["valid_count", "invalid_count"]
 
-            attrs["valid_min"] = 0
-            attrs["valid_max"] = None
             attrs["standard_name"] = None
 
             if attrs["long_name"]:
@@ -119,11 +114,6 @@ class CanonicalQuantityRegistry:
                 resolve_variance_units(units=units, to_stdev=False)
                 for units in attrs["valid_input_units"]
             ]
-
-            if base.valid_min is not None:
-                attrs["valid_min"] = 0
-            if base.valid_max is not None:
-                attrs["valid_max"] = base.valid_max**2
 
         return CanonicalQuantityMetadata(**attrs)
 

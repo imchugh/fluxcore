@@ -41,14 +41,16 @@ class ParsedVariableName:
 
 @dataclass(frozen=True, config=ConfigDict(extra="forbid"))
 class CanonicalQuantityMetadata:
-    """Registry metadata for one canonical quantity: units, naming, and valid range."""
+    """Registry metadata for one canonical quantity: units and naming.
+
+    Value ranges are deliberately not held here: configs/qc/_range_defaults.yml
+    is the single source of range limits.
+    """
 
     long_name: str
     standard_name: str | None
     standard_units: str
     valid_input_units: list[str]
-    valid_min: float | None = None
-    valid_max: float | None = None
 
 
 @dataclass(frozen=True)

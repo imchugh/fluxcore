@@ -123,6 +123,50 @@ class ValidateVariablesTestCase(unittest.TestCase):
         )
 
 
+class ResolveDefaultRangeTestCase(unittest.TestCase):
+    """resolve_default_range: the Dataset-free lookup shared with the monitors."""
+
+    def setUp(self):
+        from services.metadata.core.variable_name_parser import NameParser
+
+        self.parser = NameParser()
+        self.defaults = {
+            "Fco2": [-50, 30],
+            "Ta": {"Av": [-10, 50], "Sd": [0, 5]},
+            "Diag": {"IRGA": [0, 500], "SONIC": [0, 400]},
+        }
+
+    def _resolve(self, name, suffix=None):
+        return qc_config_schema.resolve_default_range(
+            name, suffix, self.defaults, self.parser
+        )
+
+    def test_flat_quantity(self):
+        self.assertEqual(self._resolve("Fco2"), (-50, 30))
+
+    def test_statistic_keyed_uses_suffix(self):
+        self.assertEqual(self._resolve("Ta_Av", "Av"), (-10, 50))
+        self.assertEqual(self._resolve("Ta_Sd", "Sd"), (0, 5))
+
+    def test_statistic_keyed_without_suffix_is_none(self):
+        self.assertIsNone(self._resolve("Ta_Av"))
+
+    def test_qualifier_keyed(self):
+        self.assertEqual(self._resolve("Diag_SONIC"), (0, 400))
+
+    def test_unknown_quantity_and_unparseable_name_are_none(self):
+        self.assertIsNone(self._resolve("Nope"))
+        self.assertIsNone(self._resolve("not a name"))
+
+    def test_lookup_wrapper_reads_statistic_off_dataset_attrs(self):
+        ds = _resolve_ds(["Ta_Av"])
+        ds["Ta_Av"].attrs["statistic_type"] = "average"
+        self.assertEqual(
+            qc_config_schema.lookup_default_range(ds, "Ta_Av", self.defaults, self.parser),
+            (-10, 50),
+        )
+
+
 class FlagCheckSchemaTestCase(unittest.TestCase):
     def setUp(self):
         self._tmp_dir = tempfile.TemporaryDirectory()

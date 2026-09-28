@@ -46,8 +46,6 @@ class VariableSpec:
     instrument_uri: str | dict[str, str] | None
     long_name: str
     standard_name: str | None
-    valid_min: float | None
-    valid_max: float | None
 
     # Grouping / aliasing
     alias: str
@@ -100,8 +98,6 @@ def build_variable_registry(
                     quantity=var_cfg.quantity,
                     long_name=var_cfg.canonical.long_name,
                     standard_name=var_cfg.canonical.standard_name,
-                    valid_min=var_cfg.canonical.valid_min,
-                    valid_max=var_cfg.canonical.valid_max,
                     canonical_units=canonical_units,
                     site_units=site_units,
                     statistic_type=var_cfg.statistic_type,

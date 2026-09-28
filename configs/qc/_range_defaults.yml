@@ -10,9 +10,10 @@
 #      bounds. Covers AH, CO2, Fg, Fld, Flu, Fn, Fsd, Fsu, Precip, RH,
 #      Sws, Ta, Tpanel, Ts, Tv, Ux/Uy/Uz (+Sd/Vr), the raw covariance terms
 #      (UxA..UzT), Vbat, Wd, Ws, ps.
-#   2. canonical_quantities.yml's own valid_min/valid_max fields, migrated
-#      here in full -- that file is now quantity identity/units only, with
-#      no range data of its own (see project memory l2-qc-pipeline.md).
+#   2. canonical_quantities.yml's old valid_min/valid_max fields, migrated
+#      here in full and since REMOVED from that file, which is now quantity
+#      identity/units only -- this file is the single source of value ranges
+#      (L2 QC, the legacy TOA5/RTMC export and the site monitors all read it).
 #      Covers every other entry below. These were never statistic-specific
 #      (canonical_quantities.yml had no such treatment), so they're filed
 #      as a single flat [min, max] per quantity regardless of statistic.

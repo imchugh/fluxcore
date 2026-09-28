@@ -276,24 +276,27 @@ def load_dependency_defaults(
     return dict(validate_qc_config_structure(file_path).root)
 
 
-def lookup_default_range(
-    ds: xr.Dataset,
+def resolve_default_range(
     var_name: str,
+    statistic_suffix: str | None,
     range_defaults: dict,
     name_parser: NameParser,
 ) -> tuple[float, float] | None:
     """Resolve var_name's default [min, max] from range_defaults, or None.
 
-    quantity and qualifier come from parsing var_name itself; statistic
-    comes from ds[var_name].attrs["statistic_type"] (the authoritative
-    source — required for every continuous variable by site_config_schema,
-    not something to re-derive from the name, which fails on several real
-    canonical names). Returns None (no default, pass through) wherever the
+    _range_defaults.yml is the single source of value ranges. quantity and
+    qualifier come from parsing var_name itself; statistic_suffix (Av / Sd /
+    Vr ..., see StatisticType.suffix) is supplied by the caller from the
+    variable's statistic_type -- the authoritative source, not something to
+    re-derive from the name, which fails on several real canonical names.
+    Lookup order: flat [min, max] for the quantity, then qualifier, then
+    statistic suffix. Returns None (no default, pass through) wherever the
     name doesn't parse, the quantity has no entry, or the entry is a dict
     with no matching qualifier or statistic key.
 
-    Public (used by resolve_qc_config's default-fallback and
-    orchestration.legacy_rtmc_export's range-limiting step).
+    Public: used by lookup_default_range, orchestration.legacy_rtmc_export
+    and the site monitors (services.data.data_monitor,
+    orchestration.legacy_network_status).
     """
     try:
         parsed = name_parser.parse_variable_name(var_name)
@@ -309,13 +312,24 @@ def lookup_default_range(
     if parsed.qualifier is not None and parsed.qualifier in entry:
         return tuple(entry[parsed.qualifier])
 
-    statistic_attr = ds[var_name].attrs.get("statistic_type")
-    if statistic_attr is not None:
-        statistic_suffix = StatisticType(statistic_attr).suffix
-        if statistic_suffix in entry:
-            return tuple(entry[statistic_suffix])
+    if statistic_suffix is not None and statistic_suffix in entry:
+        return tuple(entry[statistic_suffix])
 
     return None
+
+
+def lookup_default_range(
+    ds: xr.Dataset,
+    var_name: str,
+    range_defaults: dict,
+    name_parser: NameParser,
+) -> tuple[float, float] | None:
+    """resolve_default_range for a variable in ds, statistic read off its attrs."""
+    statistic_attr = ds[var_name].attrs.get("statistic_type")
+    statistic_suffix = (
+        StatisticType(statistic_attr).suffix if statistic_attr is not None else None
+    )
+    return resolve_default_range(var_name, statistic_suffix, range_defaults, name_parser)
 
 
 def resolve_qc_config(

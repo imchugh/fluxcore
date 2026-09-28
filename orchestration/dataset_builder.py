@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import pandas as pd
 import xarray as xr
 
-from domain.enums import StatisticType, VariableType
+from domain.enums import StatisticType
 from orchestration.dataframe_builder import build_dataframe
 from services.metadata.core import file_group_builder
 from services.metadata.core.variable_registry import (
@@ -185,7 +185,7 @@ def _build_result(
         time_step=ctx.metadata.time_step,
     )
 
-    var_attrs = _build_var_attrs(registry=registry, n_samples=ctx.metadata.n_samples)
+    var_attrs = _build_var_attrs(registry=registry)
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
@@ -193,27 +193,14 @@ def _build_result(
 # Variable attribute construction
 
 
-def _build_var_attrs(
-    registry: dict[str, VariableSpec],
-    n_samples: int | None = None,
-) -> dict[str, dict]:
-    """Build per-variable xarray attribute dicts keyed by canonical output name.
-
-    n_samples (expected samples per averaging period, from site time_step and
-    freq_hz) fills valid_max for COUNTER variables (diagnostics/sample
-    counts), whose upper bound is site-specific and not known to the generic
-    canonical quantity registry.
-    """
+def _build_var_attrs(registry: dict[str, VariableSpec]) -> dict[str, dict]:
+    """Build per-variable xarray attribute dicts keyed by canonical output name."""
     rslt = {}
 
     canonical_groups = group_by_canonical_name(registry)
 
     for _, var_specs in canonical_groups.items():
         main_spec = var_specs[-1]
-
-        valid_max = main_spec.valid_max
-        if valid_max is None and main_spec.variable_type == VariableType.COUNTER:
-            valid_max = n_samples
 
         attrs = {
             "height": main_spec.height,
@@ -224,8 +211,6 @@ def _build_var_attrs(
             "long_name": main_spec.long_name,
             "quantity": main_spec.quantity,
             "standard_name": main_spec.standard_name,
-            "valid_min": main_spec.valid_min,
-            "valid_max": valid_max,
             "statistic_type": _output_statistic(main_spec),
             "units": main_spec.canonical_units,
         }
