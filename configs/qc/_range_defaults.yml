@@ -142,9 +142,9 @@
 #     ever revisited.
 
 AH:
-  Av: [0, 35]                   # merged: PyFluxPro's unqualified (0,30) vs IRGA (0,35) -- see note above
-  Sd: [0, 10]
-  Vr: [0, 100]
+  Av: [0, 30]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,35) merged bound
+  Sd: [0, 2]                    # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,10)
+  Vr: [0, 4]                    # = Sd max squared
 
 CO2:                              # CO2 mole fraction (umol/mol) -- see CORRECTED note above
   Av: [350, 1500]                 # migrated from canonical_quantities.yml
@@ -153,8 +153,8 @@ CO2:                              # CO2 mole fraction (umol/mol) -- see CORRECTE
 
 CO2c:                             # CO2 mass concentration (mg/m^3) -- see CORRECTED note above
   Av: [500, 2000]
-  Sd: [0, 50]
-  Vr: [0, 2500]
+  Sd: [0, 25]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,50)
+  Vr: [0, 625]                  # = Sd max squared
 
 Diag:
   IRGA: [0, 500]                 # invalid-sample-count masking bound (user choice); NOT normalized
@@ -165,12 +165,12 @@ ER: [0, 30]                       # migrated from canonical_quantities.yml
 
 FAPAR: [0, 1]                     # migrated from canonical_quantities.yml
 Fa: [-300, 1000]                  # migrated from canonical_quantities.yml
-Fco2: [-50, 30]                   # migrated from canonical_quantities.yml
-Fe: [-200, 1000]                  # migrated from canonical_quantities.yml
+Fco2: [-50, 50]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (-50,30)
+Fe: [-100, 600]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (-200,1000)
 Fg: [-100, 150]                   # Fg_<depth>cm[a|b|c]
-Fh: [-200, 1000]                  # migrated from canonical_quantities.yml
-Fld: [250, 700]
-Flu: [300, 700]
+Fh: [-100, 600]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (-200,1000)
+Fld: [200, 700]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (250,700)
+Flu: [200, 700]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (300,700)
 Fn: [-100, 1000]                  # see FLAGGED note above
 Fsd: [-10, 1500]
 FsdDiff: [-20, 1412]              # migrated from canonical_quantities.yml -- see FLAGGED note above
@@ -191,11 +191,17 @@ RHint: [0, 100]                   # migrated from canonical_quantities.yml
 Rhoa: [0.4, 1.4]                  # migrated from canonical_quantities.yml
 Rhod: [0.6, 1.6]                  # migrated from canonical_quantities.yml
 
-Sig: [0, 102.5]                   # migrated from canonical_quantities.yml
-SigCO2: [0, 102.5]                # migrated from canonical_quantities.yml
-SigH2O: [0, 102.5]                # migrated from canonical_quantities.yml
+Sig: [80, 102.5]                  # signal strength (Sig/SigCO2/SigH2O) moves in 6.25 steps (..., 68.75, 75, 81.25, ...).
+SigCO2: [80, 102.5]               # 2026-09-28 audit: the ~75 level is noisy at every site (CO2c_Sd 2-8x healthy;
+SigH2O: [80, 102.5]               # Fco2 out of [-40,20] 14% for LI-7500, 2-40% for EC-family), so all three drop it
+SVP: [0.25, 12.5]                 # kPa. Saturation VP over Ta [-10, 50] (Tetens): 0.29 to 12.35. No default before 2026-09-28,
+VP: [0, 12.5]                     # so Wellington's logger garbage (6,025 records) passed L2. VP can't exceed saturation VP.
 Swp: [-10000, 0]                  # migrated from canonical_quantities.yml
-Sws: [0.001, 0.5]                 # Sws_<depth>cm[a|b|c] -- lower bound raised from
+Sws: [0.001, 1.0]                 # Sws_<depth>cm[a|b|c] -- upper bound is the PHYSICAL ceiling (1 = free water); it was
+                                   # 0.5 ('typical mineral soil'), which flags real organic/peat soils (0.7-0.94) and
+                                   # clay (0.5-0.6). 17 identical [0.001, 1.0] site overrides were folded in here
+                                   # (2026-09-28 audit). Catches logger fill values (9999999, or averages containing them).
+                                   # Lower bound raised from
                                    # PyFluxPro's 0: a reading of exactly 0.0 is
                                    # typically a stuck/disconnected sensor, not
                                    # real soil moisture (residual bound water
@@ -216,23 +222,23 @@ Tstar: [-50, 50]                  # migrated from canonical_quantities.yml
 
 Tv:
   Av: [-10, 50]
-  Sd: [0, 2.236]                 # derived: sqrt(Vr max) = sqrt(5)
-  Vr: [0, 5]
+  Sd: [0, 3]                     # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,2.236)
+  Vr: [0, 9]                     # = Sd max squared
 
 Ux:
   Av: [-20, 20]
-  Sd: [0, 3.162]                 # derived: sqrt(Vr max) = sqrt(10)
-  Vr: [0, 10]                    # corrected from source, see note above
+  Sd: [0, 3]                     # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,3.162)
+  Vr: [0, 9]                     # = Sd max squared
 
 Uy:
   Av: [-20, 20]
-  Sd: [0, 3.162]                 # derived: sqrt(Vr max) = sqrt(10)
-  Vr: [0, 10]                    # corrected from source, see note above
+  Sd: [0, 3]                     # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,3.162)
+  Vr: [0, 9]                     # = Sd max squared
 
 Uz:
   Av: [-1, 1]
-  Sd: [0, 1.414]                 # derived: sqrt(Vr max) = sqrt(2)
-  Vr: [0, 2]                     # corrected from source, see note above
+  Sd: [0, 1.5]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,1.414)
+  Vr: [0, 2.25]                  # = Sd max squared
 
 UxA: [-1, 1]
 UxC: [-4, 4]
@@ -253,6 +259,7 @@ Vbat: [0, 15]
 
 Wd:
   Av: [0, 360]
+  Sd: [0, 360]                   # same at all 15 overrides, none ever fires (2026-09-28 audit)
 
 Ws:
   Av: [0, 20]
