@@ -158,6 +158,33 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
         self.assertIsNone(self._resolve("Nope"))
         self.assertIsNone(self._resolve("not a name"))
 
+    def test_station_pressure_default_follows_elevation(self):
+        defaults = {"ps": {"standard_pressure_pm": 10}}
+        sea = qc_config_schema.resolve_default_range("ps", None, defaults, self.parser, elevation=0)
+        self.assertAlmostEqual(sea[0], 91.325, places=3)
+        self.assertAlmostEqual(sea[1], 111.325, places=3)
+        high = qc_config_schema.resolve_default_range("ps", None, defaults, self.parser, elevation=1650)
+        # ISA pressure at 1650 m is 83.0 kPa
+        self.assertAlmostEqual((high[0] + high[1]) / 2, 83.0, delta=0.1)
+        self.assertAlmostEqual(high[1] - high[0], 20.0)
+
+    def test_station_pressure_default_needs_an_elevation(self):
+        defaults = {"ps": {"standard_pressure_pm": 10}}
+        self.assertIsNone(qc_config_schema.resolve_default_range("ps", None, defaults, self.parser))
+
+    def test_lookup_wrapper_reads_elevation_off_dataset_attrs(self):
+        defaults = {"ps": {"standard_pressure_pm": 10}}
+        ds = _resolve_ds(["ps"])
+        ds.attrs["elevation"] = 1650.0
+        lo, hi = qc_config_schema.lookup_default_range(ds, "ps", defaults, self.parser)
+        self.assertAlmostEqual((lo + hi) / 2, 83.0, delta=0.1)
+        del ds.attrs["elevation"]
+        self.assertIsNone(qc_config_schema.lookup_default_range(ds, "ps", defaults, self.parser))
+
+    def test_real_ps_default_is_elevation_derived(self):
+        real = qc_config_schema.load_range_defaults()
+        self.assertEqual(real["ps"], {"standard_pressure_pm": 10})
+
     def test_lookup_wrapper_reads_statistic_off_dataset_attrs(self):
         ds = _resolve_ds(["Ta_Av"])
         ds["Ta_Av"].attrs["statistic_type"] = "average"
@@ -407,6 +434,33 @@ class ResolveQCConfigTestCase(unittest.TestCase):
         self.assertEqual(merged.variables["Fco2"].flag_check.reject, [8.0, 9.0])
         self.assertEqual(merged.variables["Fco2"].range_check.lower, -50)
         self.assertNotIn("Fco2_QC", merged.variables)
+
+    def test_site_range_still_overrides_elevation_derived_default(self):
+        ds = _resolve_ds(["ps"])
+        ds.attrs["elevation"] = 1650.0
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test",
+            variables={
+                "ps": qc_config_schema.VariableQCSpec(
+                    range_check=qc_config_schema.RangeCheckSpec(lower=60, upper=70)
+                ),
+            },
+        )
+        merged = qc_config_schema.resolve_qc_config(
+            site_config, {}, {"ps": {"standard_pressure_pm": 10}}, ds
+        )
+        self.assertEqual(merged.variables["ps"].range_check.lower, 60)
+
+    def test_elevation_derived_default_applies_when_site_is_silent(self):
+        ds = _resolve_ds(["ps"])
+        ds.attrs["elevation"] = 1650.0
+        merged = qc_config_schema.resolve_qc_config(
+            qc_config_schema.SiteQCConfig(site_name="Test", variables={}),
+            {},
+            {"ps": {"standard_pressure_pm": 10}},
+            ds,
+        )
+        self.assertAlmostEqual(merged.variables["ps"].range_check.lower, 73.0, delta=0.1)
 
     def test_untouched_variable_omitted_from_result(self):
         ds = _resolve_ds(["SomeRandomVar"])

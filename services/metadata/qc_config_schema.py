@@ -276,11 +276,17 @@ def load_dependency_defaults(
     return dict(validate_qc_config_structure(file_path).root)
 
 
+def standard_pressure_kpa(elevation_m: float) -> float:
+    """Standard-atmosphere (ISA) pressure in kPa at an elevation in metres."""
+    return 101.325 * (1 - 2.25577e-5 * elevation_m) ** 5.25588
+
+
 def resolve_default_range(
     var_name: str,
     statistic_suffix: str | None,
     range_defaults: dict,
     name_parser: NameParser,
+    elevation: float | None = None,
 ) -> tuple[float, float] | None:
     """Resolve var_name's default [min, max] from range_defaults, or None.
 
@@ -290,9 +296,14 @@ def resolve_default_range(
     variable's statistic_type -- the authoritative source, not something to
     re-derive from the name, which fails on several real canonical names.
     Lookup order: flat [min, max] for the quantity, then qualifier, then
-    statistic suffix. Returns None (no default, pass through) wherever the
-    name doesn't parse, the quantity has no entry, or the entry is a dict
-    with no matching qualifier or statistic key.
+    statistic suffix. A dict entry with a `standard_pressure_pm` key (station
+    pressure, kPa) resolves to standard-atmosphere pressure at `elevation`
+    (metres, the L1 store's own ds.attrs["elevation"]) plus/minus that
+    half-width, so the bound follows the site rather than needing a
+    hand-computed override per site; without an elevation it resolves to None.
+    Returns None (no default, pass through) wherever the name doesn't parse,
+    the quantity has no entry, or the entry is a dict with no matching
+    qualifier or statistic key.
 
     Public: used by lookup_default_range, orchestration.legacy_rtmc_export
     and the site monitors (services.data.data_monitor,
@@ -309,6 +320,12 @@ def resolve_default_range(
     if isinstance(entry, list):
         return tuple(entry)
 
+    if "standard_pressure_pm" in entry:
+        if elevation is None:
+            return None
+        centre = standard_pressure_kpa(elevation)
+        return (centre - entry["standard_pressure_pm"], centre + entry["standard_pressure_pm"])
+
     if parsed.qualifier is not None and parsed.qualifier in entry:
         return tuple(entry[parsed.qualifier])
 
@@ -324,12 +341,23 @@ def lookup_default_range(
     range_defaults: dict,
     name_parser: NameParser,
 ) -> tuple[float, float] | None:
-    """resolve_default_range for a variable in ds, statistic read off its attrs."""
+    """resolve_default_range for a variable in ds.
+
+    The statistic is read off the variable's attrs and the elevation off the
+    dataset's global attrs.
+    """
     statistic_attr = ds[var_name].attrs.get("statistic_type")
     statistic_suffix = (
         StatisticType(statistic_attr).suffix if statistic_attr is not None else None
     )
-    return resolve_default_range(var_name, statistic_suffix, range_defaults, name_parser)
+    elevation = ds.attrs.get("elevation")
+    return resolve_default_range(
+        var_name,
+        statistic_suffix,
+        range_defaults,
+        name_parser,
+        elevation=float(elevation) if elevation is not None else None,
+    )
 
 
 def resolve_qc_config(

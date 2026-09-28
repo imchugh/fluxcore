@@ -28,6 +28,10 @@
 #     quantity (e.g. Fld, Ta, UxA).
 #   - Quantity whose bounds vary by statistic -> nest one level, keyed by
 #     the StatisticType suffix (Av / Sd / Vr / ...).
+#   - Site-dependent bound (ps only): a dict with `standard_pressure_pm: N` resolves
+#     to standard-atmosphere pressure at ds.attrs["elevation"] +/- N kPa
+#     (services.metadata.qc_config_schema.standard_pressure_kpa); no elevation,
+#     no default.
 #   - Quantity keyed by INSTRUMENT QUALIFIER instead of statistic (Diag
 #     only -- see note below): nest one level under the qualifier
 #     (IRGA / SONIC), read off the variable name via NameParser (there is
@@ -265,7 +269,10 @@ Ws:
   Av: [0, 20]
 
 pitch: [0, 90]                    # migrated from canonical_quantities.yml
-ps: [95, 105]
+ps:                               # station pressure (kPa): standard-atmosphere pressure at the site's elevation
+  standard_pressure_pm: 10        # +/- 10 kPa. Elevation is the L1 store's own ds.attrs["elevation"]; no elevation -> no
+                                  # default. Replaces 15 hand-computed per-site overrides (2026-09-28 audit) and the old flat
+                                  # [95, 105], which assumed near-sea-level and flagged 34-100% at 11 sites above ~500 m.
 
 roll: [0, 90]                     # migrated from canonical_quantities.yml
 
