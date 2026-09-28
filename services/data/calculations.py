@@ -88,10 +88,16 @@ def calculate_molar_density(ps: ArrayLike, Ta: ArrayLike) -> ArrayLike:
 
 @register_calculation("Td")
 def calculate_dew_point(Ta: ArrayLike, RH: ArrayLike) -> ArrayLike:
-    """Dew point temperature (degC) from air temperature (degC) and RH (percent)."""
+    """Dew point temperature (degC) from air temperature (degC) and RH (percent).
+
+    Inverts the Buck (1981) form es = 0.61121 exp(17.502 T / (240.97 + T)),
+    which reproduces calculate_es (Buck 1996) to within 0.01 K over -10 to
+    40 degC, so the dew point equals air temperature at RH = 100. (It was
+    previously paired with Bolton's 243.5, which overshot by up to 0.4 K.)
+    """
     e = calculate_e(Ta=Ta, RH=RH)
     ln_ratio = np.log(e / 0.61121)
-    return (243.5 * ln_ratio) / (17.502 - ln_ratio)
+    return (240.97 * ln_ratio) / (17.502 - ln_ratio)
 
 
 def standard_pressure_kpa(elevation_m: float) -> float:

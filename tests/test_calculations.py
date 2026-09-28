@@ -12,14 +12,13 @@ class CalculationsTestCase(unittest.TestCase):
         # Buck (1996): es(20 degC) = 2.339 kPa
         self.assertAlmostEqual(float(calculations.calculate_es(np.array(20.0))), 2.339, places=2)
 
-    def test_dew_point_is_close_to_air_temperature_at_saturation(self):
-        # KNOWN DISCREPANCY: calculate_dew_point pairs Bolton's 243.5 constant
-        # with the 17.502 coefficient while calculate_es uses Buck (1996), so
-        # Td overshoots Ta slightly at RH = 100. Behaviour preserved verbatim
-        # from the pre-split transform_service; hence the loose tolerance.
-        ta = np.array([-5.0, 10.0, 30.0])
-        dew = calculations.calculate_dew_point(Ta=ta, RH=np.full(3, 100.0))
-        np.testing.assert_allclose(dew, ta, atol=0.5)
+    def test_dew_point_equals_air_temperature_at_saturation(self):
+        # Regression guard: the dew point must invert the same saturation
+        # curve calculate_es uses (a mismatched constant once made Td overshoot
+        # Ta by up to 0.4 K at RH = 100).
+        ta = np.array([-10.0, -5.0, 0.0, 10.0, 20.0, 30.0, 40.0])
+        dew = calculations.calculate_dew_point(Ta=ta, RH=np.full(7, 100.0))
+        np.testing.assert_allclose(dew, ta, atol=0.02)
 
     def test_dew_point_is_below_air_temperature_when_unsaturated_and_rises_with_rh(self):
         ta = np.full(4, 20.0)
