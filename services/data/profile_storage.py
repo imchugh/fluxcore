@@ -12,7 +12,7 @@ import numpy as np
 import xarray as xr
 
 from domain.constants import CO2_MOL_MASS, TIME_INDEX_NAME
-from services.data.transform_service import calculate_molar_density
+from services.data.calculations import calculate_molar_density
 
 TIME_DIM = TIME_INDEX_NAME
 HEIGHT_DIM = "height"

@@ -18,7 +18,7 @@ import pandas as pd
 
 from domain.enums import DiagnosticType, StatisticType, VariableType
 from infrastructure.data_conditioning import condition_dataframe
-from services.data import raw_data_loader, transform_service
+from services.data import raw_data_loader, unit_conversions
 from services.metadata.core.canonical_quantity_registry import resolve_variance_units
 from services.metadata.core.file_group_builder import FileGroup, build_file_groups
 from services.metadata.core.variable_registry import (
@@ -244,7 +244,7 @@ def _apply_conversions(
     differ from canonical stdev-form units.
 
     For counter variables: output is always invalid_count (0 = no error).
-    Sites storing valid_count are converted via transform_service; sites
+    Sites storing valid_count are converted via unit_conversions; sites
     already storing invalid_count pass through unchanged. diag_type on the
     VariableSpec determines which path is taken.
 
@@ -271,7 +271,7 @@ def _apply_conversions(
                         f"'valid_count' but n_samples is not available. "
                         f"Ensure site metadata includes time_step and freq_hz."
                     )
-                converter = transform_service.get_unit_conversion("Diag")
+                converter = unit_conversions.get_unit_conversion("Diag")
                 try:
                     result = converter(
                         data=df[variable],
@@ -287,7 +287,7 @@ def _apply_conversions(
             continue
 
         if from_units != spec.canonical_units:
-            converter = transform_service.get_unit_conversion(spec.quantity)
+            converter = unit_conversions.get_unit_conversion(spec.quantity)
             try:
                 result = converter(data=df[variable], from_units=from_units)
             except Exception as e:

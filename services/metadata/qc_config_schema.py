@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, RootModel, field_validator, model_va
 from domain.enums import StatisticType
 from infrastructure import paths
 from infrastructure.file_io import read_yml
+from services.data.calculations import standard_pressure_kpa
 from services.metadata.core.variable_name_parser import (
     NameParser,
     VariableNameParseError,
@@ -274,11 +275,6 @@ def load_dependency_defaults(
         return {}
 
     return dict(validate_qc_config_structure(file_path).root)
-
-
-def standard_pressure_kpa(elevation_m: float) -> float:
-    """Standard-atmosphere (ISA) pressure in kPa at an elevation in metres."""
-    return 101.325 * (1 - 2.25577e-5 * elevation_m) ** 5.25588
 
 
 def resolve_default_range(

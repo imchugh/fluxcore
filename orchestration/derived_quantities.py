@@ -29,7 +29,7 @@ import xarray as xr
 from domain.enums import StatisticType
 from infrastructure import datetime_utils
 from orchestration.dataset_builder import DatasetBuildIntermediate
-from services.data.transform_service import get_calculation
+from services.data.calculations import get_calculation
 from services.metadata.core.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
