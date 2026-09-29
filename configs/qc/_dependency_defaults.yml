@@ -72,6 +72,14 @@ Ws_SONIC_Sd: {dependency_check: [Diag_SONIC]}
 # whichever exist at a given site, reproducing PyFluxPro's own
 # multi-candidate probing without per-site code.
 #
+# H2O_IRGA_Sd (listed as a dependency source below, and H2O_IRGA_Av as a
+# dependent variable) is 0/29 in the network (2026-09-29 audit) -- sites use
+# AH_IRGA instead, deliberately, so this leg of every dependency_check below
+# is permanently inert via existence-gating. Left in rather than stripped
+# out: harmless (Diag_IRGA/CO2c_IRGA_Sd/Sig_IRGA family already cover it),
+# and removing it would just be code-golf against a list that mirrors
+# PyFluxPro's own do_IRGAcheck candidate set.
+#
 # UzA/UxA/UyA/UzC/UxC/UyC are wind x concentration covariances -- genuine
 # dependents of BOTH the SONIC and IRGA checks (need a good sonic AND a
 # good IRGA), so their dependency_check here is the union of both groups'
