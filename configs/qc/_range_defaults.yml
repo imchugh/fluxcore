@@ -267,6 +267,9 @@ Wd:
 
 Ws:
   Av: [0, 20]
+  Sd: [0, 20]                     # lower bound is the real backstop -- Diag_SONIC dependency_check
+                                   # (_dependency_defaults.yml) now catches the diagnostic-driven spikes
+                                   # this bound barely touched (2026-09-29 audit: 10/15340 at Fletcherview)
 
 pitch: [0, 90]                    # migrated from canonical_quantities.yml
 ps:                               # station pressure (kPa): standard-atmosphere pressure at the site's elevation

@@ -49,6 +49,15 @@ V_SONIC_Av: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd]}
 V_SONIC_Sd: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd]}
 W_SONIC_Av: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd]}
 W_SONIC_Sd: {dependency_check: [Diag_SONIC, Uz_SONIC_Sd, Tv_SONIC_Sd]}
+# Ws/Wd deliberately depend on Diag_SONIC alone, not the full Group A trio:
+# unlike Ux/Uy/Uz/Tv/U (all derived from the same raw covariance stream, so
+# co-missing with Uz_SONIC_Sd/Tv_SONIC_Sd costs nothing extra), Ws_SONIC is
+# computed independently and stayed present through a 2022 logger-output gap
+# where Uz_SONIC_Sd/Tv_SONIC_Sd went missing fleet-wide at some sites --
+# using the full trio wrongly flagged ~11.5k genuinely fine 2022 Fletcherview
+# records as bad via that unrelated missingness (2026-09-29 audit).
+Ws_SONIC_Av: {dependency_check: [Diag_SONIC]}
+Ws_SONIC_Sd: {dependency_check: [Diag_SONIC]}
 
 # --- Group B: IRGA-implicit dependency check (ported from PyFluxPro's
 # do_IRGAcheck/do_li7500check/do_EC155check, pfp_ck.py -- same "implicit
