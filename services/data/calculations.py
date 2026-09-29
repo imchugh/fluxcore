@@ -80,6 +80,22 @@ def calculate_vpd(Ta: ArrayLike, RH: ArrayLike) -> ArrayLike:
     return es - e
 
 
+@register_calculation("Fn")
+def calculate_net_radiation(
+    Fsd: ArrayLike, Fsu: ArrayLike, Fld: ArrayLike, Flu: ArrayLike
+) -> ArrayLike:
+    """Net radiation (W/m^2) from the four downwelling/upwelling shortwave/longwave components.
+
+    Always used in preference to any raw on-logger Fn: a network-wide audit
+    (2026-09-29) found a site's own logger-computed Fn is either exactly this
+    sum (same instrument, redundant) or a genuinely different secondary
+    "NR Lite"-family net radiometer that disagrees by hundreds of W/m^2 --
+    deliberately no longer imported (see orchestration/derived_quantities.py's
+    add_net_radiation).
+    """
+    return Fsd - Fsu + Fld - Flu
+
+
 @register_calculation("rho_mol")
 def calculate_molar_density(ps: ArrayLike, Ta: ArrayLike) -> ArrayLike:
     """Molar density (mol/m^3) from air pressure (kPa) and air temperature (degC)."""

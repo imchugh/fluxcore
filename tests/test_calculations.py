@@ -47,8 +47,17 @@ class CalculationsTestCase(unittest.TestCase):
         self.assertAlmostEqual(calculations.standard_pressure_kpa(0), 101.325, places=3)
         self.assertAlmostEqual(calculations.standard_pressure_kpa(1650), 83.0, delta=0.1)
 
+    def test_net_radiation_is_shortwave_plus_longwave_balance(self):
+        # CumberlandPlain, 2026-09-29 audit: on-logger Rn_Avg matched this sum
+        # to within 0.00 W/m^2 wherever both existed.
+        fsd, fsu, fld, flu = np.array(500.0), np.array(80.0), np.array(350.0), np.array(420.0)
+        self.assertAlmostEqual(
+            float(calculations.calculate_net_radiation(Fsd=fsd, Fsu=fsu, Fld=fld, Flu=flu)),
+            350.0,
+        )
+
     def test_registry_lookups(self):
-        for quantity in ("AH", "RH", "es", "CO2", "e", "VPD", "rho_mol", "Td"):
+        for quantity in ("AH", "RH", "es", "CO2", "e", "VPD", "rho_mol", "Td", "Fn"):
             self.assertIsNotNone(calculations.get_calculation(quantity), quantity)
         self.assertIsNone(calculations.get_calculation("NotAQuantity"))
         # unregistered helper: its input is site elevation, not a canonical quantity

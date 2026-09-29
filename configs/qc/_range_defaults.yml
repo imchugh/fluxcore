@@ -106,12 +106,13 @@
 #     fraction) now has its own evidence-based bounds instead.
 #
 # FLAGGED FOR REVIEW before this is wired into the pipeline:
-#   - Fn: PyFluxPro's entry is actually "Fn_NR" (a qualified variable, "NR"
-#     net radiometer) which doesn't parse under this pipeline's NameParser
-#     (NR isn't a recognised instrument qualifier) and doesn't match any
-#     canonical name in current site configs (real names are Fn, Fn_2,
-#     Fn_RAD). Filed under bare "Fn" here as the closest equivalent --
-#     confirm this is the intended target before relying on it.
+#   - Fn: RESOLVED 2026-09-29. Fn is now always calculated at L1 from
+#     Fsd - Fsu + Fld - Flu (orchestration/derived_quantities.add_net_radiation)
+#     and never imported -- an audit found a site's own raw Fn/Fn_2/Fn_RAD was
+#     either exactly this same sum (redundant) or a disagreeing secondary
+#     "NR Lite"-family instrument (dropped by decision). This bound now
+#     applies to the calculated quantity like any other L1 variable; no
+#     further action needed here.
 #   - Fg: no site currently has an Fg_* variable in
 #     /opt/TERN_EP/site_configs/operational/, so this entry is currently
 #     unused, kept for completeness/future sites.

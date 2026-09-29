@@ -104,6 +104,9 @@ def _apply_padding(
     # Lazy import to avoid circular dependency (derived_quantities imports
     # DatasetBuildIntermediate from this module)
     from orchestration.derived_quantities import (
+        add_net_radiation as _add_net_radiation,
+    )
+    from orchestration.derived_quantities import (
         pad_co2 as _pad_co2,
     )
     from orchestration.derived_quantities import (
@@ -114,6 +117,8 @@ def _apply_padding(
         result = _pad_humidity(result)
     if pad_co2:
         result = _pad_co2(result)
+    # Always calculated, never gated -- see add_net_radiation's docstring.
+    result = _add_net_radiation(result)
     return result
 
 
