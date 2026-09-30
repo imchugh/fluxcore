@@ -765,11 +765,16 @@ def append_zarr(*, ds: xr.Dataset, store_path: Path) -> None:
     should catch this ValueError (or the pre-existing to_zarr failure modes
     this doesn't change) and fall back to a full rebuild via `write_zarr`.
 
-    `ds.attrs` are not applied to the store by `to_zarr(mode="a")`, so they
-    are written explicitly onto the root group afterward — this is how
-    callers refresh whole-history attrs (record count, time coverage,
-    instrument history) that must reflect the combined store, not just the
-    newly appended slice.
+    `to_zarr(mode="a", append_dim=...)` replaces the store's root attrs
+    wholesale with `ds.attrs` as part of the append (it does not merge),
+    so any attr the caller didn't put on `ds` — anything not recomputed on
+    every tail build, e.g. a `config_hash` stamped only at full-rebuild
+    time — would otherwise be silently dropped on the very next incremental
+    update. The store's pre-append attrs are read first and merged with
+    `ds.attrs` (which wins per-key) when writing the root group's attrs
+    back afterward, so callers only need to supply the keys they want to
+    refresh (record count, time coverage, instrument history); anything
+    else already on the store persists untouched.
 
     Args:
         ds: Tail-slice dataset to append along the existing `time` dim.
@@ -781,7 +786,9 @@ def append_zarr(*, ds: xr.Dataset, store_path: Path) -> None:
     """
     store_path = Path(store_path)
 
-    existing_vars = set(xr.open_zarr(store_path).data_vars)
+    existing_ds = xr.open_zarr(store_path)
+    existing_vars = set(existing_ds.data_vars)
+    existing_attrs = dict(existing_ds.attrs)
     new_vars = set(ds.data_vars)
     if new_vars != existing_vars:
         raise ValueError(
@@ -793,7 +800,12 @@ def append_zarr(*, ds: xr.Dataset, store_path: Path) -> None:
     ds.to_zarr(store_path, mode="a", append_dim="time")
 
     group = zarr.open_group(str(store_path), mode="a")
-    group.attrs.update(ds.attrs)
+    group.attrs.update({**existing_attrs, **ds.attrs})
+    # to_zarr writes a consolidated .zmetadata cache that xr.open_zarr reads
+    # from by default; the attrs.update() above only touches the plain
+    # .zattrs file, so without re-consolidating here, every reader would
+    # keep seeing to_zarr's wholesale-replaced (pre-merge) attrs.
+    zarr.consolidate_metadata(str(store_path))
 
     _chmod_tree(store_path, file_mode=0o640, dir_mode=0o750)
 

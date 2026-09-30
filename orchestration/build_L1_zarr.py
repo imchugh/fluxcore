@@ -34,6 +34,7 @@ import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT
 from infrastructure import file_io, paths
+from orchestration import incremental_zarr
 from orchestration.build_L1_nc import (
     assign_crs_variable,
     assign_L1_global_generic_attrs,
@@ -57,13 +58,6 @@ def _resolve_store_path(
     return pathlib.Path(output_dir) / f"{site_name}_L1.zarr"
 
 
-def _last_store_timestamp(store_path: pathlib.Path) -> pd.Timestamp | None:
-    """Return the store's last timestamp, or None if the store doesn't exist yet."""
-    if not store_path.exists():
-        return None
-    return pd.Timestamp(xr.open_zarr(store_path)["time"].values[-1])
-
-
 def build(
     site_name: str,
     output_dir: pathlib.Path | str | None = None,
@@ -76,6 +70,10 @@ def build(
     dataset from scratch, and overwrites the store in full. Used to seed a
     new store and for the periodic full-rebuild reconciliation pass — see
     `update()` for the cheap incremental path used on the 30-min cadence.
+    Stamps the store with a hash of the site's assembled runtime config
+    (see `incremental_zarr.hash_config`), which `update()` checks on every
+    cycle to detect config changes that would otherwise leave already-
+    stored history silently stale.
 
     Args:
         site_name: registered site name.
@@ -90,6 +88,7 @@ def build(
         Path to the Zarr store written.
     """
     store_path = _resolve_store_path(site_name, output_dir)
+    runtime_cfg = site_runner.get_runtime_config(site_name, legacy=legacy)
 
     start_date = pd.Timestamp(year, 1, 1) if year is not None else None
     ds = site_runner.build_dataset_from_site_name(
@@ -97,6 +96,7 @@ def build(
     )
     ds = build_L1_ds_complete(ds)
     ds = build_L1_ds_full(ds)
+    ds.attrs["config_hash"] = incremental_zarr.hash_config(runtime_cfg)
 
     file_io.write_zarr(ds=ds, store_path=store_path)
 
@@ -116,16 +116,22 @@ def update(
     regardless of total site history length, unlike `build()`. Appends just
     that tail slice rather than rewriting the whole store.
 
-    If the store doesn't exist yet, seeds it with a full `build()`. If the
-    incremental path fails for any reason — most notably a site-config
-    change that added or removed a variable, so the tail's schema no longer
-    matches the store's, or a store that's already internally inconsistent
-    (e.g. a prior cycle appended some variables but not others) — falls
-    back to a full rebuild for this cycle rather than leaving the store
-    stale or raising. This mirrors `raw_data_loader.load_raw_data_since`'s
-    fallback-on-exception pattern. The checkpoint read itself is inside
-    this fallback: a store an earlier bug left inconsistent would otherwise
-    fail there on every cycle, forever, instead of self-healing.
+    If the store doesn't exist yet, or the site's assembled runtime config
+    no longer matches the hash stamped on the store (a site-config edit
+    changed how history should be processed — unit conversion, calibration,
+    instrument-period boundary, rename, etc.), seeds/reseeds it with a full
+    `build()`. If the incremental path fails for any reason — most notably
+    a site-config change that added or removed a variable, so the tail's
+    schema no longer matches the store's, or a store that's already
+    internally inconsistent (e.g. a prior cycle appended some variables but
+    not others) — falls back to a full rebuild for this cycle rather than
+    leaving the store stale or raising. This mirrors
+    `raw_data_loader.load_raw_data_since`'s fallback-on-exception pattern.
+    The checkpoint read itself is inside this fallback: a store an earlier
+    bug left inconsistent would otherwise fail there on every cycle,
+    forever, instead of self-healing. See `orchestration.incremental_zarr`
+    for the shared envelope this delegates to (shared with
+    `build_L2_zarr.update()`).
 
     Args:
         site_name: registered site name.
@@ -138,32 +144,32 @@ def update(
         Path to the Zarr store (updated in place, or freshly built).
     """
     store_path = _resolve_store_path(site_name, output_dir)
+    runtime_cfg = site_runner.get_runtime_config(site_name, legacy=legacy)
 
-    if not store_path.exists():
-        return build(site_name, output_dir=output_dir, legacy=legacy)
-
-    try:
-        last_ts = _last_store_timestamp(store_path)
+    def produce_tail(checkpoint: pd.Timestamp) -> xr.Dataset | None:
         time_step = int(xr.open_zarr(store_path).attrs["time_step"])
-        start_date = last_ts + pd.Timedelta(minutes=time_step)
+        start_date = checkpoint + pd.Timedelta(minutes=time_step)
 
         ds = site_runner.build_dataset_from_site_name(
             site_name, start_date=start_date, legacy=legacy
         )
         if ds.sizes["time"] == 0:
-            return store_path
+            return None
 
         ds = build_L1_ds_complete(ds)
-        ds = build_L1_ds_tail(ds, store_path=store_path)
-        file_io.append_zarr(ds=ds, store_path=store_path)
-    except Exception:
-        logger.exception(
-            "Incremental Zarr update failed for %s, falling back to full rebuild",
-            site_name,
-        )
+        return build_L1_ds_tail(ds, store_path=store_path)
+
+    def full_rebuild() -> pathlib.Path:
         return build(site_name, output_dir=output_dir, legacy=legacy)
 
-    return store_path
+    return incremental_zarr.incremental_update(
+        store_path=store_path,
+        config_hash=incremental_zarr.hash_config(runtime_cfg),
+        produce_tail=produce_tail,
+        full_rebuild=full_rebuild,
+        logger=logger,
+        label=f"L1 {site_name}",
+    )
 
 
 def build_L1_ds_complete(ds):

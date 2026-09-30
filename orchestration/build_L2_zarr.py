@@ -29,7 +29,7 @@ import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT
 from infrastructure import file_io, paths
-from orchestration import qc_pipeline
+from orchestration import incremental_zarr, qc_pipeline
 from services.metadata import qc_config_schema
 
 logger = logging.getLogger(__name__)
@@ -53,13 +53,6 @@ def _resolve_l1_store_path(
     return pathlib.Path(l1_dir) / f"{site_name}_L1.zarr"
 
 
-def _last_store_timestamp(store_path: pathlib.Path) -> pd.Timestamp | None:
-    """Return the store's last timestamp, or None if the store doesn't exist yet."""
-    if not store_path.exists():
-        return None
-    return pd.Timestamp(xr.open_zarr(store_path)["time"].values[-1])
-
-
 def build(
     site_name: str,
     output_dir: pathlib.Path | str | None = None,
@@ -70,7 +63,11 @@ def build(
     Reads the entire L1 store, runs the site's QC config over it, and
     overwrites the L2 store in full. Used to seed a new store and for a
     periodic full-rebuild reconciliation pass — see update() for the cheap
-    incremental path.
+    incremental path. Stamps the store with a hash of the site's assembled
+    QC config (site overrides + shared defaults — see
+    `incremental_zarr.hash_config`), which `update()` checks on every cycle
+    to detect config changes that would otherwise leave already-stored
+    history silently stale.
 
     Args:
         site_name: registered site name.
@@ -93,10 +90,13 @@ def build(
 
     dependency_defaults = qc_config_schema.load_dependency_defaults()
     range_defaults = qc_config_schema.load_range_defaults()
-    qc_config = qc_config_schema.resolve_qc_config(
+    resolved_qc_config = qc_config_schema.resolve_qc_config(
         qc_config, dependency_defaults, range_defaults, ds
     )
-    ds = qc_pipeline.apply_qc(ds, qc_config)
+    ds = qc_pipeline.apply_qc(ds, resolved_qc_config)
+    ds.attrs["config_hash"] = incremental_zarr.hash_config(
+        qc_config, dependency_defaults, range_defaults
+    )
     file_io.write_zarr(ds=ds, store_path=store_path)
 
     return store_path
@@ -125,9 +125,13 @@ def update(
     until its successor arrives, since the filter can't test a record with no
     later neighbour -- the L2 store then lags L1 by one record.
 
-    If the store doesn't exist yet, seeds it with a full build(). If the
-    incremental path fails for any reason, falls back to a full rebuild for
-    this cycle, mirroring build_L1_zarr.update()'s fallback pattern.
+    If the store doesn't exist yet, or the site's assembled QC config no
+    longer matches the hash stamped on the store (a QC-config edit changed
+    a range bound, dependency, flag rule, etc.), seeds/reseeds it with a
+    full build(). If the incremental path fails for any reason, falls back
+    to a full rebuild for this cycle, mirroring build_L1_zarr.update()'s
+    fallback pattern. See `orchestration.incremental_zarr` for the shared
+    envelope this delegates to (shared with `build_L1_zarr.update()`).
 
     Args:
         site_name: registered site name.
@@ -142,13 +146,11 @@ def update(
     store_path = _resolve_store_path(site_name, output_dir)
     l1_path = _resolve_l1_store_path(site_name, l1_dir)
 
-    if not store_path.exists():
-        return build(site_name, output_dir=output_dir, l1_dir=l1_dir)
+    qc_config = qc_config_schema.load_qc_config(site_name)
+    dependency_defaults = qc_config_schema.load_dependency_defaults()
+    range_defaults = qc_config_schema.load_range_defaults()
 
-    try:
-        checkpoint_ts = _last_store_timestamp(store_path)
-        qc_config = qc_config_schema.load_qc_config(site_name)
-
+    def produce_tail(checkpoint: pd.Timestamp) -> xr.Dataset | None:
         lookback_days = max(
             (
                 spec.mad_filter.window_days
@@ -160,22 +162,20 @@ def update(
 
         l1_ds = xr.open_zarr(l1_path)
         time_step = int(l1_ds.attrs["time_step"])
-        read_start = checkpoint_ts - pd.Timedelta(days=lookback_days)
-        tail_start = checkpoint_ts + pd.Timedelta(minutes=time_step)
+        read_start = checkpoint - pd.Timedelta(days=lookback_days)
+        tail_start = checkpoint + pd.Timedelta(minutes=time_step)
 
         ds = l1_ds.sel(time=slice(read_start, None))
-        if ds.sizes["time"] == 0 or ds.time.values[-1] <= np.datetime64(checkpoint_ts):
-            return store_path
+        if ds.sizes["time"] == 0 or ds.time.values[-1] <= np.datetime64(checkpoint):
+            return None
 
         qc_config_schema.validate_qc_config_variables(
             qc_config, qc_pipeline.checkable_variables(ds)
         )
-        dependency_defaults = qc_config_schema.load_dependency_defaults()
-        range_defaults = qc_config_schema.load_range_defaults()
-        qc_config = qc_config_schema.resolve_qc_config(
+        resolved_qc_config = qc_config_schema.resolve_qc_config(
             qc_config, dependency_defaults, range_defaults, ds
         )
-        ds = qc_pipeline.apply_qc(ds, qc_config)
+        ds = qc_pipeline.apply_qc(ds, resolved_qc_config)
 
         ds = ds.sel(time=slice(tail_start, None))
         if lookback_days > 0:
@@ -185,18 +185,23 @@ def update(
             # no longer the last record of the QC input.
             ds = ds.isel(time=slice(None, -1))
         if ds.sizes["time"] == 0:
-            return store_path
+            return None
 
-        ds = _assign_L2_tail_attrs(ds, store_path=store_path)
-        file_io.append_zarr(ds=ds, store_path=store_path)
-    except Exception:
-        logger.exception(
-            "Incremental L2 Zarr update failed for %s, falling back to full rebuild",
-            site_name,
-        )
+        return _assign_L2_tail_attrs(ds, store_path=store_path)
+
+    def full_rebuild() -> pathlib.Path:
         return build(site_name, output_dir=output_dir, l1_dir=l1_dir)
 
-    return store_path
+    return incremental_zarr.incremental_update(
+        store_path=store_path,
+        config_hash=incremental_zarr.hash_config(
+            qc_config, dependency_defaults, range_defaults
+        ),
+        produce_tail=produce_tail,
+        full_rebuild=full_rebuild,
+        logger=logger,
+        label=f"L2 {site_name}",
+    )
 
 
 def _assign_L2_tail_attrs(ds: xr.Dataset, store_path: pathlib.Path) -> xr.Dataset:

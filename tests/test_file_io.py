@@ -33,6 +33,30 @@ class AppendZarrTestCase(unittest.TestCase):
         result = xr.open_zarr(self.store_path)
         self.assertEqual(result.sizes["time"], 8)
 
+    def test_attrs_not_in_tail_are_preserved_after_append(self):
+        # to_zarr(mode="a") replaces the store's root attrs wholesale with
+        # the tail's, and also writes a consolidated .zmetadata cache that
+        # xr.open_zarr reads from by default -- a regression here would
+        # show up only when reading back through that default path, not by
+        # inspecting the plain .zattrs file directly.
+        idx0 = pd.date_range("2026-01-01", periods=5, freq="30min")
+        ds0 = xr.Dataset({"Ta": ("time", np.arange(5.0))}, coords={"time": idx0})
+        ds0.attrs["config_hash"] = "abc123"
+        ds0.attrs["site_name"] = "TestSite"
+        ds0.to_zarr(self.store_path, mode="w")
+
+        idx = pd.date_range("2026-01-01 02:30", periods=3, freq="30min")
+        tail = xr.Dataset(
+            {"Ta": ("time", np.array([5.0, 6.0, 7.0]))}, coords={"time": idx}
+        )
+        tail.attrs["site_name"] = "TestSite"  # refreshed, but config_hash is not
+
+        file_io.append_zarr(ds=tail, store_path=self.store_path)
+
+        result = xr.open_zarr(self.store_path)
+        self.assertEqual(result.attrs.get("config_hash"), "abc123")
+        self.assertEqual(result.attrs.get("site_name"), "TestSite")
+
     def test_added_variable_raises_before_writing_anything(self):
         _write_initial_store(self.store_path, n=5)
         idx = pd.date_range("2026-01-01 02:30", periods=3, freq="30min")

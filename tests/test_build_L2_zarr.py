@@ -130,13 +130,36 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         after = xr.open_zarr(store_path).sizes["time"]
         self.assertEqual(before, after)
 
+    def test_update_detects_config_change_and_forces_rebuild(self):
+        ds = _build_l1_dataset(10, value=10.0)
+        self._write_l1(ds)
+        store_path = build_L2_zarr.build(
+            "TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir
+        )
+        out = xr.open_zarr(store_path)
+        self.assertTrue(bool((out["Ta_Av_QCFlag"] == 0).all()))
+
+        # Tighten the range bound with no new L1 data arriving -- a plain
+        # checkpoint-based update would see nothing new and leave the now-stale
+        # flags in place. The config-hash check must catch this instead and
+        # force a full rebuild that re-flags the existing records.
+        (self.qc_dir / "TestSite.yml").write_text(
+            "Ta_Av:\n  range_check: {lower: -10, upper: 5}\n"
+        )
+
+        build_L2_zarr.update("TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir)
+
+        out = xr.open_zarr(store_path)
+        self.assertTrue(bool((out["Ta_Av_QCFlag"] == 2).all()))
+
     def test_update_falls_back_to_build_on_error(self):
         ds = _build_l1_dataset(20)
         self._write_l1(ds)
         build_L2_zarr.build("TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir)
 
-        with mock.patch.object(
-            build_L2_zarr, "_last_store_timestamp", side_effect=RuntimeError("boom")
+        with mock.patch(
+            "orchestration.incremental_zarr.last_store_timestamp",
+            side_effect=RuntimeError("boom"),
         ):
             store_path = build_L2_zarr.update(
                 "TestSite", output_dir=self.l2_dir, l1_dir=self.l1_dir
