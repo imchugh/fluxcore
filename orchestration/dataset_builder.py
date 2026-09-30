@@ -3,10 +3,13 @@
 
 Public API
 ----------
-build_dataset_from_site_name(site_name, pad_humidity, pad_co2, start_date) -> xr.Dataset
-build_dataset_from_context(ctx, pad_humidity, pad_co2, start_date)         -> xr.Dataset
+build_dataset_from_context(ctx, pad_humidity, pad_co2, start_date) -> xr.Dataset
 
 DatasetBuildIntermediate  — exported for use by derived_quantities
+
+See also `orchestration.tern.site_runner.build_dataset_from_site_name` for
+the TERN-adapter convenience wrapper that resolves a bare site name to a
+context before delegating here.
 """
 
 import datetime
@@ -24,7 +27,7 @@ from services.metadata.core.variable_registry import (
     canonical_output_name,
     group_by_canonical_name,
 )
-from services.metadata.tern.site_registry import SiteContext, SiteRegistry
+from services.metadata.tern.site_registry import SiteContext
 
 
 @dataclass
@@ -49,28 +52,6 @@ ATTRS_SUBSET = [
     "vegetation",
     "date_commissioned",
 ]
-
-SITE_REGISTRY = SiteRegistry()
-
-
-def build_dataset_from_site_name(
-    site_name: str,
-    pad_humidity: bool = True,
-    pad_co2: bool = True,
-    start_date: pd.Timestamp | None = None,
-    legacy: bool = False,
-) -> xr.Dataset:
-    """Convenience wrapper — resolves site name to context via registry.
-
-    legacy: if True, build from the site's legacy config snapshot
-        (site_configs/legacy) instead of its operational config. Use for
-        one-off rebuilds of L1 output under an earlier generation of
-        instruments/variables/files.
-    """
-    ctx = SITE_REGISTRY.get_context(site=site_name, legacy=legacy)
-    return build_dataset_from_context(
-        ctx=ctx, pad_humidity=pad_humidity, pad_co2=pad_co2, start_date=start_date
-    )
 
 
 def build_dataset_from_context(

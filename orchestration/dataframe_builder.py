@@ -3,13 +3,15 @@
 
 Public API
 ----------
-build_dataframe_from_site_name(site_name, quantities, n_samples, start_date)
-    -> pd.DataFrame
 build_dataframe_from_context(ctx, quantities, n_samples, start_date)
     -> pd.DataFrame
 build_dataframe(file_groups, registry, quantities, n_samples, start_date,
                 flux_file, time_step)
     -> pd.DataFrame
+
+See also `orchestration.tern.site_runner.build_dataframe_from_site_name`
+for the TERN-adapter convenience wrapper that resolves a bare site name to
+a context before delegating here.
 """
 
 from collections.abc import Callable
@@ -27,23 +29,7 @@ from services.metadata.core.variable_registry import (
     canonical_output_name,
     group_by_canonical_name,
 )
-from services.metadata.tern.site_registry import SiteContext, SiteRegistry
-
-SITE_REGISTRY = SiteRegistry()
-
-
-def build_dataframe_from_site_name(
-    site_name: str,
-    quantities: set[str] | None = None,
-    start_date: pd.Timestamp | None = None,
-) -> pd.DataFrame:
-    """Convenience wrapper — resolves site name to context via registry."""
-    ctx = SITE_REGISTRY.get_context(site=site_name)
-    return build_dataframe_from_context(
-        ctx=ctx,
-        quantities=quantities,
-        start_date=start_date,
-    )
+from services.metadata.tern.site_registry import SiteContext
 
 
 def build_dataframe_from_context(

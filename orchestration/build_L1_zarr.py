@@ -34,7 +34,6 @@ import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT
 from infrastructure import file_io, paths
-from orchestration import dataset_builder
 from orchestration.build_L1_nc import (
     assign_crs_variable,
     assign_L1_global_generic_attrs,
@@ -44,6 +43,7 @@ from orchestration.build_L1_nc import (
     serialize_units,
     serialize_uri,
 )
+from orchestration.tern import site_runner
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ def build(
     store_path = _resolve_store_path(site_name, output_dir)
 
     start_date = pd.Timestamp(year, 1, 1) if year is not None else None
-    ds = dataset_builder.build_dataset_from_site_name(
+    ds = site_runner.build_dataset_from_site_name(
         site_name, start_date=start_date, legacy=legacy
     )
     ds = build_L1_ds_complete(ds)
@@ -147,7 +147,7 @@ def update(
         time_step = int(xr.open_zarr(store_path).attrs["time_step"])
         start_date = last_ts + pd.Timedelta(minutes=time_step)
 
-        ds = dataset_builder.build_dataset_from_site_name(
+        ds = site_runner.build_dataset_from_site_name(
             site_name, start_date=start_date, legacy=legacy
         )
         if ds.sizes["time"] == 0:

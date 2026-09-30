@@ -26,7 +26,7 @@ import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT, NC_ENCODING, SITE_PLACEHOLDER
 from infrastructure import file_io, paths
-from orchestration import dataset_builder
+from orchestration.tern import site_runner
 from services import config_loader
 
 STD_METADATA = config_loader.load_config_file_from_name(name="nc_metadata")
@@ -90,7 +90,7 @@ def build(
     output_dir = pathlib.Path(output_dir)
 
     start_date = pd.Timestamp(year, 1, 1) if year is not None else None
-    ds = dataset_builder.build_dataset_from_site_name(
+    ds = site_runner.build_dataset_from_site_name(
         site_name, start_date=start_date, legacy=legacy
     )
     ds = build_L1_ds_complete(ds)
