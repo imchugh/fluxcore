@@ -144,6 +144,11 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
     def test_flat_quantity(self):
         self.assertEqual(self._resolve("Fco2"), (-50, 30))
 
+    def test_quality_flag_variant_does_not_inherit_quantity_range(self):
+        # Fco2_QC holds logger flag codes, not flux values -- the quantity's
+        # own range_defaults entry (meant for Fco2 itself) must not apply.
+        self.assertIsNone(self._resolve("Fco2_QC"))
+
     def test_statistic_keyed_uses_suffix(self):
         self.assertEqual(self._resolve("Ta_Av", "Av"), (-10, 50))
         self.assertEqual(self._resolve("Ta_Sd", "Sd"), (0, 5))
@@ -434,6 +439,17 @@ class ResolveQCConfigTestCase(unittest.TestCase):
         self.assertEqual(merged.variables["Fco2"].flag_check.reject, [8.0, 9.0])
         self.assertEqual(merged.variables["Fco2"].range_check.lower, -50)
         self.assertNotIn("Fco2_QC", merged.variables)
+
+    def test_unreferenced_quality_flag_variable_gets_no_range_default(self):
+        # Fh_QC present in L1 but not wired into any site flag_check (e.g. not
+        # yet configured) -- not caught by the flag_sources exclusion, so this
+        # relies on resolve_default_range itself recognising the QC suffix.
+        ds = _resolve_ds(["Fh", "Fh_QC"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        merged = qc_config_schema.resolve_qc_config(
+            site_config, {}, {"Fh": [-100, 600]}, ds
+        )
+        self.assertIsNone(merged.variables.get("Fh_QC"))
 
     def test_site_range_still_overrides_elevation_derived_default(self):
         ds = _resolve_ds(["ps"])

@@ -22,7 +22,7 @@ from typing import Iterable
 import xarray as xr
 from pydantic import BaseModel, ConfigDict, RootModel, field_validator, model_validator
 
-from domain.enums import StatisticType
+from domain.enums import StatisticType, VariableType
 from infrastructure import paths
 from infrastructure.file_io import read_yml
 from services.data.calculations import standard_pressure_kpa
@@ -298,8 +298,10 @@ def resolve_default_range(
     half-width, so the bound follows the site rather than needing a
     hand-computed override per site; without an elevation it resolves to None.
     Returns None (no default, pass through) wherever the name doesn't parse,
-    the quantity has no entry, or the entry is a dict with no matching
-    qualifier or statistic key.
+    the variable is a quality-flag variant of the quantity (e.g. Fco2_QC --
+    holds flag codes, not the quantity's physical values, so the quantity's
+    own range entry must not apply), the quantity has no entry, or the entry
+    is a dict with no matching qualifier or statistic key.
 
     Public: used by lookup_default_range, orchestration.legacy_rtmc_export
     and the site monitors (services.data.data_monitor,
@@ -308,6 +310,9 @@ def resolve_default_range(
     try:
         parsed = name_parser.parse_variable_name(var_name)
     except VariableNameParseError:
+        return None
+
+    if parsed.variable_type_id == VariableType.QUALITY_FLAG.suffix:
         return None
 
     entry = range_defaults.get(parsed.quantity)
@@ -394,8 +399,9 @@ def resolve_qc_config(
     merged: dict[str, VariableQCSpec] = {}
 
     # Logger quality-flag variables named as a flag_check source are gate-only
-    # inputs: no default range (NameParser reads e.g. Fco2_QC as quantity Fco2,
-    # which would wrongly apply the flux range) and no default dependency.
+    # inputs: excluded here so they get no checks/no _QCFlag of their own at
+    # all, not just no range (resolve_default_range already returns None for
+    # any VariableType.QUALITY_FLAG variable) and no default dependency.
     flag_sources = {
         src
         for spec in qc_config.variables.values()
