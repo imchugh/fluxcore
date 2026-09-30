@@ -20,7 +20,10 @@ _FILE_FORMATS = {
         "header_lines": {"info": 0, "variable": 1, "units": 2, "sampling": 3},
         "separator": ",",
         "non_numeric_cols": ["TIMESTAMP"],
-        "na_values": "NAN",
+        # "NAN": Campbell's float sentinel. "-2147483648" (INT32_MIN): Campbell's
+        # NaN convention for LONG (integer) fields -- appears raw in TOA5 files
+        # (e.g. Diag_SONIC/Diag_IRGA at some sites), not something our code writes.
+        "na_values": ["NAN", "-2147483648"],
         "quoting": csv.QUOTE_NONNUMERIC,
     },
     "EddyPro": {
