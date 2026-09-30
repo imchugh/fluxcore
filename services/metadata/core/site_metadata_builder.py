@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Generic-core, strict, file-based loader for a single site's SiteMetadata.
 
-Companion to runtime_config_builder.py, for the other half of a SiteContext.
+Companion to runtime_config_builder.py, for the other half of a SiteContext
+— also defined here (the seam contract object combining both halves), since
+neither half's own module should have to import the other just to build it.
 TERN's own production pipeline is unaffected by this module — it keeps
 sourcing SiteMetadata as an object via SiteRegistry.get_metadata()
 (services/metadata/tern/site_registry.py), reading configs/site_metadata.yml or
@@ -20,6 +22,7 @@ it stays untouched, and is never exercised by this module, since validation
 here happens strictly before SiteMetadata's constructor ever sees the data.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +30,22 @@ from pydantic import BaseModel, field_validator
 
 from domain.data_models.metadata_classes import SiteMetadata
 from infrastructure.file_io import read_yml
+from services.metadata.core.runtime_config_builder import SiteRuntimeConfig
+
+
+@dataclass(frozen=True)
+class SiteContext:
+    """Combined runtime objects for a configured pipeline site.
+
+    One of the tier-1 contract objects (alongside SiteRuntimeConfig,
+    VariableSpec, FileGroup, CanonicalQuantityMetadata) any adapter can
+    produce to drive the generic core — defined here rather than in a
+    TERN-adapter module so a non-TERN caller never needs to import TERN
+    code just to get this type.
+    """
+
+    runtime_config: SiteRuntimeConfig
+    metadata: SiteMetadata
 
 
 class SiteMetadataSchema(BaseModel):

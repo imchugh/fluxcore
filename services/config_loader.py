@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
-"""Resolve and load internal config files (yml/txt/csv) by name."""
+"""Resolve and load internal config files (yml/txt/csv) by name.
+
+Generic core: defines its own CONFIG_PATH/CONFIG_FILE rather than importing
+them from infrastructure.paths, which is TERN-adapter-side (site-placeholder
+path templating) and must stay out of tier-1 imports. Both resolve to the
+same physical location (this repo's configs/ directory), computed
+independently since paths.py belongs to a different tier.
+"""
 
 import pathlib
 
 import pandas as pd
 
 from infrastructure.file_io import read_csv, read_text, read_yml
-from infrastructure.paths import CONFIG_FILE, CONFIG_PATH
+
+CONFIG_PATH = pathlib.Path(__file__).parents[1] / "configs"
+CONFIG_FILE = "paths.yml"
 
 ConfigType = dict | str | pd.DataFrame
 ALLOWED_CONFIG_TYPES = [".yml", ".txt", ".csv"]

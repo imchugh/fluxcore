@@ -23,13 +23,13 @@ from infrastructure.data_conditioning import condition_dataframe
 from services.data import raw_data_loader, unit_conversions
 from services.metadata.core.canonical_quantity_registry import resolve_variance_units
 from services.metadata.core.file_group_builder import FileGroup, build_file_groups
+from services.metadata.core.site_metadata_builder import SiteContext
 from services.metadata.core.variable_registry import (
     VariableSpec,
     build_variable_registry,
     canonical_output_name,
     group_by_canonical_name,
 )
-from services.metadata.tern.site_registry import SiteContext
 
 
 def build_dataframe_from_context(
