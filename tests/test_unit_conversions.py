@@ -19,6 +19,19 @@ class UnitConversionsTestCase(unittest.TestCase):
         np.testing.assert_allclose(uc.convert_RH(np.array([0.55])), 55.0)
         np.testing.assert_allclose(uc.convert_Sws(np.array([45.0])), 0.45)
         np.testing.assert_allclose(uc.convert_temperature(np.array([273.15])), 0.0, atol=1e-9)
+        np.testing.assert_allclose(uc.convert_tbody(np.array([273.15])), 0.0, atol=1e-9)
+        rs = np.array([33000.0])
+        ln_r = np.log(rs)
+        expected_tbody_ntc = (
+            1 / (1.0295e-3 + 2.391e-4 * ln_r + 1.568e-7 * ln_r**3) - 273.15
+        )
+        np.testing.assert_allclose(
+            uc.convert_tbody(rs, from_units="ohms_ntc"), expected_tbody_ntc
+        )
+        np.testing.assert_allclose(
+            uc.convert_tbody(np.array([110.0]), from_units="ohms_pt100"),
+            (110.0 / 100.0 - 1) / 0.00385,
+        )
         np.testing.assert_allclose(uc.convert_pressure(np.array([101325.0])), 101.325)
         np.testing.assert_allclose(uc.convert_pressure(np.array([1013.25]), from_units="hPa"), 101.325)
         np.testing.assert_allclose(uc.convert_precipitation(np.array([5.0])), 1.0)
@@ -28,7 +41,15 @@ class UnitConversionsTestCase(unittest.TestCase):
         np.testing.assert_allclose(uc.convert_diagnostic(np.array([18000.0, 17990.0]), n_samples=18000), [0.0, 10.0])
 
     def test_unsupported_units_raise(self):
-        for func in (uc.convert_CO2_flux, uc.convert_RH, uc.convert_Sws, uc.convert_pressure, uc.convert_temperature):
+        funcs = (
+            uc.convert_CO2_flux,
+            uc.convert_RH,
+            uc.convert_Sws,
+            uc.convert_pressure,
+            uc.convert_temperature,
+            uc.convert_tbody,
+        )
+        for func in funcs:
             with self.assertRaises(ValueError):
                 func(np.array([1.0]), from_units="not_a_unit")
 

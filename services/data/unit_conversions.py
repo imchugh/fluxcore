@@ -8,6 +8,8 @@ returning None. Physical calculations between quantities live in
 services/data/calculations.py.
 """
 
+import numpy as np
+
 from domain.constants import CO2_MOL_MASS, H2O_MOL_MASS, K
 
 CONVERSION_REGISTRY = {}
@@ -116,7 +118,7 @@ def convert_Sws(data, from_units="percent"):
     raise ValueError(f"Unsupported from_units {from_units!r} for Sws conversion")
 
 
-@register_conversion("Ta", "Tv", "Tbody")
+@register_conversion("Ta", "Tv")
 def convert_temperature(data, from_units="K"):
     """Convert temperature from Kelvin to canonical degrees Celsius."""
     if from_units == "K":
@@ -124,6 +126,37 @@ def convert_temperature(data, from_units="K"):
     raise ValueError(
         f"Unsupported from_units {from_units!r} for temperature conversion"
     )
+
+
+@register_conversion("Tbody")
+def convert_tbody(data, from_units="K"):
+    """Convert radiometer body temperature to canonical degrees Celsius.
+
+    Some sites log only the raw resistance from the net radiometer's body-
+    temperature sensor rather than a logger-computed temperature -- and the
+    CNR4 ships with either of two different sensor types reading in ohms,
+    needing two different formulas, so the two are kept as distinct
+    from_units labels rather than one ambiguous "ohms":
+
+    "ohms_ntc": the standard CNR4 NTC thermistor (resistance in the
+    thousands of ohms at ambient temperature). Steinhart-Hart equation,
+    coefficients from the CNR4 manual (not a generic thermistor fit --
+    specific to this sensor).
+
+    "ohms_pt100": some CNR4 units instead use a Pt100 RTD (resistance ~100
+    ohms at 0 degC). Linear IEC 60751 approximation (alpha=0.00385/degC) --
+    accurate enough over ordinary ambient-temperature ranges; the
+    Callendar-Van Dusen quadratic correction only matters well outside that.
+    """
+    if from_units == "K":
+        return data - K
+    if from_units == "ohms_ntc":
+        ln_r = np.log(data)
+        return 1 / (1.0295e-3 + 2.391e-4 * ln_r + 1.568e-7 * ln_r**3) - K
+    if from_units == "ohms_pt100":
+        r0, alpha = 100.0, 0.00385
+        return (data / r0 - 1) / alpha
+    raise ValueError(f"Unsupported from_units {from_units!r} for Tbody conversion")
 
 
 def get_unit_conversion(quantity):

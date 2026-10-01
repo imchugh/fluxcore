@@ -314,6 +314,8 @@ Tbody:
   valid_input_units:
   - degC
   - K
+  - ohms_ntc
+  - ohms_pt100
 Tcanopy:
   long_name: Canopy temperature
   standard_name: null
