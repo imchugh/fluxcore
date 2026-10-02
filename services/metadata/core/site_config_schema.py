@@ -32,7 +32,7 @@ VALID_FILE_TYPES = [x.name for x in FileType]
 class InputVariableConfig(BaseModel):
     """Schema and validation rules for one raw input variable."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     # Define attributes
 
@@ -62,6 +62,8 @@ class InputVariableConfig(BaseModel):
 
 class HorizontalLocationConfig(BaseModel):
     """Schema and validation rules for horizontal instrument location."""
+
+    model_config = ConfigDict(extra="forbid")
 
     # Define attributes
 
@@ -97,6 +99,8 @@ class HorizontalLocationConfig(BaseModel):
 class CustomMetadataConfig(BaseModel):
     """Schema for custom (site-specific) metadata."""
 
+    # Deliberately open: this is the one model meant to hold site-specific
+    # fields the schema doesn't anticipate. Do not tighten to "forbid".
     model_config = ConfigDict(extra="allow")
 
     # Define attributes
@@ -111,7 +115,7 @@ class CustomMetadataConfig(BaseModel):
 class VariableConfig(BaseModel):
     """Schema for one canonical variable's full configuration."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     # Define attributes
 
@@ -168,6 +172,8 @@ class VariableConfig(BaseModel):
 # Complete site configuration
 class SiteConfig(BaseModel):
     """Schema and cross-field validation rules for a complete site config."""
+
+    model_config = ConfigDict(extra="forbid")
 
     # Define attributes
 
