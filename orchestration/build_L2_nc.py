@@ -11,8 +11,8 @@ path here: L2 is always QC-derived from L1's Zarr store, never rebuilt
 directly from raw data, so this module has one entry point, not a pair.
 
 Not wired into tasks/build_tasks.py -- built for manual benchmarking against
-real PyFluxPro L2 NetCDF output, same deferred-until-needed status as
-build_L2_zarr.py's own task wiring.
+real PyFluxPro L2 NetCDF output (the L2 Zarr store itself is rebuilt
+nightly by the rebuild_L2_zarr task).
 
 Usage (from project root, with ep_cntl activated):
     python -m orchestration.build_L2_nc SITE_NAME [--zarr-dir DIR] \
