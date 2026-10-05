@@ -88,7 +88,10 @@ def _parse_args() -> argparse.Namespace:
         "--zarr-dir",
         type=pathlib.Path,
         default=None,
-        help="Override source L2 Zarr directory (default: homogenised_data/zarr/L2 stream).",
+        help=(
+            "Override source L2 Zarr directory "
+            "(default: homogenised_data/zarr/L2 stream)."
+        ),
     )
     parser.add_argument(
         "--output-dir",
