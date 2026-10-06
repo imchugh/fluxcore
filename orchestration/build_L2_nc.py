@@ -28,6 +28,7 @@ from orchestration.build_L1_nc import (
     build_L1_year_from_zarr,
     get_ds_years,
 )
+from orchestration.build_L2_zarr import PROCESSING_LEVEL
 
 
 def build_from_zarr(
@@ -57,7 +58,9 @@ def build_from_zarr(
     ds = _rehydrate_instrument_history(ds)
     # Refresh date_created/history to this NetCDF build's own time, rather
     # than whenever the L2 Zarr store was last written/appended.
-    ds = assign_L1_global_generic_attrs(ds, global_attrs=global_attrs)
+    ds = assign_L1_global_generic_attrs(
+        ds, global_attrs=global_attrs, processing_level=PROCESSING_LEVEL
+    )
 
     output_dir = pathlib.Path(output_dir)
 

@@ -35,6 +35,8 @@ from services.metadata.core.qc_config_schema import SiteQCConfig
 
 logger = logging.getLogger(__name__)
 
+PROCESSING_LEVEL = "L2"
+
 
 def store_path_for(site_name: str, output_dir: pathlib.Path | str) -> pathlib.Path:
     """Path of a site's L2 Zarr store within output_dir."""
@@ -86,6 +88,7 @@ def build(
         qc_config, dependency_defaults, range_defaults, ds
     )
     ds = qc_pipeline.apply_qc(ds, resolved_qc_config)
+    ds.attrs["processing_level"] = PROCESSING_LEVEL
     ds.attrs["config_hash"] = incremental_zarr.hash_config(
         qc_config, dependency_defaults, range_defaults
     )
@@ -197,9 +200,10 @@ def _assign_L2_tail_attrs(ds: xr.Dataset, store_path: pathlib.Path) -> xr.Datase
     """Refresh whole-history attrs on a tail slice before it's appended.
 
     apply_qc doesn't touch ds.attrs, so a tail slice still carries L1's
-    whole-history time_coverage_start/nc_nrecs — appending it unmodified
-    would let append_zarr overwrite the store's own combined attrs with
-    L1's, jumping time_coverage_start forward and understating nc_nrecs.
+    processing_level and whole-history time_coverage_start/nc_nrecs —
+    appending it unmodified would let append_zarr overwrite the store's own
+    combined attrs with L1's, relabelling the store L1, jumping
+    time_coverage_start forward and understating nc_nrecs.
     Mirrors build_L1_zarr.assign_L1_data_full_attrs's tail-attrs handling.
     """
     existing_attrs = dict(xr.open_zarr(store_path).attrs)
@@ -208,6 +212,7 @@ def _assign_L2_tail_attrs(ds: xr.Dataset, store_path: pathlib.Path) -> xr.Datase
 
     ds.attrs.update(
         {
+            "processing_level": PROCESSING_LEVEL,
             "nc_nrecs": nrecs_base + ds.sizes["time"],
             "time_coverage_start": range_start,
             "time_coverage_end": pd.to_datetime(ds.time.values[-1]).strftime(

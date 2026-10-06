@@ -90,6 +90,23 @@ class BuildL2NcTestCase(unittest.TestCase):
         for path in written:
             self.assertTrue(path.exists())
 
+    def test_processing_level_is_L2_even_if_global_attrs_say_L1(self):
+        ds = _build_l2_dataset()
+        ds.attrs["processing_level"] = "L1"
+        self._write_l2(ds)
+
+        written = build_L2_nc.build_from_zarr(
+            "TestSite",
+            zarr_dir=self.zarr_dir,
+            output_dir=self.nc_dir,
+            year=2020,
+            global_attrs={"processing_level": "L1", "Conventions": "CF-1.8"},
+        )
+        out = xr.open_dataset(written[0])
+        self.assertEqual(out.attrs["processing_level"], "L2")
+        self.assertEqual(out.attrs["Conventions"], "CF-1.8")
+        out.close()
+
     def test_qc_flag_values_and_attrs_survive(self):
         ds = _build_l2_dataset()
         flagged_time = ds.time.values[5]

@@ -36,6 +36,7 @@ def _build_l1_dataset(n, time_step=30, start="2020-01-01", value=10.0):
         {
             "time_step": time_step,
             "site_name": "TestSite",
+            "processing_level": "L1",
             "nc_nrecs": n,
             "time_coverage_start": idx[0].strftime("%Y-%m-%d %H:%M:%S"),
             "time_coverage_end": idx[-1].strftime("%Y-%m-%d %H:%M:%S"),
@@ -109,6 +110,28 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         out = xr.open_zarr(store_path)
         self.assertEqual(out.sizes["time"], 25)
         self.assertEqual(int(out.attrs["nc_nrecs"]), 25)
+
+    def test_store_is_labelled_L2_after_build_and_append(self):
+        # The L1 source says processing_level L1; append_zarr lets the tail's
+        # attrs overwrite the store's, so the tail must be relabelled too.
+        ds = _build_l1_dataset(20)
+        self._write_l1(ds)
+        store_path = build_L2_zarr.build(
+            self._qc_config(), output_dir=self.l2_dir, l1_dir=self.l1_dir
+        )
+        self.assertEqual(xr.open_zarr(store_path).attrs["processing_level"], "L2")
+
+        more = _build_l1_dataset(5, start="2020-01-01 10:00")
+        for key in ("nc_nrecs", "time_coverage_start", "time_coverage_end"):
+            more.attrs.pop(key, None)
+        file_io.append_zarr(ds=more, store_path=self.l1_dir / "TestSite_L1.zarr")
+        build_L2_zarr.update(
+            self._qc_config(), output_dir=self.l2_dir, l1_dir=self.l1_dir
+        )
+
+        out = xr.open_zarr(store_path)
+        self.assertEqual(out.sizes["time"], 25)
+        self.assertEqual(out.attrs["processing_level"], "L2")
 
     def test_update_with_no_new_records_is_a_noop(self):
         ds = _build_l1_dataset(20)

@@ -286,13 +286,16 @@ def assign_L1_data_year_attrs(ds, year):
     return ds
 
 
-def assign_L1_global_generic_attrs(ds, global_attrs: dict | None = None):
-    """Add caller-supplied global attrs, plus date/history.
+def assign_L1_global_generic_attrs(
+    ds, global_attrs: dict | None = None, processing_level: str = "L1"
+):
+    """Add caller-supplied global attrs, plus processing_level and date/history.
 
     global_attrs is a network's own global attribute template (e.g. TERN's
     configs/nc_metadata.yml); any string value containing SITE_PLACEHOLDER
     has it replaced with the dataset's site_name. None adds only the
-    date/history fields.
+    generated fields. processing_level is set by the level's own builder and
+    always overrides any value in global_attrs.
     """
     site_metadata = {
         key: (
@@ -309,6 +312,7 @@ def assign_L1_global_generic_attrs(ds, global_attrs: dict | None = None):
     this_month = date.strftime("%b")
     site_metadata.update(
         {
+            "processing_level": processing_level,
             "date_created": date.strftime(DATA_TIME_FORMAT),
             "history": f"{this_month} {this_year} processing",
         }
