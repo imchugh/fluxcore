@@ -166,6 +166,11 @@ def add_day_night_indicator(ds: xr.Dataset) -> xr.Dataset:
     same precedent as the 'crs' variable. Returns ds unchanged (with a logged
     warning) if latitude/longitude/elevation aren't all present, rather than
     failing the whole build over one derived convenience variable.
+
+    An empty time axis (an incremental reload with nothing new since the
+    checkpoint) gets a zero-length day_night, so the dataset reaches the
+    caller's own empty check instead of raising here — which
+    incremental_zarr would treat as a failure and answer with a full rebuild.
     """
     lat = ds.attrs.get("latitude")
     lon = ds.attrs.get("longitude")
@@ -176,12 +181,15 @@ def add_day_night_indicator(ds: xr.Dataset) -> xr.Dataset:
         )
         return ds
 
-    binary = datetime_utils.get_day_night_binary(
-        lat=lat, lon=lon, elev=elev, dates=ds.time.values
-    )
+    if ds.sizes["time"] == 0:
+        values = pd.Series([], dtype="int64").to_numpy()
+    else:
+        values = datetime_utils.get_day_night_binary(
+            lat=lat, lon=lon, elev=elev, dates=ds.time.values
+        ).to_numpy()
     ds["day_night"] = (
         "time",
-        binary.to_numpy(),
+        values,
         {
             "long_name": "Day/night indicator",
             "units": "1",

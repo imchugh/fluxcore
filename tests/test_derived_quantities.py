@@ -112,6 +112,15 @@ class AddDayNightIndicatorTestCase(unittest.TestCase):
         self.assertNotIn("day_night", out)
         self.assertIn("Missing latitude/longitude/elevation", ctx.output[0])
 
+    def test_empty_time_axis_adds_empty_indicator(self):
+        # An incremental reload with no new records must not raise: the
+        # exception would trigger incremental_zarr's full-rebuild fallback.
+        ds = _build_dataset().isel(time=slice(0, 0))
+        out = add_day_night_indicator(ds)
+
+        self.assertIn("day_night", out)
+        self.assertEqual(out.sizes["time"], 0)
+
     def test_partial_attrs_also_skips(self):
         ds = _build_dataset(with_attrs=False)
         ds.attrs["latitude"] = LAT
