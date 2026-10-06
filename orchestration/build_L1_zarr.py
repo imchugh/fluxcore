@@ -20,12 +20,10 @@ flattened to a year-clipped string — Zarr attrs are JSON-native, so this
 survives the round trip natively. NetCDF export re-hydrates it and
 reproduces the year clipping itself; see `_json_safe_instrument_history`.
 
-Usage (from project root, with ep_cntl activated):
-    python -m orchestration.build_L1_zarr SITE_NAME [--update] [--year YEAR] \
-        [--output-dir DIR]
+Generic core: takes a SiteContext and an explicit output directory. The TERN
+site-name wrappers and CLI live in orchestration/tern/build_runner.py.
 """
 
-import argparse
 import logging
 import pathlib
 
@@ -34,7 +32,6 @@ import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT
 from infrastructure import file_io
-from infrastructure.tern import paths
 from orchestration import incremental_zarr
 from orchestration.build_L1_nc import (
     assign_crs_variable,
@@ -45,25 +42,22 @@ from orchestration.build_L1_nc import (
     serialize_units,
     serialize_uri,
 )
-from orchestration.tern import site_runner
+from orchestration.dataset_builder import build_dataset_from_context
+from services.metadata.core.site_metadata_builder import SiteContext
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_store_path(
-    site_name: str, output_dir: pathlib.Path | str | None
-) -> pathlib.Path:
-    """Resolve the target Zarr store path for a site, applying the default stream."""
-    if output_dir is None:
-        output_dir = paths.get_local_stream_path("homogenised_data", "zarr") / "L1"
+def store_path_for(site_name: str, output_dir: pathlib.Path | str) -> pathlib.Path:
+    """Path of a site's L1 Zarr store within output_dir."""
     return pathlib.Path(output_dir) / f"{site_name}_L1.zarr"
 
 
 def build(
-    site_name: str,
-    output_dir: pathlib.Path | str | None = None,
+    ctx: SiteContext,
+    output_dir: pathlib.Path | str,
     year: int | None = None,
-    legacy: bool = False,
+    global_attrs: dict | None = None,
 ) -> pathlib.Path:
     """Build a single, whole-history L1 Zarr store for a site (full rebuild).
 
@@ -77,27 +71,23 @@ def build(
     stored history silently stale.
 
     Args:
-        site_name: registered site name.
-        output_dir: directory to write the store into. Defaults to the
-            homogenised_data/zarr/L1 stream path.
+        ctx: the site's assembled runtime config and metadata.
+        output_dir: directory to write the store into.
         year: if provided, discard all records before this calendar year
             during data loading.
-        legacy: if True, build from the site's legacy config snapshot
-            instead of its operational config.
+        global_attrs: extra global attributes to stamp on the store (see
+            build_L1_nc.assign_L1_global_generic_attrs).
 
     Returns:
         Path to the Zarr store written.
     """
-    store_path = _resolve_store_path(site_name, output_dir)
-    runtime_cfg = site_runner.get_runtime_config(site_name, legacy=legacy)
+    store_path = store_path_for(ctx.runtime_config.site_name, output_dir)
 
     start_date = pd.Timestamp(year, 1, 1) if year is not None else None
-    ds = site_runner.build_dataset_from_site_name(
-        site_name, start_date=start_date, legacy=legacy
-    )
-    ds = build_L1_ds_complete(ds)
+    ds = build_dataset_from_context(ctx=ctx, start_date=start_date)
+    ds = build_L1_ds_complete(ds, global_attrs=global_attrs)
     ds = build_L1_ds_full(ds)
-    ds.attrs["config_hash"] = incremental_zarr.hash_config(runtime_cfg)
+    ds.attrs["config_hash"] = incremental_zarr.hash_config(ctx.runtime_config)
 
     file_io.write_zarr(ds=ds, store_path=store_path)
 
@@ -105,9 +95,9 @@ def build(
 
 
 def update(
-    site_name: str,
-    output_dir: pathlib.Path | str | None = None,
-    legacy: bool = False,
+    ctx: SiteContext,
+    output_dir: pathlib.Path | str,
+    global_attrs: dict | None = None,
 ) -> pathlib.Path:
     """Incrementally update a site's L1 Zarr store with new records only.
 
@@ -135,37 +125,34 @@ def update(
     `build_L2_zarr.update()`).
 
     Args:
-        site_name: registered site name.
-        output_dir: directory containing the store. Defaults to the
-            homogenised_data/zarr/L1 stream path.
-        legacy: if True, build from the site's legacy config snapshot
-            instead of its operational config.
+        ctx: the site's assembled runtime config and metadata.
+        output_dir: directory containing the store.
+        global_attrs: extra global attributes to stamp on the store (see
+            build_L1_nc.assign_L1_global_generic_attrs).
 
     Returns:
         Path to the Zarr store (updated in place, or freshly built).
     """
-    store_path = _resolve_store_path(site_name, output_dir)
-    runtime_cfg = site_runner.get_runtime_config(site_name, legacy=legacy)
+    site_name = ctx.runtime_config.site_name
+    store_path = store_path_for(site_name, output_dir)
 
     def produce_tail(checkpoint: pd.Timestamp) -> xr.Dataset | None:
         time_step = int(xr.open_zarr(store_path).attrs["time_step"])
         start_date = checkpoint + pd.Timedelta(minutes=time_step)
 
-        ds = site_runner.build_dataset_from_site_name(
-            site_name, start_date=start_date, legacy=legacy
-        )
+        ds = build_dataset_from_context(ctx=ctx, start_date=start_date)
         if ds.sizes["time"] == 0:
             return None
 
-        ds = build_L1_ds_complete(ds)
+        ds = build_L1_ds_complete(ds, global_attrs=global_attrs)
         return build_L1_ds_tail(ds, store_path=store_path)
 
     def full_rebuild() -> pathlib.Path:
-        return build(site_name, output_dir=output_dir, legacy=legacy)
+        return build(ctx, output_dir=output_dir, global_attrs=global_attrs)
 
     return incremental_zarr.incremental_update(
         store_path=store_path,
-        config_hash=incremental_zarr.hash_config(runtime_cfg),
+        config_hash=incremental_zarr.hash_config(ctx.runtime_config),
         produce_tail=produce_tail,
         full_rebuild=full_rebuild,
         logger=logger,
@@ -173,14 +160,14 @@ def update(
     )
 
 
-def build_L1_ds_complete(ds):
+def build_L1_ds_complete(ds, global_attrs: dict | None = None):
     """Apply spatial dims, CRS variable, and generic global attrs to the dataset.
 
     Reused unchanged from build_L1_nc — none of these steps are year-scoped.
     """
     ds = do_dim_ops(ds=ds)
     ds = assign_crs_variable(ds=ds)
-    ds = assign_L1_global_generic_attrs(ds=ds)
+    ds = assign_L1_global_generic_attrs(ds=ds, global_attrs=global_attrs)
 
     return ds
 
@@ -344,58 +331,3 @@ def _isoformat_history(history: dict) -> dict:
         }
         for inst, dates in history.items()
     }
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Build or incrementally update a site's L1 Zarr store."
-    )
-    parser.add_argument("site_name", help="Registered site name, e.g. Dookie2.")
-    parser.add_argument(
-        "--update",
-        action="store_true",
-        help="Incrementally append new records instead of a full rebuild.",
-    )
-    parser.add_argument(
-        "--year",
-        type=int,
-        default=None,
-        help="Discard records before this calendar year during data loading "
-        "(--update only checkpoints off the store's own last timestamp; "
-        "this is ignored with --update).",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=pathlib.Path,
-        default=None,
-        help="Override output directory (default: homogenised_data/zarr/L1 stream).",
-    )
-    parser.add_argument(
-        "--legacy",
-        action="store_true",
-        help="Build from the site's legacy config snapshot instead of operational.",
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
-    """CLI entry point."""
-    args = _parse_args()
-    if args.update:
-        store_path = update(
-            site_name=args.site_name,
-            output_dir=args.output_dir,
-            legacy=args.legacy,
-        )
-    else:
-        store_path = build(
-            site_name=args.site_name,
-            output_dir=args.output_dir,
-            year=args.year,
-            legacy=args.legacy,
-        )
-    print(f"Wrote Zarr store: {store_path}")
-
-
-if __name__ == "__main__":
-    main()

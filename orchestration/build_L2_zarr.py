@@ -15,11 +15,11 @@ the despike test gets a genuine neighbourhood rather than being starved by a
 handful of new records — see update()'s docstring), and append. Falls back
 to a full build() on any exception, same pattern as L1's update().
 
-Usage (from project root, with ep_cntl activated):
-    python -m orchestration.build_L2_zarr SITE_NAME [--update] [--output-dir DIR]
+Generic core: takes an already-loaded SiteQCConfig and explicit store
+directories. The TERN site-name wrappers and CLI live in
+orchestration/tern/build_runner.py.
 """
 
-import argparse
 import logging
 import pathlib
 
@@ -29,35 +29,27 @@ import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT
 from infrastructure import file_io
-from infrastructure.tern import paths
 from orchestration import incremental_zarr, qc_pipeline
 from services.metadata.core import qc_config_schema
+from services.metadata.core.qc_config_schema import SiteQCConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_store_path(
-    site_name: str, output_dir: pathlib.Path | str | None
-) -> pathlib.Path:
-    """Resolve the target L2 Zarr store path for a site."""
-    if output_dir is None:
-        output_dir = paths.get_local_stream_path("homogenised_data", "zarr") / "L2"
+def store_path_for(site_name: str, output_dir: pathlib.Path | str) -> pathlib.Path:
+    """Path of a site's L2 Zarr store within output_dir."""
     return pathlib.Path(output_dir) / f"{site_name}_L2.zarr"
 
 
-def _resolve_l1_store_path(
-    site_name: str, l1_dir: pathlib.Path | str | None
-) -> pathlib.Path:
-    """Resolve the source L1 Zarr store path for a site."""
-    if l1_dir is None:
-        l1_dir = paths.get_local_stream_path("homogenised_data", "zarr") / "L1"
+def _l1_store_path(site_name: str, l1_dir: pathlib.Path | str) -> pathlib.Path:
+    """Path of a site's source L1 Zarr store within l1_dir."""
     return pathlib.Path(l1_dir) / f"{site_name}_L1.zarr"
 
 
 def build(
-    site_name: str,
-    output_dir: pathlib.Path | str | None = None,
-    l1_dir: pathlib.Path | str | None = None,
+    qc_config: SiteQCConfig,
+    output_dir: pathlib.Path | str,
+    l1_dir: pathlib.Path | str,
 ) -> pathlib.Path:
     """Build a single, whole-history L2 Zarr store for a site (full rebuild).
 
@@ -71,20 +63,19 @@ def build(
     history silently stale.
 
     Args:
-        site_name: registered site name.
-        output_dir: directory to write the L2 store into. Defaults to the
-            homogenised_data/zarr/L2 stream path.
-        l1_dir: directory containing the source L1 store. Defaults to the
-            homogenised_data/zarr/L1 stream path.
+        qc_config: the site's own QC config (overrides only; the shared
+            defaults are loaded and merged here). Its site_name names the
+            stores ({site_name}_L1.zarr in, {site_name}_L2.zarr out).
+        output_dir: directory to write the L2 store into.
+        l1_dir: directory containing the source L1 store.
 
     Returns:
         Path to the L2 Zarr store written.
     """
-    store_path = _resolve_store_path(site_name, output_dir)
-    l1_path = _resolve_l1_store_path(site_name, l1_dir)
+    store_path = store_path_for(qc_config.site_name, output_dir)
+    l1_path = _l1_store_path(qc_config.site_name, l1_dir)
 
     ds = xr.open_zarr(l1_path)
-    qc_config = qc_config_schema.load_qc_config(site_name)
     qc_config_schema.validate_qc_config_variables(
         qc_config, qc_pipeline.checkable_variables(ds)
     )
@@ -104,9 +95,9 @@ def build(
 
 
 def update(
-    site_name: str,
-    output_dir: pathlib.Path | str | None = None,
-    l1_dir: pathlib.Path | str | None = None,
+    qc_config: SiteQCConfig,
+    output_dir: pathlib.Path | str,
+    l1_dir: pathlib.Path | str,
 ) -> pathlib.Path:
     """Incrementally update a site's L2 Zarr store with new L1 records only.
 
@@ -135,19 +126,16 @@ def update(
     envelope this delegates to (shared with `build_L1_zarr.update()`).
 
     Args:
-        site_name: registered site name.
-        output_dir: directory containing the L2 store. Defaults to the
-            homogenised_data/zarr/L2 stream path.
-        l1_dir: directory containing the source L1 store. Defaults to the
-            homogenised_data/zarr/L1 stream path.
+        qc_config: the site's own QC config (see build()).
+        output_dir: directory containing the L2 store.
+        l1_dir: directory containing the source L1 store.
 
     Returns:
         Path to the L2 Zarr store (updated in place, or freshly built).
     """
-    store_path = _resolve_store_path(site_name, output_dir)
-    l1_path = _resolve_l1_store_path(site_name, l1_dir)
+    store_path = store_path_for(qc_config.site_name, output_dir)
+    l1_path = _l1_store_path(qc_config.site_name, l1_dir)
 
-    qc_config = qc_config_schema.load_qc_config(site_name)
     dependency_defaults = qc_config_schema.load_dependency_defaults()
     range_defaults = qc_config_schema.load_range_defaults()
 
@@ -191,7 +179,7 @@ def update(
         return _assign_L2_tail_attrs(ds, store_path=store_path)
 
     def full_rebuild() -> pathlib.Path:
-        return build(site_name, output_dir=output_dir, l1_dir=l1_dir)
+        return build(qc_config, output_dir=output_dir, l1_dir=l1_dir)
 
     return incremental_zarr.incremental_update(
         store_path=store_path,
@@ -201,7 +189,7 @@ def update(
         produce_tail=produce_tail,
         full_rebuild=full_rebuild,
         logger=logger,
-        label=f"L2 {site_name}",
+        label=f"L2 {qc_config.site_name}",
     )
 
 
@@ -228,50 +216,3 @@ def _assign_L2_tail_attrs(ds: xr.Dataset, store_path: pathlib.Path) -> xr.Datase
         }
     )
     return ds
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Apply L2 QC to a site's L1 Zarr store, building/updating an L2 store."
-    )
-    parser.add_argument("site_name", help="Registered site name, e.g. Dookie2.")
-    parser.add_argument(
-        "--update",
-        action="store_true",
-        help="Incrementally append new records instead of a full rebuild.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=pathlib.Path,
-        default=None,
-        help="Override L2 output directory (default: homogenised_data/zarr/L2 stream).",
-    )
-    parser.add_argument(
-        "--l1-dir",
-        type=pathlib.Path,
-        default=None,
-        help="Override source L1 directory (default: homogenised_data/zarr/L1 stream).",
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
-    """CLI entry point."""
-    args = _parse_args()
-    if args.update:
-        store_path = update(
-            site_name=args.site_name,
-            output_dir=args.output_dir,
-            l1_dir=args.l1_dir,
-        )
-    else:
-        store_path = build(
-            site_name=args.site_name,
-            output_dir=args.output_dir,
-            l1_dir=args.l1_dir,
-        )
-    print(f"Wrote Zarr store: {store_path}")
-
-
-if __name__ == "__main__":
-    main()

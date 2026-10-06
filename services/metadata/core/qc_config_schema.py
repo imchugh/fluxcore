@@ -7,29 +7,31 @@ loader: QC config content (canonical variable names + numeric thresholds) needs
 no TERN-specific resolution, so the whole load path stays in tier 1 (generic
 core) — see CLAUDE.md's "Generic-core / TERN-adapter / ops boundary".
 
-Per-site QC config files live beside the L1 site configs, in the
-site_config_files_L2 stream (site_configs/operational/L2/{site_name}.yml), so
-site-specific configs stay separate from code. The shared, site-independent
-defaults table (configs/qc/_range_defaults.yml) stays in-repo: it changes with
-the code and applies to every site.
+Where a site's own QC config file lives is the caller's concern
+(load_qc_config takes the directory explicitly; TERN's is resolved by
+services/metadata/tern/qc_config_loader.py). The shared, site-independent
+defaults tables (configs/qc/_range_defaults.yml, _dependency_defaults.yml)
+ship with the code: they change with it and apply to every site.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
 
 import xarray as xr
 from pydantic import BaseModel, ConfigDict, RootModel, field_validator, model_validator
 
 from domain.enums import StatisticType, VariableType
 from infrastructure.file_io import read_yml
-from infrastructure.tern import paths
+from services import config_loader
 from services.data.calculations import standard_pressure_kpa
 from services.metadata.core.variable_name_parser import (
     NameParser,
     VariableNameParseError,
 )
+
+QC_DEFAULTS_DIR = config_loader.CONFIG_PATH / "qc"
 
 
 class RangeCheckSpec(BaseModel):
@@ -183,16 +185,13 @@ class SiteQCConfig:
         return order
 
 
-def load_qc_config(site_name: str, config_dir: Path | None = None) -> SiteQCConfig:
+def load_qc_config(site_name: str, config_dir: Path | str) -> SiteQCConfig:
     """Load a site's QC config, or an empty (pass-through) one if none exists.
 
     Args:
-        site_name: registered site name.
-        config_dir: directory containing {site_name}.yml. Defaults to the
-            site_config_files_L2 stream (site_configs/operational/L2).
+        site_name: the site's name.
+        config_dir: directory containing {site_name}.yml.
     """
-    if config_dir is None:
-        config_dir = paths.get_local_stream_path("configs", "site_config_files_L2")
     file_path = Path(config_dir) / f"{site_name}.yml"
 
     if not file_path.exists():
@@ -212,7 +211,7 @@ def load_range_defaults(config_dir: Path | None = None) -> dict:
     StatisticType suffix (Av/Sd/Vr/...) -- see the file's own header comment
     for the full keying convention. Returns {} if the file doesn't exist.
     """
-    config_dir = config_dir or (paths.CONFIG_PATH / "qc")
+    config_dir = config_dir or QC_DEFAULTS_DIR
     file_path = Path(config_dir) / "_range_defaults.yml"
 
     if not file_path.exists():
@@ -242,7 +241,10 @@ def validate_qc_config_variables(
                 missing.add(dep)
         if spec.flag_check is not None:
             missing.update(s for s in spec.flag_check.source if s not in available)
-        if spec.mad_filter is not None and spec.mad_filter.reference_var not in available:
+        if (
+            spec.mad_filter is not None
+            and spec.mad_filter.reference_var not in available
+        ):
             missing.add(spec.mad_filter.reference_var)
 
     if missing:
@@ -268,7 +270,7 @@ def load_dependency_defaults(
     sites) -- resolve_qc_config existence-gates each entry against a site's
     real data at merge time. Returns {} if the file doesn't exist.
     """
-    config_dir = config_dir or (paths.CONFIG_PATH / "qc")
+    config_dir = config_dir or QC_DEFAULTS_DIR
     file_path = Path(config_dir) / "_dependency_defaults.yml"
 
     if not file_path.exists():
@@ -325,7 +327,10 @@ def resolve_default_range(
         if elevation is None:
             return None
         centre = standard_pressure_kpa(elevation)
-        return (centre - entry["standard_pressure_pm"], centre + entry["standard_pressure_pm"])
+        return (
+            centre - entry["standard_pressure_pm"],
+            centre + entry["standard_pressure_pm"],
+        )
 
     if parsed.qualifier is not None and parsed.qualifier in entry:
         return tuple(entry[parsed.qualifier])

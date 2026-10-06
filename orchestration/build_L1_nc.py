@@ -15,6 +15,11 @@ assign_L1_global_generic_attrs, and get_ds_years are also reused by
 orchestration/build_L2_nc.py -- their content is generic to any
 Zarr-sourced, already-processed dataset, not specific to L1, despite the
 naming.
+
+Generic core: takes a SiteContext and explicit directories, never a bare
+site name to resolve. Network-specific global attributes (e.g. TERN's
+configs/nc_metadata.yml) are passed in as `global_attrs` by the caller; the
+TERN site-name wrappers live in orchestration/tern/build_runner.py.
 """
 
 import datetime
@@ -26,11 +31,10 @@ import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT, NC_ENCODING, SITE_PLACEHOLDER
 from infrastructure import file_io
-from infrastructure.tern import paths
-from orchestration.tern import site_runner
+from orchestration.dataset_builder import build_dataset_from_context
 from services import config_loader
+from services.metadata.core.site_metadata_builder import SiteContext
 
-STD_METADATA = config_loader.load_config_file_from_name(name="nc_metadata")
 NC_DIM_ATTRS = config_loader.load_config_file_from_name(name="nc_dim_attrs")
 
 VARIABLE_NC_ATTRS = {
@@ -54,14 +58,14 @@ def get_ds_years(ds):
 
 
 def build(
-    site_name: str,
-    output_dir: pathlib.Path | str | None = None,
+    ctx: SiteContext,
+    output_dir: pathlib.Path | str,
     year: int | None = None,
-    legacy: bool = False,
+    global_attrs: dict | None = None,
 ) -> list[pathlib.Path]:
     """Build L1 NetCDF files for all data years at a site.
 
-    Constructs the base L1 dataset via L1_constructor, augments it with
+    Constructs the base L1 dataset from the site context, augments it with
     NetCDF global attributes and spatial dimensions, then writes one file
     per data year to output_dir.
 
@@ -70,31 +74,22 @@ def build(
     produce empty output years.
 
     Args:
-        site_name: registered site name.
-        output_dir: directory to write files into. Defaults to the
-            homogenised_data/nc stream path for this site.
+        ctx: the site's assembled runtime config and metadata.
+        output_dir: directory to write files into.
         year: if provided, only build that calendar year and discard all
-            earlier records during data loading.  Use for the 30-min
-            operational update cycle to avoid reading full site history.
-        legacy: if True, build from the site's legacy config snapshot
-            (site_configs/legacy) instead of its operational config. Use
-            for one-off rebuilds of a site under an earlier generation of
-            instruments/variables/files. Not wired into scheduled tasks —
-            callers should pass an explicit output_dir to avoid overwriting
-            the operational L1 output for the site.
+            earlier records during data loading.
+        global_attrs: extra global attributes to stamp on every file (see
+            assign_L1_global_generic_attrs).
 
     Returns:
         List of paths to files written.
     """
-    if output_dir is None:
-        output_dir = paths.get_local_stream_path("homogenised_data", "nc") / site_name
+    site_name = ctx.runtime_config.site_name
     output_dir = pathlib.Path(output_dir)
 
     start_date = pd.Timestamp(year, 1, 1) if year is not None else None
-    ds = site_runner.build_dataset_from_site_name(
-        site_name, start_date=start_date, legacy=legacy
-    )
-    ds = build_L1_ds_complete(ds)
+    ds = build_dataset_from_context(ctx=ctx, start_date=start_date)
+    ds = build_L1_ds_complete(ds, global_attrs=global_attrs)
 
     written = []
     for ds_year in get_ds_years(ds):
@@ -108,9 +103,10 @@ def build(
 
 def build_from_zarr(
     site_name: str,
-    zarr_dir: pathlib.Path | str | None = None,
-    output_dir: pathlib.Path | str | None = None,
+    zarr_dir: pathlib.Path | str,
+    output_dir: pathlib.Path | str,
     year: int | None = None,
+    global_attrs: dict | None = None,
 ) -> list[pathlib.Path]:
     """Build L1 NetCDF files for a site by reading from its Zarr store.
 
@@ -125,28 +121,25 @@ def build_from_zarr(
     matching the fail-closed style already used for tasks.csv.
 
     Args:
-        site_name: registered site name.
-        zarr_dir: directory containing the site's Zarr store. Defaults to
-            the homogenised_data/zarr/L1 stream path.
-        output_dir: directory to write NetCDF files into. Defaults to the
-            homogenised_data/nc stream path for this site.
+        site_name: the site's name, used only for store/file naming
+            ({site_name}_L1.zarr in, {site_name}_{year}_L1.nc out).
+        zarr_dir: directory containing the site's Zarr store.
+        output_dir: directory to write NetCDF files into.
         year: if provided, only build that calendar year's file.
+        global_attrs: extra global attributes to (re)stamp on every file
+            (see assign_L1_global_generic_attrs).
 
     Returns:
         List of paths to files written.
     """
-    if zarr_dir is None:
-        zarr_dir = paths.get_local_stream_path("homogenised_data", "zarr") / "L1"
     store_path = pathlib.Path(zarr_dir) / f"{site_name}_L1.zarr"
 
     ds = xr.open_zarr(store_path).load()
     ds = _rehydrate_instrument_history(ds)
     # Refresh date_created/history to this NetCDF build's own time, rather
     # than whenever the Zarr store was last written/appended.
-    ds = assign_L1_global_generic_attrs(ds)
+    ds = assign_L1_global_generic_attrs(ds, global_attrs=global_attrs)
 
-    if output_dir is None:
-        output_dir = paths.get_local_stream_path("homogenised_data", "nc") / site_name
     output_dir = pathlib.Path(output_dir)
 
     years = [year] if year is not None else get_ds_years(ds)
@@ -161,11 +154,11 @@ def build_from_zarr(
     return written
 
 
-def build_L1_ds_complete(ds):
+def build_L1_ds_complete(ds, global_attrs: dict | None = None):
     """Apply spatial dims, CRS variable, and generic global attrs to the dataset."""
     ds = do_dim_ops(ds=ds)
     ds = assign_crs_variable(ds=ds)
-    ds = assign_L1_global_generic_attrs(ds=ds)
+    ds = assign_L1_global_generic_attrs(ds=ds, global_attrs=global_attrs)
 
     return ds
 
@@ -293,13 +286,22 @@ def assign_L1_data_year_attrs(ds, year):
     return ds
 
 
-def assign_L1_global_generic_attrs(ds):
-    """Add the site-agnostic global attrs from nc_metadata config, plus date/history."""
-    # Get and edit the generic global attribute fields
-    site_metadata = STD_METADATA.copy()
-    site_metadata["metadata_link"] = site_metadata["metadata_link"].replace(
-        SITE_PLACEHOLDER, ds.site_name
-    )
+def assign_L1_global_generic_attrs(ds, global_attrs: dict | None = None):
+    """Add caller-supplied global attrs, plus date/history.
+
+    global_attrs is a network's own global attribute template (e.g. TERN's
+    configs/nc_metadata.yml); any string value containing SITE_PLACEHOLDER
+    has it replaced with the dataset's site_name. None adds only the
+    date/history fields.
+    """
+    site_metadata = {
+        key: (
+            value.replace(SITE_PLACEHOLDER, ds.site_name)
+            if isinstance(value, str)
+            else value
+        )
+        for key, value in (global_attrs or {}).items()
+    }
 
     # Add time-sensitive fields
     date = datetime.datetime.now()
