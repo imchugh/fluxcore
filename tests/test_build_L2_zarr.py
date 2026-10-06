@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from infrastructure import file_io, paths
+from infrastructure import file_io
+from infrastructure.tern import paths
 from orchestration import build_L2_zarr
 
 
@@ -57,7 +58,7 @@ class BuildL2ZarrTestCase(unittest.TestCase):
             "Ta_Av:\n  range_check: {lower: -10, upper: 50}\n"
         )
 
-        patcher = mock.patch("infrastructure.paths.CONFIG_PATH", self.root)
+        patcher = mock.patch("infrastructure.tern.paths.CONFIG_PATH", self.root)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -71,7 +72,7 @@ class BuildL2ZarrTestCase(unittest.TestCase):
             return real_stream_path(resource, stream, site)
 
         stream_patcher = mock.patch(
-            "infrastructure.paths.get_local_stream_path", side_effect=_stream_path
+            "infrastructure.tern.paths.get_local_stream_path", side_effect=_stream_path
         )
         stream_patcher.start()
         self.addCleanup(stream_patcher.stop)

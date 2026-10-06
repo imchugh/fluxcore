@@ -33,7 +33,8 @@ import pandas as pd
 import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT
-from infrastructure import file_io, paths
+from infrastructure import file_io
+from infrastructure.tern import paths
 from orchestration import incremental_zarr
 from orchestration.build_L1_nc import (
     assign_crs_variable,

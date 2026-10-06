@@ -25,7 +25,8 @@ import pathlib
 import xarray as xr
 
 from domain.constants import NC_ENCODING
-from infrastructure import file_io, paths
+from infrastructure import file_io
+from infrastructure.tern import paths
 from orchestration.build_L1_nc import (
     _rehydrate_instrument_history,
     assign_L1_global_generic_attrs,

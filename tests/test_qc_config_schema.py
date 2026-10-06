@@ -9,7 +9,7 @@ import pandas as pd
 import xarray as xr
 from pydantic import ValidationError
 
-from services.metadata import qc_config_schema
+from services.metadata.core import qc_config_schema
 
 VALID_YAML = """\
 Ta_Av:

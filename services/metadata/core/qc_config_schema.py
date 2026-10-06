@@ -23,8 +23,8 @@ import xarray as xr
 from pydantic import BaseModel, ConfigDict, RootModel, field_validator, model_validator
 
 from domain.enums import StatisticType, VariableType
-from infrastructure import paths
 from infrastructure.file_io import read_yml
+from infrastructure.tern import paths
 from services.data.calculations import standard_pressure_kpa
 from services.metadata.core.variable_name_parser import (
     NameParser,
@@ -303,9 +303,9 @@ def resolve_default_range(
     own range entry must not apply), the quantity has no entry, or the entry
     is a dict with no matching qualifier or statistic key.
 
-    Public: used by lookup_default_range, orchestration.legacy_rtmc_export
-    and the site monitors (services.data.data_monitor,
-    orchestration.legacy_network_status).
+    Public: used by lookup_default_range, orchestration.tern.legacy_rtmc_export
+    and the site monitors (services.network.data_monitor,
+    orchestration.tern.legacy_network_status).
     """
     try:
         parsed = name_parser.parse_variable_name(var_name)

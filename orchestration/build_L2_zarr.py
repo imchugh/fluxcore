@@ -28,9 +28,10 @@ import pandas as pd
 import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT
-from infrastructure import file_io, paths
+from infrastructure import file_io
+from infrastructure.tern import paths
 from orchestration import incremental_zarr, qc_pipeline
-from services.metadata import qc_config_schema
+from services.metadata.core import qc_config_schema
 
 logger = logging.getLogger(__name__)
 

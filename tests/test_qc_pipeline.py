@@ -7,8 +7,8 @@ import pandas as pd
 import xarray as xr
 
 from orchestration import qc_pipeline
-from services.metadata import qc_config_schema
-from services.metadata.qc_config_schema import (
+from services.metadata.core import qc_config_schema
+from services.metadata.core.qc_config_schema import (
     RangeCheckSpec,
     SiteQCConfig,
     VariableQCSpec,

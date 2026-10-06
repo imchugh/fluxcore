@@ -2,7 +2,7 @@
 """Resolve and load internal config files (yml/txt/csv) by name.
 
 Generic core: defines its own CONFIG_PATH/CONFIG_FILE rather than importing
-them from infrastructure.paths, which is TERN-adapter-side (site-placeholder
+them from infrastructure.tern.paths, which is TERN-adapter-side (site-placeholder
 path templating) and must stay out of tier-1 imports. Both resolve to the
 same physical location (this repo's configs/ directory), computed
 independently since paths.py belongs to a different tier.

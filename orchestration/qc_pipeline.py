@@ -13,7 +13,7 @@ import pandas as pd
 import xarray as xr
 
 from services.data.qc_service import get_check
-from services.metadata.qc_config_schema import SiteQCConfig
+from services.metadata.core.qc_config_schema import SiteQCConfig
 
 # Matches PyFluxPro's own codes exactly (grepped from pfp_ck.py/pfp_io.py, not
 # from memory), so {var}_QCFlag is directly comparable against real PyFluxPro

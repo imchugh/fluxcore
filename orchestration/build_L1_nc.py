@@ -25,7 +25,8 @@ import pandas as pd
 import xarray as xr
 
 from domain.constants import DATA_TIME_FORMAT, NC_ENCODING, SITE_PLACEHOLDER
-from infrastructure import file_io, paths
+from infrastructure import file_io
+from infrastructure.tern import paths
 from orchestration.tern import site_runner
 from services import config_loader
 
