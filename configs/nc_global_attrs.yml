@@ -1,0 +1,8 @@
+# Network-agnostic NetCDF global attributes applied to every output file.
+# A network's own attributes (e.g. TERN's configs/tern/nc_metadata.yml) are
+# passed in by the caller as global_attrs and override these per key.
+Conventions: CF-1.8
+comment: CF metadata, OzFlux standard variable names
+featureType: timeSeries
+license: https://creativecommons.org/licenses/by/4.0/
+license_name: CC BY 4.0

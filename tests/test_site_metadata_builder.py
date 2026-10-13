@@ -1,6 +1,6 @@
 """Tests for the generic-core SiteMetadata file loader (no TERN dependency).
 
-Fixture is the real AliceSpringsMulga record from configs/site_metadata.yml,
+Fixture is the real AliceSpringsMulga record from configs/tern/site_metadata.yml,
 unwrapped from its {site_name: <record>} multi-site mapping into a
 standalone single-site file — the shape a non-TERN caller would write by
 hand, demonstrated with real production data rather than an invented one.

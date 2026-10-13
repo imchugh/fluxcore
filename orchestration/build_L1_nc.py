@@ -17,9 +17,11 @@ Zarr-sourced, already-processed dataset, not specific to L1, despite the
 naming.
 
 Generic core: takes a SiteContext and explicit directories, never a bare
-site name to resolve. Network-specific global attributes (e.g. TERN's
-configs/nc_metadata.yml) are passed in as `global_attrs` by the caller; the
-TERN site-name wrappers live in orchestration/tern/build_runner.py.
+site name to resolve. Every file gets the network-agnostic global attributes
+in configs/nc_global_attrs.yml; network-specific ones (e.g. TERN's
+configs/tern/nc_metadata.yml) are passed in as `global_attrs` by the caller
+and override them per key. The TERN site-name wrappers live in
+orchestration/tern/build_runner.py.
 """
 
 import datetime
@@ -36,6 +38,7 @@ from services import config_loader
 from services.metadata.core.site_metadata_builder import SiteContext
 
 NC_DIM_ATTRS = config_loader.load_config_file_from_name(name="nc_dim_attrs")
+NC_GLOBAL_ATTRS = config_loader.load_config_file_from_name(name="nc_global_attrs")
 
 VARIABLE_NC_ATTRS = {
     "units",
@@ -289,13 +292,15 @@ def assign_L1_data_year_attrs(ds, year):
 def assign_L1_global_generic_attrs(
     ds, global_attrs: dict | None = None, processing_level: str = "L1"
 ):
-    """Add caller-supplied global attrs, plus processing_level and date/history.
+    """Add the core and caller-supplied global attrs, plus generated fields.
 
-    global_attrs is a network's own global attribute template (e.g. TERN's
-    configs/nc_metadata.yml); any string value containing SITE_PLACEHOLDER
-    has it replaced with the dataset's site_name. None adds only the
-    generated fields. processing_level is set by the level's own builder and
-    always overrides any value in global_attrs.
+    The core's network-agnostic attrs (NC_GLOBAL_ATTRS, from
+    configs/nc_global_attrs.yml) are always applied. global_attrs is a
+    network's own global attribute template (e.g. TERN's
+    configs/tern/nc_metadata.yml), overriding the core attrs per key. Any
+    string value containing SITE_PLACEHOLDER has it replaced with the
+    dataset's site_name. processing_level is set by the level's own builder
+    and always overrides any value from either source.
     """
     site_metadata = {
         key: (
@@ -303,7 +308,7 @@ def assign_L1_global_generic_attrs(
             if isinstance(value, str)
             else value
         )
-        for key, value in (global_attrs or {}).items()
+        for key, value in {**NC_GLOBAL_ATTRS, **(global_attrs or {})}.items()
     }
 
     # Add time-sensitive fields
