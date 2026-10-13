@@ -3,7 +3,8 @@
 Tier-1 core modules must never import TERN-adapter or ops code: the core is
 destined for extraction into its own package, where those imports would have
 nothing to resolve to. Every TERN-side module lives in a `tern` subpackage,
-or in services/network, tasks, tools or ui.
+or in services/network, tasks, tools or ui. The same holds for the core's
+tests: those in tests/ go with the core, TERN-side tests live in tests/tern/.
 """
 
 import ast
@@ -19,6 +20,7 @@ CORE_PATHS = [
     "services/metadata/core",
     "services/config_loader.py",
     "orchestration",
+    "tests",
 ]
 
 FORBIDDEN_PREFIXES = ("services.network", "tasks", "tools", "ui", "run")
