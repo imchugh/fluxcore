@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from infrastructure import file_io
-from services.data import eddypro_concatenator as epc
+from fluxcore.infrastructure import file_io
+from fluxcore.services.data import eddypro_concatenator as epc
 
 EDDYPRO_HEADERS = [
     ["DATAH", "filename", "date", "time", "Val1"],

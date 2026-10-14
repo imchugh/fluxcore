@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from infrastructure import file_io
-from orchestration import build_L2_nc
+from fluxcore.infrastructure import file_io
+from fluxcore.orchestration import build_L2_nc
 
 
 def _build_l2_dataset(n=48 * 2, time_step=30, start="2020-01-01"):
@@ -36,7 +36,10 @@ def _build_l2_dataset(n=48 * 2, time_step=30, start="2020-01-01"):
                     # converts a compound instrument dict to an ordered list
                     # of pairs before writing, since Zarr's attrs writer
                     # alphabetizes dict keys but preserves list order).
-                    "instrument": [["sonic_anemometer", "CSAT3B"], ["irga", "LI-7500RS"]],
+                    "instrument": [
+                        ["sonic_anemometer", "CSAT3B"],
+                        ["irga", "LI-7500RS"],
+                    ],
                 },
             ),
             "Ta_Av_QCFlag": (
@@ -49,7 +52,11 @@ def _build_l2_dataset(n=48 * 2, time_step=30, start="2020-01-01"):
                     "flag_meanings": "good range_check",
                 },
             ),
-            "Fco2": (("time", "latitude", "longitude"), fco2, {"long_name": "CO2 flux"}),
+            "Fco2": (
+                ("time", "latitude", "longitude"),
+                fco2,
+                {"long_name": "CO2 flux"},
+            ),
             "crs": 0,
         },
         coords={"time": idx, "latitude": lat, "longitude": lon},

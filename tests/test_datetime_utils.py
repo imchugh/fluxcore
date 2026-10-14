@@ -1,9 +1,9 @@
-"""Tests for infrastructure.datetime_utils.floor_to_interval."""
+"""Tests for fluxcore.infrastructure.datetime_utils.floor_to_interval."""
 
 import unittest
 from datetime import datetime
 
-from infrastructure.datetime_utils import floor_to_interval
+from fluxcore.infrastructure.datetime_utils import floor_to_interval
 
 
 class TestFloorToInterval(unittest.TestCase):

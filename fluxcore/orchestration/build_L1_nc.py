@@ -1,0 +1,600 @@
+#!/usr/bin/env python3
+"""Export step: convert an L1 xarray Dataset into annual NetCDF files.
+
+Adds spatial dims, QC flags, global/variable metadata, then splits by
+calendar year and writes one NetCDF file per year.
+
+build_from_zarr() is the operational path (construct_L1_nc): reads an
+already-processed site from its Zarr store (orchestration/build_L1_zarr.py)
+rather than rebuilding from raw data. build() (raw-data, from scratch) is
+kept for manual/legacy rebuilds, bootstrapping a site before its Zarr store
+exists, and diagnosing zarr/raw discrepancies.
+
+build_L1_year_from_zarr, _rehydrate_instrument_history,
+assign_L1_global_generic_attrs, and get_ds_years are also reused by
+orchestration/build_L2_nc.py -- their content is generic to any
+Zarr-sourced, already-processed dataset, not specific to L1, despite the
+naming.
+
+Generic core: takes a SiteContext and explicit directories, never a bare
+site name to resolve. Every file gets the network-agnostic global attributes
+in configs/nc_global_attrs.yml; network-specific ones (e.g. TERN's
+configs/tern/nc_metadata.yml) are passed in as `global_attrs` by the caller
+and override them per key. The TERN site-name wrappers live in
+orchestration/tern/build_runner.py.
+"""
+
+import datetime
+import pathlib
+
+import numpy as np
+import pandas as pd
+import xarray as xr
+
+from fluxcore.domain.constants import DATA_TIME_FORMAT, NC_ENCODING, SITE_PLACEHOLDER
+from fluxcore.infrastructure import file_io
+from fluxcore.orchestration.dataset_builder import build_dataset_from_context
+from fluxcore.services import config_loader
+from fluxcore.services.metadata.core.site_metadata_builder import SiteContext
+
+NC_DIM_ATTRS = config_loader.load_config_file_from_name(name="nc_dim_attrs")
+NC_GLOBAL_ATTRS = config_loader.load_config_file_from_name(name="nc_global_attrs")
+
+VARIABLE_NC_ATTRS = {
+    "units",
+    "long_name",
+    "standard_name",
+    "height",
+    "height_range",
+    "instrument",
+    "instrument_history",
+    "instrument_uri",
+    "statistic_type",
+    "flag_values",
+    "flag_meanings",
+}
+
+
+def get_ds_years(ds):
+    """Return the sorted list of distinct calendar years present in ds.time."""
+    return np.unique(ds.time.dt.year).tolist()
+
+
+def build(
+    ctx: SiteContext,
+    output_dir: pathlib.Path | str,
+    year: int | None = None,
+    global_attrs: dict | None = None,
+) -> list[pathlib.Path]:
+    """Build L1 NetCDF files for all data years at a site.
+
+    Constructs the base L1 dataset from the site context, augments it with
+    NetCDF global attributes and spatial dimensions, then writes one file
+    per data year to output_dir.
+
+    The dataset is truncated to the temporal extent of the flux file group,
+    so ancillary data (e.g. soil loggers) predating the flux system does not
+    produce empty output years.
+
+    Args:
+        ctx: the site's assembled runtime config and metadata.
+        output_dir: directory to write files into.
+        year: if provided, only build that calendar year and discard all
+            earlier records during data loading.
+        global_attrs: extra global attributes to stamp on every file (see
+            assign_L1_global_generic_attrs).
+
+    Returns:
+        List of paths to files written.
+    """
+    site_name = ctx.runtime_config.site_name
+    output_dir = pathlib.Path(output_dir)
+
+    start_date = pd.Timestamp(year, 1, 1) if year is not None else None
+    ds = build_dataset_from_context(ctx=ctx, start_date=start_date)
+    ds = build_L1_ds_complete(ds, global_attrs=global_attrs)
+
+    written = []
+    for ds_year in get_ds_years(ds):
+        year_ds = build_L1_ds_by_year(ds=ds, year=ds_year)
+        file_path = output_dir / f"{site_name}_{ds_year}_L1.nc"
+        file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
+        written.append(file_path)
+
+    return written
+
+
+def build_from_zarr(
+    site_name: str,
+    zarr_dir: pathlib.Path | str,
+    output_dir: pathlib.Path | str,
+    year: int | None = None,
+    global_attrs: dict | None = None,
+) -> list[pathlib.Path]:
+    """Build L1 NetCDF files for a site by reading from its Zarr store.
+
+    Replaces build()'s raw-data rebuild for the operational cron path: the
+    store (kept current by construct_L1_zarr/rebuild_L1_zarr — see
+    orchestration/build_L1_zarr.py) is already unit-converted, merged,
+    QC-flagged, and attributed, so this only slices by year, re-derives the
+    year-scoped attrs, and writes NetCDF. See build() for the from-scratch
+    raw-data path (manual/legacy/bootstrap use, or diagnosing zarr/raw
+    discrepancies) — also the fallback if a site's Zarr store doesn't exist
+    yet; this function raises rather than silently falling back to it,
+    matching the fail-closed style already used for tasks.csv.
+
+    Args:
+        site_name: the site's name, used only for store/file naming
+            ({site_name}_L1.zarr in, {site_name}_{year}_L1.nc out).
+        zarr_dir: directory containing the site's Zarr store.
+        output_dir: directory to write NetCDF files into.
+        year: if provided, only build that calendar year's file.
+        global_attrs: extra global attributes to (re)stamp on every file
+            (see assign_L1_global_generic_attrs).
+
+    Returns:
+        List of paths to files written.
+    """
+    store_path = pathlib.Path(zarr_dir) / f"{site_name}_L1.zarr"
+
+    ds = xr.open_zarr(store_path).load()
+    ds = _rehydrate_instrument_history(ds)
+    # Refresh date_created/history to this NetCDF build's own time, rather
+    # than whenever the Zarr store was last written/appended.
+    ds = assign_L1_global_generic_attrs(ds, global_attrs=global_attrs)
+
+    output_dir = pathlib.Path(output_dir)
+
+    years = [year] if year is not None else get_ds_years(ds)
+
+    written = []
+    for ds_year in years:
+        year_ds = build_L1_year_from_zarr(ds=ds, year=ds_year)
+        file_path = output_dir / f"{site_name}_{ds_year}_L1.nc"
+        file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
+        written.append(file_path)
+
+    return written
+
+
+def build_L1_ds_complete(ds, global_attrs: dict | None = None):
+    """Apply spatial dims, CRS variable, and generic global attrs to the dataset."""
+    ds = do_dim_ops(ds=ds)
+    ds = assign_crs_variable(ds=ds)
+    ds = assign_L1_global_generic_attrs(ds=ds, global_attrs=global_attrs)
+
+    return ds
+
+
+def _year_time_bounds(ds, year) -> list[str]:
+    """Calendar-year time_bounds for slicing ds, as DATA_TIME_FORMAT strings."""
+    time_step = ds.attrs["time_step"]
+    return [
+        bound.strftime(DATA_TIME_FORMAT)
+        for bound in (
+            datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step),
+            datetime.datetime(year + 1, 1, 1),
+        )
+    ]
+
+
+def build_L1_ds_by_year(ds, year):
+    """Slice ds to one calendar year and apply the per-year attrs/serialization steps.
+
+    Args:
+        ds: xarray dataset already assembled for the full site history.
+        year: calendar year to slice out.
+
+    Returns:
+        Sliced, fully attributed and serialized single-year dataset.
+    """
+    year_ds = ds.sel(time=slice(*_year_time_bounds(ds, year)))
+    year_ds = assign_variable_flags(year_ds)
+    year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
+    year_ds = filter_variable_attrs(ds=year_ds)
+    year_ds = serialize_uri(ds=year_ds)
+    year_ds = serialize_inst_history(ds=year_ds, year=year)
+    year_ds = serialize_units(ds=year_ds)
+    year_ds = file_io.serialize_dataset_attrs(ds=year_ds)
+
+    return year_ds
+
+
+def build_L1_year_from_zarr(ds, year):
+    """Slice a Zarr-sourced (already-processed) dataset to one year.
+
+    Counterpart to build_L1_ds_by_year for data sourced from
+    build_from_zarr rather than freshly built from raw: skips the steps
+    already baked into the Zarr store (QC flags, attr filtering,
+    uri/units serialization) and only re-derives what's
+    genuinely year-scoped — title/record-count/time-coverage attrs and
+    instrument-history clipping — reusing the existing
+    assign_L1_data_year_attrs/serialize_inst_history unchanged.
+
+    Args:
+        ds: xarray dataset loaded from a site's Zarr store (already passed
+            through _rehydrate_instrument_history).
+        year: calendar year to slice out.
+
+    Returns:
+        Sliced, fully attributed and serialized single-year dataset.
+    """
+    year_ds = ds.sel(time=slice(*_year_time_bounds(ds, year)))
+    year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
+    year_ds = serialize_inst_history(ds=year_ds, year=year)
+    year_ds = file_io.serialize_dataset_attrs(ds=year_ds)
+
+    return year_ds
+
+
+def do_dim_ops(ds):
+    """Add latitude/longitude dims and attach CF attrs to the dimension coordinates."""
+    # Add spatial coordinates
+    ds = ds.assign_coords(
+        latitude=ds.attrs["latitude"],
+        longitude=ds.attrs["longitude"],
+    ).expand_dims(["latitude", "longitude"])
+    ds = ds.transpose("time", "latitude", "longitude")
+
+    # Attach CF attrs to dimension coordinates
+    for dim in ("time", "latitude", "longitude"):
+        ds[dim].attrs.update(NC_DIM_ATTRS[dim])
+
+    return ds
+
+
+def assign_crs_variable(ds):
+    """Add a scalar 'crs' coordinate-reference-system variable to ds.
+
+    Args:
+        ds: xarray dataset.
+
+    Returns:
+        ds, with the 'crs' variable added.
+    """
+    ds["crs"] = ([], np.int32(0), NC_DIM_ATTRS["coordinate_reference_system"])
+    return ds
+
+
+def assign_L1_data_year_attrs(ds, year):
+    """Add per-year global attrs (title, record count, time coverage) to ds.
+
+    Args:
+        ds: xarray dataset, already sliced to one calendar year.
+        year: calendar year, used to build the title string.
+
+    Returns:
+        ds, with the year-specific global attrs added.
+    """
+
+    def _format_time(x):
+        return pd.to_datetime(x).strftime(DATA_TIME_FORMAT)
+
+    begin = _format_time(ds.time.values[0])
+    end = _format_time(ds.time.values[-1])
+
+    # Make title string
+    title_str = f"Flux tower data set from the {ds.site_name} site {year}"
+
+    # Assign attrs
+    ds.attrs.update(
+        {
+            "title": title_str,
+            "nc_nrecs": len(ds.time),
+            "time_coverage_start": begin,
+            "time_coverage_end": end,
+        }
+    )
+
+    return ds
+
+
+def assign_L1_global_generic_attrs(
+    ds, global_attrs: dict | None = None, processing_level: str = "L1"
+):
+    """Add the core and caller-supplied global attrs, plus generated fields.
+
+    The core's network-agnostic attrs (NC_GLOBAL_ATTRS, from
+    configs/nc_global_attrs.yml) are always applied. global_attrs is a
+    network's own global attribute template (e.g. TERN's
+    configs/tern/nc_metadata.yml), overriding the core attrs per key. Any
+    string value containing SITE_PLACEHOLDER has it replaced with the
+    dataset's site_name. processing_level is set by the level's own builder
+    and always overrides any value from either source.
+    """
+    site_metadata = {
+        key: (
+            value.replace(SITE_PLACEHOLDER, ds.site_name)
+            if isinstance(value, str)
+            else value
+        )
+        for key, value in {**NC_GLOBAL_ATTRS, **(global_attrs or {})}.items()
+    }
+
+    # Add time-sensitive fields
+    date = datetime.datetime.now()
+    this_year = date.strftime("%Y")
+    this_month = date.strftime("%b")
+    site_metadata.update(
+        {
+            "processing_level": processing_level,
+            "date_created": date.strftime(DATA_TIME_FORMAT),
+            "history": f"{this_month} {this_year} processing",
+        }
+    )
+
+    # Update dataset metadata
+    ds.attrs.update(site_metadata)
+
+    return ds
+
+
+def assign_variable_flags(ds):
+    """Assign the variable QC flags to the existing dataset.
+
+    Args:
+        ds: xarray dataset.
+
+    Returns:
+        ds, with a '{var}_QCFlag' variable added for every data variable.
+    """
+    var_list = [
+        var
+        for var in ds.variables
+        if var not in ds.dims and var not in ("crs", "day_night")
+    ]
+    for var in var_list:
+        ds[f"{var}_QCFlag"] = (
+            ["time", "latitude", "longitude"],
+            pd.isnull(ds[var]).astype(int),
+            {"long_name": f"{var} QC flag", "units": "1"},
+        )
+    return ds
+
+
+def filter_variable_attrs(ds):
+    """Drop every variable attr not in VARIABLE_NC_ATTRS (crs is left untouched)."""
+    for var in ds.variables:
+        if var == "crs":
+            continue
+        ds[var].attrs = {
+            k: v for k, v in ds[var].attrs.items() if k in VARIABLE_NC_ATTRS
+        }
+
+    return ds
+
+
+def serialize_units(ds):
+    """Rewrite 'dimensionless' units to '1', the CF-compliant form."""
+    for var in ds.variables:
+        if ds[var].attrs.get("units") == "dimensionless":
+            ds[var].attrs["units"] = "1"
+
+    return ds
+
+
+def serialize_uri(ds):
+    """Flatten a compound-instrument instrument_uri dict to a comma-joined string.
+
+    Unresolved (None) entries are dropped; a dict with no resolved URIs at
+    all serializes to None, consistent with a scalar unresolved
+    instrument_uri, so the later None-attr filter drops the attribute
+    rather than writing a literal "None" string.
+    """
+    var_list = [var for var in ds.variables if var not in ds.dims]
+    for var in var_list:
+        attrs = ds[var].attrs
+
+        if isinstance(attrs.get("instrument_uri"), dict):
+            uris = [uri for uri in attrs["instrument_uri"].values() if uri is not None]
+            attrs["instrument_uri"] = ",".join(uris) if uris else None
+
+    return ds
+
+
+def _rehydrate_instrument_history(ds):
+    """Reverse build_L1_zarr._json_safe_instrument_history's Zarr-safe encoding.
+
+    Parses each variable's instrument_history start_date/end_date back to
+    pd.Timestamp (or None), so serialize_inst_history can run against
+    Zarr-sourced data exactly as it does against freshly built data. Also
+    reconstructs `instrument`/instrument_history's alias-level structure
+    from the [key, value]-pair lists written at Zarr-build time back into
+    plain dicts, in their original order — a compound instrument_history is
+    a list at this point (never a dict), which is what tells this apart
+    from a simple one, so no key-order guessing is needed the way
+    _reorder_compound_instrument used to do it.
+    """
+    var_list = [var for var in ds.variables if var not in ds.dims]
+    for var in var_list:
+        attrs = ds[var].attrs
+
+        inst = attrs.get("instrument")
+        if isinstance(inst, list):
+            attrs["instrument"] = dict(inst)
+
+        history = attrs.get("instrument_history")
+        if history is None:
+            continue
+
+        if isinstance(history, list):
+            # Compound: [[alias, {inst_name: {start_date, end_date}}], ...]
+            attrs["instrument_history"] = {
+                alias: _parse_history(inst_history) for alias, inst_history in history
+            }
+        else:
+            attrs["instrument_history"] = _parse_history(history)
+
+    return ds
+
+
+def _parse_history(history: dict) -> dict:
+    """Parse ISO-string start_date/end_date within a simple instrument-history dict."""
+    return {
+        inst: {
+            "start_date": pd.Timestamp(dates["start_date"])
+            if dates["start_date"] is not None
+            else None,
+            "end_date": pd.Timestamp(dates["end_date"])
+            if dates["end_date"] is not None
+            else None,
+        }
+        for inst, dates in history.items()
+    }
+
+
+def serialize_inst_history(ds, year):
+    """Serialize per-year instrument-changeover history into compact attr strings.
+
+    Collapses the instrument_history dict (simple or compound) built during
+    dataset assembly into '|'- and ';'-joined strings clipped to this year's
+    date range, and sets 'instrument' to the last instrument used in the year.
+    The open-ended-date resolution itself lives in resolve_instrument_history;
+    this function only adds the calendar-year windowing and NetCDF attr
+    reassembly on top of it.
+    """
+    time_step = ds.attrs["time_step"]
+    year_start = datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step)
+    year_end = datetime.datetime(year + 1, 1, 1)
+    year_start = max(year_start, pd.Timestamp(ds.time.values[0]).to_pydatetime())
+    year_end = min(year_end, pd.Timestamp(ds.time.values[-1]).to_pydatetime())
+
+    var_list = [var for var in ds.variables if var not in ds.dims]
+    for var in var_list:
+        attrs = ds[var].attrs
+
+        if "instrument_history" not in attrs:
+            if isinstance(attrs.get("instrument"), dict):
+                attrs["instrument"] = ",".join(attrs["instrument"].values())
+            continue
+
+        history = attrs["instrument_history"]
+        first_val = next(iter(history.values()))
+
+        if "start_date" in first_val:
+            # Simple: {inst_name: {start_date, end_date}}
+            if isinstance(attrs.get("instrument"), dict):
+                attrs["instrument"] = ",".join(attrs["instrument"].values())
+            serialised, last_inst = _serialise_simple_history(
+                history, year_start, year_end
+            )
+        else:
+            # Compound: {alias: {inst_name: {start_date, end_date}}}
+            serialised, last_inst = _serialise_compound_history(
+                history, year_start, year_end
+            )
+
+        if not serialised:
+            del attrs["instrument_history"]
+        elif "start_date" in first_val:
+            # Simple history
+            if len(serialised) == 1:
+                attrs["instrument"] = last_inst
+                del attrs["instrument_history"]
+            else:
+                attrs["instrument_history"] = "|".join(serialised)
+                if last_inst is not None:
+                    attrs["instrument"] = last_inst
+        else:
+            # Compound history: last_inst is a dict {alias: name}
+            attrs["instrument_history"] = ";".join(serialised)
+            inst = attrs.get("instrument")
+            current = dict(inst) if isinstance(inst, dict) else {}
+            if last_inst:
+                current.update(last_inst)
+            attrs["instrument"] = ",".join(current.values())
+
+    return ds
+
+
+def resolve_instrument_history(
+    history: dict,
+    window_start: datetime.datetime,
+    window_end: datetime.datetime,
+) -> list[tuple[str, datetime.datetime, datetime.datetime]]:
+    """Resolve a simple instrument-history dict against a time window.
+
+    This is the piece that actually needs data, not just config: an
+    instrument era with no recorded start_date/end_date in the site config
+    — either because the instrument never changed, or because a changeover
+    boundary was simply never dated — is open-ended, and the only sensible
+    way to resolve "open-ended" into a concrete date is to clamp it to
+    whatever window of actual data is being asked about; there's no
+    config-only answer. Callers are responsible for that clamping (e.g.
+    serialize_inst_history clamps its calendar-year window to the
+    dataset's actual time extent) before calling this.
+
+    Args:
+        history: {instrument_name: {"start_date": Timestamp|None,
+            "end_date": Timestamp|None}}.
+        window_start: window lower bound.
+        window_end: window upper bound.
+
+    Returns:
+        (instrument_name, resolved_start, resolved_end) tuples, in
+        `history`'s order, restricted to eras overlapping the window and
+        clipped to it.
+    """
+    resolved = []
+    for inst, dates in history.items():
+        start = dates["start_date"] if dates["start_date"] is not None else window_start
+        end = dates["end_date"] if dates["end_date"] is not None else window_end
+        if end < window_start or start > window_end:
+            continue
+        resolved.append((inst, max(window_start, start), min(window_end, end)))
+    return resolved
+
+
+def _format_resolved_history(
+    resolved: list[tuple[str, datetime.datetime, datetime.datetime]],
+) -> tuple[list[str], str | None]:
+    """Format resolved (instrument, start, end) tuples into NetCDF attr segments.
+
+    Returns the formatted '(inst,start,end)' segment strings and the name
+    of whichever instrument's resolved era ends latest (the "current"
+    instrument for this window).
+    """
+    serialised = [
+        f"({inst},{start.isoformat()},{end.isoformat()})"
+        for inst, start, end in resolved
+    ]
+    last_inst = None
+    last_end = None
+    for inst, _start, end in resolved:
+        if last_end is None or end > last_end:
+            last_end = end
+            last_inst = inst
+    return serialised, last_inst
+
+
+def _serialise_simple_history(
+    history: dict,
+    year_start,
+    year_end,
+) -> tuple[list[str], str | None]:
+    """Serialise a simple instrument history to a list of formatted strings."""
+    resolved = resolve_instrument_history(history, year_start, year_end)
+    return _format_resolved_history(resolved)
+
+
+def _serialise_compound_history(
+    history: dict,
+    year_start,
+    year_end,
+) -> tuple[list[str], dict[str, str]]:
+    """Serialise a compound instrument history keyed by alias.
+
+    Produces one segment per alias: alias>(inst,start,end)|(inst,start,end)
+    Segments joined with ';' by the caller. Returns last_by_alias as a
+    {alias: instrument_name} dict for the most recently used instruments.
+    """
+    alias_segments = []
+    last_by_alias: dict[str, str] = {}
+    for alias, inst_history in history.items():
+        parts, last_inst = _serialise_simple_history(inst_history, year_start, year_end)
+        if parts:
+            alias_segments.append(f"{alias}>{'|'.join(parts)}")
+            if last_inst is not None:
+                last_by_alias[alias] = last_inst
+
+    return alias_segments, last_by_alias

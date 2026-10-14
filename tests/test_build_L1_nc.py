@@ -4,8 +4,8 @@ import unittest
 
 import xarray as xr
 
-from orchestration import build_L1_nc
-from orchestration.build_L1_nc import assign_L1_global_generic_attrs
+from fluxcore.orchestration import build_L1_nc
+from fluxcore.orchestration.build_L1_nc import assign_L1_global_generic_attrs
 
 
 def _dataset():

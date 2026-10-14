@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from services.data import qc_service
+from fluxcore.services.data import qc_service
 
 
 def _index(n, freq="30min", start="2020-01-01"):

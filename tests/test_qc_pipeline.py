@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from orchestration import qc_pipeline
-from services.metadata.core import qc_config_schema
-from services.metadata.core.qc_config_schema import (
+from fluxcore.orchestration import qc_pipeline
+from fluxcore.services.metadata.core import qc_config_schema
+from fluxcore.services.metadata.core.qc_config_schema import (
     RangeCheckSpec,
     SiteQCConfig,
     VariableQCSpec,
@@ -51,7 +51,9 @@ class ApplyQCTestCase(unittest.TestCase):
         qc_config = SiteQCConfig(
             site_name="TestSite",
             variables={
-                "Ta_Av": VariableQCSpec(range_check=RangeCheckSpec(lower=-10, upper=50)),
+                "Ta_Av": VariableQCSpec(
+                    range_check=RangeCheckSpec(lower=-10, upper=50)
+                ),
             },
         )
         out = qc_pipeline.apply_qc(ds, qc_config)
@@ -69,7 +71,9 @@ class ApplyQCTestCase(unittest.TestCase):
         qc_config = SiteQCConfig(
             site_name="TestSite",
             variables={
-                "Ta_Av": VariableQCSpec(range_check=RangeCheckSpec(lower=-10, upper=50)),
+                "Ta_Av": VariableQCSpec(
+                    range_check=RangeCheckSpec(lower=-10, upper=50)
+                ),
             },
         )
         out = qc_pipeline.apply_qc(ds, qc_config)
@@ -80,7 +84,9 @@ class ApplyQCTestCase(unittest.TestCase):
         qc_config = SiteQCConfig(
             site_name="TestSite",
             variables={
-                "Ta_Av": VariableQCSpec(range_check=RangeCheckSpec(lower=-10, upper=50)),
+                "Ta_Av": VariableQCSpec(
+                    range_check=RangeCheckSpec(lower=-10, upper=50)
+                ),
                 "Fco2": VariableQCSpec(dependency_check=["Ta_Av"]),
             },
         )
@@ -129,7 +135,9 @@ class ApplyQCTestCase(unittest.TestCase):
         qc_config = SiteQCConfig(
             site_name="TestSite",
             variables={
-                "Ta_Av": VariableQCSpec(range_check=RangeCheckSpec(lower=-10, upper=50)),
+                "Ta_Av": VariableQCSpec(
+                    range_check=RangeCheckSpec(lower=-10, upper=50)
+                ),
                 "Fco2": VariableQCSpec(dependency_check=["Ta_Av"]),
             },
         )

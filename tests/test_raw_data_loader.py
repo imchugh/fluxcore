@@ -18,9 +18,9 @@ from unittest import mock
 
 import pandas as pd
 
-from domain.constants import DATA_TIME_FORMAT
-from infrastructure import file_io
-from services.data import raw_data_loader as rdl
+from fluxcore.domain.constants import DATA_TIME_FORMAT
+from fluxcore.infrastructure import file_io
+from fluxcore.services.data import raw_data_loader as rdl
 
 TOA5_HEADERS = [
     ["TOA5", "TestStation", "CR6", "12345", "CR6.Std.99", "CPU:test.CR6", "0", "flux"],

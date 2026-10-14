@@ -8,8 +8,11 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from orchestration.dataset_builder import DatasetBuildIntermediate
-from orchestration.derived_quantities import add_day_night_indicator, add_net_radiation
+from fluxcore.orchestration.dataset_builder import DatasetBuildIntermediate
+from fluxcore.orchestration.derived_quantities import (
+    add_day_night_indicator,
+    add_net_radiation,
+)
 
 LAT, LON, ELEV = -34.0027, 140.5877, 60
 
@@ -55,7 +58,13 @@ class AddNetRadiationTestCase(unittest.TestCase):
         # imported as of 2026-09-29, but if a stray column existed it would
         # still be replaced, not left alone.
         df = pd.DataFrame(
-            {"Fsd": [500.0], "Fsu": [80.0], "Fld": [350.0], "Flu": [420.0], "Fn": [999.0]}
+            {
+                "Fsd": [500.0],
+                "Fsu": [80.0],
+                "Fld": [350.0],
+                "Flu": [420.0],
+                "Fn": [999.0],
+            }
         )
         var_attrs = {q: _radiation_attrs(q) for q in ("Fsd", "Fsu", "Fld", "Flu")}
         result = DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
@@ -105,7 +114,7 @@ class AddDayNightIndicatorTestCase(unittest.TestCase):
     def test_missing_attrs_skips_gracefully(self):
         ds = _build_dataset(with_attrs=False)
         with self.assertLogs(
-            "orchestration.derived_quantities", level="WARNING"
+            "fluxcore.orchestration.derived_quantities", level="WARNING"
         ) as ctx:
             out = add_day_night_indicator(ds)
 

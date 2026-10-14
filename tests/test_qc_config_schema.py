@@ -9,7 +9,7 @@ import pandas as pd
 import xarray as xr
 from pydantic import ValidationError
 
-from services.metadata.core import qc_config_schema
+from fluxcore.services.metadata.core import qc_config_schema
 
 VALID_YAML = """\
 Ta_Av:
@@ -47,7 +47,9 @@ class QCConfigStructureTestCase(unittest.TestCase):
         self.assertEqual(cfg.variables, {})
 
     def test_bad_range_order_raises(self):
-        path = self._write("Bad.yml", "Ta_Av:\n  range_check: {lower: 50, upper: -10}\n")
+        path = self._write(
+            "Bad.yml", "Ta_Av:\n  range_check: {lower: 50, upper: -10}\n"
+        )
         with self.assertRaises(ValidationError):
             qc_config_schema.validate_qc_config_structure(path)
 
@@ -127,7 +129,7 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
     """resolve_default_range: the Dataset-free lookup shared with the monitors."""
 
     def setUp(self):
-        from services.metadata.core.variable_name_parser import NameParser
+        from fluxcore.services.metadata.core.variable_name_parser import NameParser
 
         self.parser = NameParser()
         self.defaults = {
@@ -165,17 +167,23 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
 
     def test_station_pressure_default_follows_elevation(self):
         defaults = {"ps": {"standard_pressure_pm": 10}}
-        sea = qc_config_schema.resolve_default_range("ps", None, defaults, self.parser, elevation=0)
+        sea = qc_config_schema.resolve_default_range(
+            "ps", None, defaults, self.parser, elevation=0
+        )
         self.assertAlmostEqual(sea[0], 91.325, places=3)
         self.assertAlmostEqual(sea[1], 111.325, places=3)
-        high = qc_config_schema.resolve_default_range("ps", None, defaults, self.parser, elevation=1650)
+        high = qc_config_schema.resolve_default_range(
+            "ps", None, defaults, self.parser, elevation=1650
+        )
         # ISA pressure at 1650 m is 83.0 kPa
         self.assertAlmostEqual((high[0] + high[1]) / 2, 83.0, delta=0.1)
         self.assertAlmostEqual(high[1] - high[0], 20.0)
 
     def test_station_pressure_default_needs_an_elevation(self):
         defaults = {"ps": {"standard_pressure_pm": 10}}
-        self.assertIsNone(qc_config_schema.resolve_default_range("ps", None, defaults, self.parser))
+        self.assertIsNone(
+            qc_config_schema.resolve_default_range("ps", None, defaults, self.parser)
+        )
 
     def test_lookup_wrapper_reads_elevation_off_dataset_attrs(self):
         defaults = {"ps": {"standard_pressure_pm": 10}}
@@ -184,7 +192,9 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
         lo, hi = qc_config_schema.lookup_default_range(ds, "ps", defaults, self.parser)
         self.assertAlmostEqual((lo + hi) / 2, 83.0, delta=0.1)
         del ds.attrs["elevation"]
-        self.assertIsNone(qc_config_schema.lookup_default_range(ds, "ps", defaults, self.parser))
+        self.assertIsNone(
+            qc_config_schema.lookup_default_range(ds, "ps", defaults, self.parser)
+        )
 
     def test_real_ps_default_is_elevation_derived(self):
         real = qc_config_schema.load_range_defaults()
@@ -194,7 +204,9 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
         ds = _resolve_ds(["Ta_Av"])
         ds["Ta_Av"].attrs["statistic_type"] = "average"
         self.assertEqual(
-            qc_config_schema.lookup_default_range(ds, "Ta_Av", self.defaults, self.parser),
+            qc_config_schema.lookup_default_range(
+                ds, "Ta_Av", self.defaults, self.parser
+            ),
             (-10, 50),
         )
 
@@ -476,7 +488,9 @@ class ResolveQCConfigTestCase(unittest.TestCase):
             {"ps": {"standard_pressure_pm": 10}},
             ds,
         )
-        self.assertAlmostEqual(merged.variables["ps"].range_check.lower, 73.0, delta=0.1)
+        self.assertAlmostEqual(
+            merged.variables["ps"].range_check.lower, 73.0, delta=0.1
+        )
 
     def test_untouched_variable_omitted_from_result(self):
         ds = _resolve_ds(["SomeRandomVar"])

@@ -8,7 +8,7 @@ from unittest import mock
 
 import pandas as pd
 
-from orchestration import incremental_zarr
+from fluxcore.orchestration import incremental_zarr
 
 
 @dataclasses.dataclass(frozen=True)
@@ -75,7 +75,9 @@ class IncrementalUpdateTestCase(unittest.TestCase):
         full_rebuild = mock.Mock(return_value=self.store_path)
         produce_tail = mock.Mock()
 
-        with mock.patch("orchestration.incremental_zarr.xr.open_zarr") as open_zarr:
+        with mock.patch(
+            "fluxcore.orchestration.incremental_zarr.xr.open_zarr"
+        ) as open_zarr:
             open_zarr.return_value = mock.Mock(attrs={"config_hash": "old"})
             result = incremental_zarr.incremental_update(
                 store_path=self.store_path,
@@ -98,12 +100,14 @@ class IncrementalUpdateTestCase(unittest.TestCase):
         produce_tail = mock.Mock(return_value=tail_ds)
 
         with (
-            mock.patch("orchestration.incremental_zarr.xr.open_zarr") as open_zarr,
             mock.patch(
-                "orchestration.incremental_zarr.last_store_timestamp"
+                "fluxcore.orchestration.incremental_zarr.xr.open_zarr"
+            ) as open_zarr,
+            mock.patch(
+                "fluxcore.orchestration.incremental_zarr.last_store_timestamp"
             ) as last_ts,
             mock.patch(
-                "orchestration.incremental_zarr.file_io.append_zarr"
+                "fluxcore.orchestration.incremental_zarr.file_io.append_zarr"
             ) as append_zarr,
         ):
             open_zarr.return_value = mock.Mock(attrs={"config_hash": "h1"})
@@ -131,12 +135,14 @@ class IncrementalUpdateTestCase(unittest.TestCase):
         produce_tail = mock.Mock(return_value=empty_ds)
 
         with (
-            mock.patch("orchestration.incremental_zarr.xr.open_zarr") as open_zarr,
             mock.patch(
-                "orchestration.incremental_zarr.last_store_timestamp"
+                "fluxcore.orchestration.incremental_zarr.xr.open_zarr"
+            ) as open_zarr,
+            mock.patch(
+                "fluxcore.orchestration.incremental_zarr.last_store_timestamp"
             ) as last_ts,
             mock.patch(
-                "orchestration.incremental_zarr.file_io.append_zarr"
+                "fluxcore.orchestration.incremental_zarr.file_io.append_zarr"
             ) as append_zarr,
         ):
             open_zarr.return_value = mock.Mock(attrs={"config_hash": "h1"})
@@ -162,7 +168,9 @@ class IncrementalUpdateTestCase(unittest.TestCase):
         def _boom(checkpoint):
             raise RuntimeError("boom")
 
-        with mock.patch("orchestration.incremental_zarr.xr.open_zarr") as open_zarr:
+        with mock.patch(
+            "fluxcore.orchestration.incremental_zarr.xr.open_zarr"
+        ) as open_zarr:
             open_zarr.return_value = mock.Mock(attrs={"config_hash": "h1"})
 
             result = incremental_zarr.incremental_update(

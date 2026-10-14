@@ -2,8 +2,8 @@
 
 import unittest
 
-from domain.enums import StatisticType, VariableType
-from services.metadata.core.canonical_quantity_registry import (
+from fluxcore.domain.enums import StatisticType, VariableType
+from fluxcore.services.metadata.core.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
 

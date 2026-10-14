@@ -9,9 +9,9 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from infrastructure import file_io
-from orchestration import build_L2_zarr
-from services.metadata.core import qc_config_schema
+from fluxcore.infrastructure import file_io
+from fluxcore.orchestration import build_L2_zarr
+from fluxcore.services.metadata.core import qc_config_schema
 
 
 def _build_l1_dataset(n, time_step=30, start="2020-01-01", value=10.0):
@@ -180,7 +180,7 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         )
 
         with mock.patch(
-            "orchestration.incremental_zarr.last_store_timestamp",
+            "fluxcore.orchestration.incremental_zarr.last_store_timestamp",
             side_effect=RuntimeError("boom"),
         ):
             store_path = build_L2_zarr.update(

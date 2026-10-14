@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from infrastructure import file_io
+from fluxcore.infrastructure import file_io
 
 
 def _write_initial_store(store_path: pathlib.Path, n=5) -> None:
@@ -26,7 +26,9 @@ class AppendZarrTestCase(unittest.TestCase):
     def test_matching_schema_appends_normally(self):
         _write_initial_store(self.store_path, n=5)
         idx = pd.date_range("2026-01-01 02:30", periods=3, freq="30min")
-        tail = xr.Dataset({"Ta": ("time", np.array([5.0, 6.0, 7.0]))}, coords={"time": idx})
+        tail = xr.Dataset(
+            {"Ta": ("time", np.array([5.0, 6.0, 7.0]))}, coords={"time": idx}
+        )
 
         file_io.append_zarr(ds=tail, store_path=self.store_path)
 
@@ -89,7 +91,9 @@ class AppendZarrTestCase(unittest.TestCase):
         ds0.to_zarr(self.store_path, mode="w")
 
         idx = pd.date_range("2026-01-01 02:30", periods=3, freq="30min")
-        tail = xr.Dataset({"Ta": ("time", np.array([5.0, 6.0, 7.0]))}, coords={"time": idx})
+        tail = xr.Dataset(
+            {"Ta": ("time", np.array([5.0, 6.0, 7.0]))}, coords={"time": idx}
+        )
 
         with self.assertRaises(ValueError) as ctx:
             file_io.append_zarr(ds=tail, store_path=self.store_path)

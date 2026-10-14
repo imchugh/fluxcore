@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fluxcore"
+version = "0.1.0"
+description = "Network-agnostic eddy covariance flux processing core (L1 homogenisation, L2 QC)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "pandas",
+    "xarray",
+    "zarr<3",
+    "netCDF4",
+    "pydantic>=2",
+    "pyyaml",
+    "ephem",
+    "timezonefinder",
+]
+
+[project.optional-dependencies]
+dask = ["dask"]
+
+[tool.setuptools.packages.find]
+include = ["fluxcore*"]
+
+[tool.setuptools.package-data]
+fluxcore = ["configs/*.yml", "configs/qc/*.yml"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "D"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fluxcore"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Test names are self-documenting (test_raises_on_missing_variable, etc.);
+# a module-level docstring covers shared setup. Requiring a docstring on
+# every test class/method would be pure redundancy, not documentation.
+"tests/**" = ["D"]
+"**/__init__.py" = ["D104"]
