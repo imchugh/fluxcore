@@ -216,6 +216,17 @@ def _build_file_group_dataframe(
 
     df = pd.concat(dfs).sort_index()
 
+    # Same rule as the no-files branch above, for a configured variable whose
+    # column is absent from every file read this time (e.g. a sensor dropped
+    # from the logger program, so only older backup files still carry it): add
+    # it as all-NaN. The group's columns must always be its full configured
+    # set, independent of which files a given read happened to touch;
+    # otherwise an incremental tail's variable set differs from the store's
+    # (built from all files) and the append is refused.
+    missing = [alias for alias in rename_map.values() if alias not in df.columns]
+    if missing:
+        df = df.reindex(columns=[*df.columns, *missing])
+
     return condition_dataframe(df, interval_out=time_step)
 
 
