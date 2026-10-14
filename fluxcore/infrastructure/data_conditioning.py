@@ -33,9 +33,16 @@ def infer_interval(df: pd.DataFrame) -> int:
 
     Raises:
         TypeError: if the index is not a DatetimeIndex.
+        ValueError: if there are fewer than two distinct timestamps, so no
+            interval can be inferred.
     """
     check_datetime_index(df)
-    return int(df.index.to_series().diff().median().total_seconds() / 60)
+    median = df.index.to_series().diff().median()
+    if pd.isna(median):
+        raise ValueError(
+            "Cannot infer a time step from fewer than two distinct timestamps"
+        )
+    return int(median.total_seconds() / 60)
 
 
 def condition_dataframe(
@@ -52,9 +59,9 @@ def condition_dataframe(
 
     Args:
         df: DataFrame with a DatetimeIndex.
-        interval_in: input interval in minutes.  Inferred from the data if
-            None.
-        interval_out: output interval in minutes.  Defaults to
+        interval_in: input interval in minutes. Only used if
+            ``interval_out`` is None; inferred from the data if also None.
+        interval_out: output interval in minutes. Defaults to
             ``interval_in`` if None.
 
     Returns:
@@ -62,6 +69,8 @@ def condition_dataframe(
 
     Raises:
         TypeError: if the index is not a DatetimeIndex.
+        ValueError: if neither interval is given and the data has fewer than
+            two distinct timestamps.
     """
     check_datetime_index(df)
 
@@ -69,10 +78,11 @@ def condition_dataframe(
     df = df[df.index.notna()]
     df = df[~df.index.duplicated(keep="first")]
 
-    if interval_in is None:
-        interval_in = infer_interval(df)
-
-    interval = interval_out or interval_in
+    # Infer only when nothing was supplied: inference needs at least two
+    # timestamps, and an incremental tail is routinely a single record (one
+    # new 30-min row since the checkpoint), which would otherwise raise and
+    # push the caller into a full rebuild.
+    interval = interval_out or interval_in or infer_interval(df)
     return df.resample(f"{interval}min").asfreq()
 
 
