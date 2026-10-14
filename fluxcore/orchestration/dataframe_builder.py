@@ -10,7 +10,7 @@ build_dataframe(file_groups, registry, quantities, n_samples, start_date,
     -> pd.DataFrame
 
 See also the TERN-EP pipeline's
-`orchestration.tern.site_runner.build_dataframe_from_site_name`
+`orchestration.site_runner.build_dataframe_from_site_name`
 for the TERN-adapter convenience wrapper that resolves a bare site name to
 a context before delegating here.
 """

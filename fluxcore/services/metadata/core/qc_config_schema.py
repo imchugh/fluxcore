@@ -9,7 +9,7 @@ core) — see CLAUDE.md's "Generic-core / TERN-adapter / ops boundary".
 
 Where a site's own QC config file lives is the caller's concern
 (load_qc_config takes the directory explicitly; TERN's is resolved by
-services/metadata/tern/qc_config_loader.py). The shared, site-independent
+services/metadata/qc_config_loader.py). The shared, site-independent
 defaults tables (configs/qc/_range_defaults.yml, _dependency_defaults.yml)
 ship with the code: they change with it and apply to every site.
 """
@@ -306,9 +306,9 @@ def resolve_default_range(
     is a dict with no matching qualifier or statistic key.
 
     Public: used by lookup_default_range and, in the TERN-EP pipeline,
-    orchestration.tern.legacy_rtmc_export
+    orchestration.legacy_rtmc_export
     and the site monitors (services.network.data_monitor,
-    orchestration.tern.legacy_network_status).
+    orchestration.legacy_network_status).
     """
     try:
         parsed = name_parser.parse_variable_name(var_name)

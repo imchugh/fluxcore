@@ -4,7 +4,7 @@
 CONFIG_PATH is the package's own config directory (fluxcore/configs/, shipped
 as package data and holding only network-agnostic files). Every lookup takes
 an optional config_dir, so a network adapter can load its own config files
-through the same functions (the TERN-EP pipeline passes its configs/tern/);
+through the same functions (the TERN-EP pipeline passes its configs/);
 the default, non-recursive lookup never sees them.
 """
 

@@ -17,7 +17,7 @@ to a full build() on any exception, same pattern as L1's update().
 
 Generic core: takes an already-loaded SiteQCConfig and explicit store
 directories. The TERN site-name wrappers and CLI live in
-orchestration/tern/build_runner.py.
+orchestration/build_runner.py.
 """
 
 import logging

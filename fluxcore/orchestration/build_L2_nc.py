@@ -13,7 +13,7 @@ directly from raw data, so this module has one entry point, not a pair.
 Not wired into tasks/build_tasks.py -- built for manual benchmarking against
 real PyFluxPro L2 NetCDF output (the L2 Zarr store itself is rebuilt
 nightly by the rebuild_L2_zarr task). The TERN site-name wrapper and CLI
-live in orchestration/tern/build_runner.py.
+live in orchestration/build_runner.py.
 """
 
 import pathlib

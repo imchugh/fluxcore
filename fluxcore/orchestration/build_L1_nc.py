@@ -19,9 +19,9 @@ naming.
 Generic core: takes a SiteContext and explicit directories, never a bare
 site name to resolve. Every file gets the network-agnostic global attributes
 in configs/nc_global_attrs.yml; network-specific ones (e.g. TERN's
-configs/tern/nc_metadata.yml) are passed in as `global_attrs` by the caller
+configs/nc_metadata.yml) are passed in as `global_attrs` by the caller
 and override them per key. The TERN site-name wrappers live in
-orchestration/tern/build_runner.py.
+orchestration/build_runner.py.
 """
 
 import datetime
@@ -297,7 +297,7 @@ def assign_L1_global_generic_attrs(
     The core's network-agnostic attrs (NC_GLOBAL_ATTRS, from
     configs/nc_global_attrs.yml) are always applied. global_attrs is a
     network's own global attribute template (e.g. TERN's
-    configs/tern/nc_metadata.yml), overriding the core attrs per key. Any
+    configs/nc_metadata.yml), overriding the core attrs per key. Any
     string value containing SITE_PLACEHOLDER has it replaced with the
     dataset's site_name. processing_level is set by the level's own builder
     and always overrides any value from either source.

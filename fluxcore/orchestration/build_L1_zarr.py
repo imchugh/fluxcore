@@ -21,7 +21,7 @@ survives the round trip natively. NetCDF export re-hydrates it and
 reproduces the year clipping itself; see `_json_safe_instrument_history`.
 
 Generic core: takes a SiteContext and an explicit output directory. The TERN
-site-name wrappers and CLI live in orchestration/tern/build_runner.py.
+site-name wrappers and CLI live in orchestration/build_runner.py.
 """
 
 import logging
