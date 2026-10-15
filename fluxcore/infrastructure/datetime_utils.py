@@ -219,8 +219,10 @@ def get_UTC_offset(
 def format_fast_timestamp(ts: datetime) -> str:
     """Format a sub-second datetime as a Campbell TOA5 timestamp string.
 
-    Rounds to the nearest 100 ms and appends tenths of a second when
-    non-zero (e.g. '2025-01-01 00:00:00.1'). Use for high-frequency data
+    Truncates to tenths of a second after adding 0.5 ms, so float jitter just
+    below a tenth (e.g. 00:00:00.0999996) lands on it rather than the tenth
+    before; it is not rounding to the nearest 100 ms. Appends the tenths only
+    when non-zero (e.g. '2025-01-01 00:00:00.1'). Use for high-frequency data
     where DATA_TIME_FORMAT would lose sub-second precision.
 
     Args:
