@@ -109,8 +109,14 @@ def build_dataframe(
     Step 2 — concatenate all file groups horizontally.
     Step 3 — merge overlapping instrument periods into single columns.
     Step 4 — rename aliased columns to canonical output names.
-    Step 5 — truncate to flux file group's temporal extent, so that ancillary
-              data predating the flux system does not produce empty output years.
+    Step 5 — truncate to the flux file group's temporal extent, so that
+              ancillary data predating the flux system does not produce empty
+              output years. With ``start_date`` (an incremental tail), the
+              tail instead spans start_date to the last new flux record on the
+              regular time grid, and is empty if there is no new flux record:
+              exactly the rows a full build would add after start_date, so
+              appending it can't run the store ahead of the flux data or leave
+              holes in its time axis.
     """
     if quantities is not None:
         specs_by_alias = {
@@ -124,6 +130,7 @@ def build_dataframe(
         }
 
     # Step 1
+    empty = pd.DataFrame(index=pd.DatetimeIndex([], name="time"))
     dfs = []
     flux_index = None
     for group_name, file_group in file_groups.items():
@@ -153,7 +160,7 @@ def build_dataframe(
         # nothing to concatenate. Return an empty frame with a properly
         # typed time index rather than letting pd.concat raise, so callers
         # can treat "no new data yet" as a normal, empty result.
-        return pd.DataFrame(index=pd.DatetimeIndex([], name="time"))
+        return empty
     df = pd.concat(dfs, axis=1)
 
     # Step 3
@@ -163,8 +170,22 @@ def build_dataframe(
     df = _rename_to_canonical(df=df, specs_by_alias=specs_by_alias)
 
     # Step 5
-    if flux_index is not None:
-        df = df.loc[flux_index.min() : flux_index.max()]
+    if start_date is None:
+        if flux_index is not None:
+            df = df.loc[flux_index.min() : flux_index.max()]
+    elif flux_file in file_groups:
+        if flux_index is None:
+            return empty
+        df = df.loc[: flux_index.max()]
+        if time_step is not None:
+            df = df.reindex(
+                pd.date_range(
+                    start_date,
+                    flux_index.max(),
+                    freq=f"{time_step}min",
+                    name=df.index.name,
+                )
+            )
 
     return df
 
