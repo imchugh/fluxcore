@@ -125,12 +125,13 @@ def get_day_night_binary(lat: float, lon: float, elev: float, dates) -> pd.Serie
 
 
 def get_standard_timezone(tz_name: str) -> timezone:
-    """Return a fixed-offset `timezone` for `tz_name`'s winter (non-DST) UTC offset."""
-    tz = ZoneInfo(tz_name)
+    """Return a fixed-offset `timezone` for `tz_name`'s standard (non-DST) UTC offset.
 
-    winter_dt = datetime(2026, 7, 1, tzinfo=tz)
-
-    return timezone(winter_dt.utcoffset())
+    Subtracts the DST component rather than sampling a "winter" date, which
+    would be the wrong half of the year in one hemisphere.
+    """
+    reference = datetime(2026, 1, 1, tzinfo=ZoneInfo(tz_name))
+    return timezone(reference.utcoffset() - reference.dst())
 
 
 def get_utc_now(as_iso=False) -> datetime | str:

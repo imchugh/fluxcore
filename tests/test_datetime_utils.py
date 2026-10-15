@@ -1,9 +1,26 @@
-"""Tests for fluxcore.infrastructure.datetime_utils.floor_to_interval."""
+"""Tests for fluxcore.infrastructure.datetime_utils."""
 
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from fluxcore.infrastructure.datetime_utils import floor_to_interval
+from fluxcore.infrastructure.datetime_utils import (
+    floor_to_interval,
+    get_standard_timezone,
+)
+
+
+class TestGetStandardTimezone(unittest.TestCase):
+    def test_southern_hemisphere_dst_zone(self):
+        tz = get_standard_timezone("Australia/Sydney")
+        self.assertEqual(tz.utcoffset(None), timedelta(hours=10))
+
+    def test_northern_hemisphere_dst_zone(self):
+        tz = get_standard_timezone("Europe/Berlin")
+        self.assertEqual(tz.utcoffset(None), timedelta(hours=1))
+
+    def test_zone_without_dst(self):
+        tz = get_standard_timezone("Australia/Darwin")
+        self.assertEqual(tz.utcoffset(None), timedelta(hours=9, minutes=30))
 
 
 class TestFloorToInterval(unittest.TestCase):
