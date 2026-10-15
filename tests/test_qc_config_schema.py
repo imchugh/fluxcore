@@ -9,7 +9,7 @@ import pandas as pd
 import xarray as xr
 from pydantic import ValidationError
 
-from fluxcore.services.metadata.core import qc_config_schema
+from fluxcore.services.metadata import qc_config_schema
 
 VALID_YAML = """\
 Ta_Av:

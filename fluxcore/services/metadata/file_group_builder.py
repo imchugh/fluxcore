@@ -7,7 +7,7 @@ from pathlib import Path
 from fluxcore.domain.enums import DEFAULT_FILE_FORMAT, FileFormat, LoggerType
 from fluxcore.infrastructure import file_io
 from fluxcore.services.data import raw_data_loader
-from fluxcore.services.metadata.core.runtime_config_builder import SiteRuntimeConfig
+from fluxcore.services.metadata.runtime_config_builder import SiteRuntimeConfig
 
 
 @dataclass

@@ -24,7 +24,7 @@ from fluxcore.infrastructure.file_io import read_yml
 from fluxcore.services import config_loader
 from fluxcore.services.data import qc_service
 from fluxcore.services.data.calculations import standard_pressure_kpa
-from fluxcore.services.metadata.core.variable_name_parser import (
+from fluxcore.services.metadata.variable_name_parser import (
     VariableNameParseError,
     parse_variable_name,
 )

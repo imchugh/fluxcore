@@ -9,15 +9,15 @@ import unittest
 from pathlib import Path
 
 from fluxcore.domain.enums import LoggerType
-from fluxcore.services.metadata.core.file_group_builder import (
+from fluxcore.services.metadata.file_group_builder import (
     FileGroup,
     build_file_groups,
 )
-from fluxcore.services.metadata.core.runtime_config_builder import (
+from fluxcore.services.metadata.runtime_config_builder import (
     build_runtime_config,
     build_runtime_config_from_file,
 )
-from fluxcore.services.metadata.core.site_config_schema import (
+from fluxcore.services.metadata.site_config_schema import (
     validate_L1_config_structure,
 )
 

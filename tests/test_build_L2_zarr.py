@@ -11,7 +11,7 @@ import xarray as xr
 
 from fluxcore.infrastructure import file_io
 from fluxcore.orchestration import build_L2_zarr
-from fluxcore.services.metadata.core import qc_config_schema
+from fluxcore.services.metadata import qc_config_schema
 
 
 def _build_l1_dataset(n, time_step=30, start="2020-01-01", value=10.0):

@@ -14,11 +14,11 @@ from datetime import datetime
 from pydantic.dataclasses import dataclass
 
 from fluxcore.domain.enums import DiagnosticType, StatisticType, VariableType
-from fluxcore.services.metadata.core.canonical_quantity_registry import (
+from fluxcore.services.metadata.canonical_quantity_registry import (
     resolve_variance_units,
 )
-from fluxcore.services.metadata.core.file_group_builder import FileGroup
-from fluxcore.services.metadata.core.runtime_config_builder import SiteRuntimeConfig
+from fluxcore.services.metadata.file_group_builder import FileGroup
+from fluxcore.services.metadata.runtime_config_builder import SiteRuntimeConfig
 
 
 @dataclass(frozen=True)

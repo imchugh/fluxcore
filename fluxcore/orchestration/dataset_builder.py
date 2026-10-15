@@ -16,8 +16,8 @@ from fluxcore.domain.enums import StatisticType
 from fluxcore.orchestration import derived_quantities
 from fluxcore.orchestration.dataframe_builder import build_dataframe_and_specs
 from fluxcore.orchestration.derived_quantities import DatasetBuildIntermediate
-from fluxcore.services.metadata.core.site_metadata_builder import SiteContext
-from fluxcore.services.metadata.core.variable_registry import (
+from fluxcore.services.metadata.site_metadata_builder import SiteContext
+from fluxcore.services.metadata.variable_registry import (
     VariableSpec,
     canonical_output_name,
     group_by_canonical_name,

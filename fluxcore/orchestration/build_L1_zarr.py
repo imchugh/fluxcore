@@ -34,7 +34,7 @@ from fluxcore.orchestration.dataset_finishing import (
     filter_variable_attrs,
     flatten_instrument_uri,
 )
-from fluxcore.services.metadata.core.site_metadata_builder import SiteContext
+from fluxcore.services.metadata.site_metadata_builder import SiteContext
 
 logger = logging.getLogger(__name__)
 

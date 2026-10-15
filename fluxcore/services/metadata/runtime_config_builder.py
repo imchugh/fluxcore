@@ -30,14 +30,14 @@ from fluxcore.domain.enums import (
     StatisticType,
     VariableType,
 )
-from fluxcore.services.metadata.core.canonical_quantity_registry import (
+from fluxcore.services.metadata.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
-from fluxcore.services.metadata.core.site_config_schema import (
+from fluxcore.services.metadata.site_config_schema import (
     SiteConfig,
     validate_L1_config_structure,
 )
-from fluxcore.services.metadata.core.variable_name_parser import parse_variable_name
+from fluxcore.services.metadata.variable_name_parser import parse_variable_name
 
 
 @dataclass(frozen=True)

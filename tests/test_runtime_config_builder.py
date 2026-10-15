@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fluxcore.services.metadata.core.runtime_config_builder import (
+from fluxcore.services.metadata.runtime_config_builder import (
     build_runtime_config_from_file,
 )
 

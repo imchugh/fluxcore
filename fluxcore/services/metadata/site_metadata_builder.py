@@ -20,7 +20,7 @@ from pydantic import BaseModel, field_validator
 
 from fluxcore.domain.data_models.metadata_classes import SiteMetadata
 from fluxcore.infrastructure.file_io import read_yml
-from fluxcore.services.metadata.core.runtime_config_builder import SiteRuntimeConfig
+from fluxcore.services.metadata.runtime_config_builder import SiteRuntimeConfig
 
 
 @dataclass(frozen=True)

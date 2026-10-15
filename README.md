@@ -29,7 +29,7 @@ pip install -e ".[dask]"    # with dask for chunked Zarr reads
 
 ```python
 from fluxcore.orchestration import build_L1_zarr, build_L2_zarr
-from fluxcore.services.metadata.core.qc_config_schema import load_qc_config
+from fluxcore.services.metadata.qc_config_schema import load_qc_config
 
 build_L1_zarr.build(ctx, output_dir="out/zarr/L1")          # ctx: SiteContext
 build_L2_zarr.build(
@@ -40,7 +40,7 @@ build_L2_zarr.build(
 ```
 
 `SiteContext` = `SiteRuntimeConfig` (from a site config YAML:
-`fluxcore.services.metadata.core.runtime_config_builder.build_runtime_config_from_file`)
+`fluxcore.services.metadata.runtime_config_builder.build_runtime_config_from_file`)
 \+ `SiteMetadata` (`site_metadata_builder.build_site_metadata_from_file`).
 
 Planned: file-driven entry points, one per level (`run_L1(control_file)`,

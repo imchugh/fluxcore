@@ -36,7 +36,7 @@ import xarray as xr
 from fluxcore.domain.enums import StatisticType
 from fluxcore.infrastructure import datetime_utils
 from fluxcore.services.data.calculations import get_calculation
-from fluxcore.services.metadata.core.canonical_quantity_registry import (
+from fluxcore.services.metadata.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
 

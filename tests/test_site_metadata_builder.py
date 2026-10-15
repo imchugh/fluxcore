@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from fluxcore.services.metadata.core.site_metadata_builder import (
+from fluxcore.services.metadata.site_metadata_builder import (
     build_site_metadata_from_file,
 )
 

@@ -18,7 +18,7 @@
 #      (canonical_quantities.yml had no such treatment), so they're filed
 #      as a single flat [min, max] per quantity regardless of statistic.
 #
-# Keying convention, matching services.metadata.core.variable_name_parser's
+# Keying convention, matching services.metadata.variable_name_parser's
 # ParsedVariableName.quantity and the L1 store's own ds[var].attrs
 # ["statistic_type"] (the authoritative source for statistic -- required
 # for every continuous variable by site_config_schema.py, not something to

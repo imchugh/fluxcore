@@ -7,8 +7,8 @@ import pandas as pd
 import xarray as xr
 
 from fluxcore.orchestration import qc_pipeline
-from fluxcore.services.metadata.core import qc_config_schema
-from fluxcore.services.metadata.core.qc_config_schema import (
+from fluxcore.services.metadata import qc_config_schema
+from fluxcore.services.metadata.qc_config_schema import (
     RangeCheckSpec,
     SiteQCConfig,
     VariableQCSpec,

@@ -1,9 +1,9 @@
-"""Tests for services/metadata/core/canonical_quantity_registry.py."""
+"""Tests for services/metadata/canonical_quantity_registry.py."""
 
 import unittest
 
 from fluxcore.domain.enums import StatisticType, VariableType
-from fluxcore.services.metadata.core.canonical_quantity_registry import (
+from fluxcore.services.metadata.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
 

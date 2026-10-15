@@ -36,14 +36,14 @@ from fluxcore.services.data.raw_data_loader import (
     load_raw_header,
     peek_last_timestamp,
 )
-from fluxcore.services.metadata.core.canonical_quantity_registry import (
+from fluxcore.services.metadata.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
-from fluxcore.services.metadata.core.file_group_builder import (
+from fluxcore.services.metadata.file_group_builder import (
     FileGroup,
     get_variables_from_file,
 )
-from fluxcore.services.metadata.core.qc_config_schema import (
+from fluxcore.services.metadata.qc_config_schema import (
     RangeCheckSpec,
     SiteQCConfig,
     VariableQCSpec,
@@ -54,22 +54,22 @@ from fluxcore.services.metadata.core.qc_config_schema import (
     resolve_default_range,
     resolve_qc_config,
 )
-from fluxcore.services.metadata.core.runtime_config_builder import (
+from fluxcore.services.metadata.runtime_config_builder import (
     SiteRuntimeConfig,
     build_runtime_config,
     build_runtime_config_from_file,
 )
-from fluxcore.services.metadata.core.site_config_schema import (
+from fluxcore.services.metadata.site_config_schema import (
     SiteConfig,
     validate_all,
     validate_L1_config_structure,
 )
-from fluxcore.services.metadata.core.site_metadata_builder import (
+from fluxcore.services.metadata.site_metadata_builder import (
     SiteContext,
     build_site_metadata_from_file,
 )
-from fluxcore.services.metadata.core.variable_name_parser import parse_variable_name
-from fluxcore.services.metadata.core.variable_registry import VariableSpec
+from fluxcore.services.metadata.variable_name_parser import parse_variable_name
+from fluxcore.services.metadata.variable_registry import VariableSpec
 
 __all__ = [
     # Level builders (modules): build/update a Zarr store, export NetCDF

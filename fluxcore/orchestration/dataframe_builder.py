@@ -18,15 +18,15 @@ import pandas as pd
 from fluxcore.domain.enums import DiagnosticType, StatisticType, VariableType
 from fluxcore.infrastructure.data_conditioning import condition_dataframe
 from fluxcore.services.data import raw_data_loader, unit_conversions
-from fluxcore.services.metadata.core.canonical_quantity_registry import (
+from fluxcore.services.metadata.canonical_quantity_registry import (
     resolve_variance_units,
 )
-from fluxcore.services.metadata.core.file_group_builder import (
+from fluxcore.services.metadata.file_group_builder import (
     FileGroup,
     build_file_groups,
 )
-from fluxcore.services.metadata.core.site_metadata_builder import SiteContext
-from fluxcore.services.metadata.core.variable_registry import (
+from fluxcore.services.metadata.site_metadata_builder import SiteContext
+from fluxcore.services.metadata.variable_registry import (
     VariableSpec,
     build_variable_registry,
     canonical_output_name,
