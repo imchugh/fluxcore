@@ -33,6 +33,7 @@ import xarray as xr
 
 from fluxcore.domain.constants import DATA_TIME_FORMAT, NC_ENCODING, SITE_PLACEHOLDER
 from fluxcore.infrastructure import file_io
+from fluxcore.orchestration import incremental_zarr
 from fluxcore.services import config_loader
 
 NC_DIM_ATTRS = config_loader.load_config("nc_dim_attrs")
@@ -56,6 +57,11 @@ VARIABLE_NC_ATTRS = {
 def get_ds_years(ds):
     """Return the sorted list of distinct calendar years present in ds.time."""
     return np.unique(ds.time.dt.year).tolist()
+
+
+def non_dim_variables(ds) -> list[str]:
+    """Names of ds's variables that aren't dimension coordinates."""
+    return [var for var in ds.variables if var not in ds.dims]
 
 
 def build_from_zarr(
@@ -83,37 +89,66 @@ def build_from_zarr(
     Returns:
         List of paths to files written.
     """
-    store_path = pathlib.Path(zarr_dir) / f"{site_name}_L1.zarr"
+    return export_store(
+        site_name,
+        zarr_dir,
+        output_dir,
+        level="L1",
+        year=year,
+        global_attrs=global_attrs,
+    )
+
+
+def export_store(
+    site_name: str,
+    zarr_dir: pathlib.Path | str,
+    output_dir: pathlib.Path | str,
+    level: str,
+    year: int | None = None,
+    global_attrs: dict | None = None,
+) -> list[pathlib.Path]:
+    """Write a site's `level` Zarr store out as annual NetCDF files.
+
+    Shared by the L1 and L2 exporters: {site_name}_{level}.zarr in,
+    {site_name}_{year}_{level}.nc out, one file per calendar year (or only
+    `year`).
+    """
+    store_path = incremental_zarr.store_path_for(site_name, zarr_dir, level)
 
     ds = xr.open_zarr(store_path).load()
     ds = _rehydrate_instrument_history(ds)
     # Refresh date_created/history to this NetCDF build's own time, rather
     # than whenever the Zarr store was last written/appended.
-    ds = assign_L1_global_generic_attrs(ds, global_attrs=global_attrs)
+    ds = assign_L1_global_generic_attrs(
+        ds, global_attrs=global_attrs, processing_level=level
+    )
 
     output_dir = pathlib.Path(output_dir)
-
     years = [year] if year is not None else get_ds_years(ds)
 
     written = []
     for ds_year in years:
         year_ds = build_L1_year_from_zarr(ds=ds, year=ds_year)
-        file_path = output_dir / f"{site_name}_{ds_year}_L1.nc"
+        file_path = output_dir / f"{site_name}_{ds_year}_{level}.nc"
         file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
         written.append(file_path)
 
     return written
 
 
+def _year_window(year: int, time_step) -> tuple[datetime.datetime, datetime.datetime]:
+    """First and last period-end timestamps of a calendar year's records."""
+    return (
+        datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step),
+        datetime.datetime(year + 1, 1, 1),
+    )
+
+
 def _year_time_bounds(ds, year) -> list[str]:
     """Calendar-year time_bounds for slicing ds, as DATA_TIME_FORMAT strings."""
-    time_step = ds.attrs["time_step"]
     return [
         bound.strftime(DATA_TIME_FORMAT)
-        for bound in (
-            datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step),
-            datetime.datetime(year + 1, 1, 1),
-        )
+        for bound in _year_window(year, ds.attrs["time_step"])
     ]
 
 
@@ -134,7 +169,9 @@ def build_L1_year_from_zarr(ds, year):
         Sliced, fully attributed and serialized single-year dataset.
     """
     year_ds = ds.sel(time=slice(*_year_time_bounds(ds, year)))
-    year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
+    year_ds = assign_coverage_attrs(
+        year_ds, title=f"Flux tower data set from the {ds.site_name} site {year}"
+    )
     year_ds = serialize_inst_history(ds=year_ds, year=year)
     year_ds = file_io.serialize_dataset_attrs(ds=year_ds)
 
@@ -170,36 +207,37 @@ def assign_crs_variable(ds):
     return ds
 
 
-def assign_L1_data_year_attrs(ds, year):
-    """Add per-year global attrs (title, record count, time coverage) to ds.
+def assign_coverage_attrs(
+    ds, title: str | None = None, range_start=None, nrecs_base: int = 0
+):
+    """Set the record-count and time-coverage global attrs (and title, if given).
 
     Args:
-        ds: xarray dataset, already sliced to one calendar year.
-        year: calendar year, used to build the title string.
+        ds: dataset whose time axis the attrs describe.
+        title: new title attr; None leaves any existing title alone.
+        range_start: use as time_coverage_start instead of ds's first time —
+            for a tail slice, the existing store's recorded start.
+        nrecs_base: records already in the store before ds (0 unless ds is a
+            tail slice being appended).
 
     Returns:
-        ds, with the year-specific global attrs added.
+        ds, with the attrs set.
     """
 
     def _format_time(x):
         return pd.to_datetime(x).strftime(DATA_TIME_FORMAT)
 
-    begin = _format_time(ds.time.values[0])
-    end = _format_time(ds.time.values[-1])
-
-    # Make title string
-    title_str = f"Flux tower data set from the {ds.site_name} site {year}"
-
-    # Assign attrs
-    ds.attrs.update(
+    attrs = {"title": title} if title is not None else {}
+    attrs.update(
         {
-            "title": title_str,
-            "nc_nrecs": len(ds.time),
-            "time_coverage_start": begin,
-            "time_coverage_end": end,
+            "nc_nrecs": nrecs_base + ds.sizes["time"],
+            "time_coverage_start": _format_time(
+                range_start if range_start is not None else ds.time.values[0]
+            ),
+            "time_coverage_end": _format_time(ds.time.values[-1]),
         }
     )
-
+    ds.attrs.update(attrs)
     return ds
 
 
@@ -295,8 +333,7 @@ def serialize_uri(ds):
     instrument_uri, so the later None-attr filter drops the attribute
     rather than writing a literal "None" string.
     """
-    var_list = [var for var in ds.variables if var not in ds.dims]
-    for var in var_list:
+    for var in non_dim_variables(ds):
         attrs = ds[var].attrs
 
         if isinstance(attrs.get("instrument_uri"), dict):
@@ -319,8 +356,7 @@ def _rehydrate_instrument_history(ds):
     from a simple one, so no key-order guessing is needed the way
     _reorder_compound_instrument used to do it.
     """
-    var_list = [var for var in ds.variables if var not in ds.dims]
-    for var in var_list:
+    for var in non_dim_variables(ds):
         attrs = ds[var].attrs
 
         inst = attrs.get("instrument")
@@ -367,14 +403,11 @@ def serialize_inst_history(ds, year):
     this function only adds the calendar-year windowing and NetCDF attr
     reassembly on top of it.
     """
-    time_step = ds.attrs["time_step"]
-    year_start = datetime.datetime(year, 1, 1) + datetime.timedelta(minutes=time_step)
-    year_end = datetime.datetime(year + 1, 1, 1)
+    year_start, year_end = _year_window(year, ds.attrs["time_step"])
     year_start = max(year_start, pd.Timestamp(ds.time.values[0]).to_pydatetime())
     year_end = min(year_end, pd.Timestamp(ds.time.values[-1]).to_pydatetime())
 
-    var_list = [var for var in ds.variables if var not in ds.dims]
-    for var in var_list:
+    for var in non_dim_variables(ds):
         attrs = ds[var].attrs
 
         if "instrument_history" not in attrs:

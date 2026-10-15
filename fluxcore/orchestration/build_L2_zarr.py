@@ -27,25 +27,15 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from fluxcore.domain.constants import DATA_TIME_FORMAT
 from fluxcore.infrastructure import file_io
 from fluxcore.orchestration import incremental_zarr, qc_pipeline
+from fluxcore.orchestration.build_L1_nc import assign_coverage_attrs
 from fluxcore.services.metadata.core import qc_config_schema
 from fluxcore.services.metadata.core.qc_config_schema import SiteQCConfig
 
 logger = logging.getLogger(__name__)
 
 PROCESSING_LEVEL = "L2"
-
-
-def store_path_for(site_name: str, output_dir: pathlib.Path | str) -> pathlib.Path:
-    """Path of a site's L2 Zarr store within output_dir."""
-    return pathlib.Path(output_dir) / f"{site_name}_L2.zarr"
-
-
-def _l1_store_path(site_name: str, l1_dir: pathlib.Path | str) -> pathlib.Path:
-    """Path of a site's source L1 Zarr store within l1_dir."""
-    return pathlib.Path(l1_dir) / f"{site_name}_L1.zarr"
 
 
 def build(
@@ -74,12 +64,12 @@ def build(
     Returns:
         Path to the L2 Zarr store written.
     """
-    store_path = store_path_for(qc_config.site_name, output_dir)
-    l1_path = _l1_store_path(qc_config.site_name, l1_dir)
+    store_path = incremental_zarr.store_path_for(qc_config.site_name, output_dir, "L2")
+    l1_path = incremental_zarr.store_path_for(qc_config.site_name, l1_dir, "L1")
 
     ds = xr.open_zarr(l1_path)
     qc_config_schema.validate_qc_config_variables(
-        qc_config, qc_pipeline.checkable_variables(ds)
+        qc_config, qc_config_schema.checkable_variables(ds)
     )
 
     dependency_defaults = qc_config_schema.load_dependency_defaults()
@@ -136,8 +126,8 @@ def update(
     Returns:
         Path to the L2 Zarr store (updated in place, or freshly built).
     """
-    store_path = store_path_for(qc_config.site_name, output_dir)
-    l1_path = _l1_store_path(qc_config.site_name, l1_dir)
+    store_path = incremental_zarr.store_path_for(qc_config.site_name, output_dir, "L2")
+    l1_path = incremental_zarr.store_path_for(qc_config.site_name, l1_dir, "L1")
 
     dependency_defaults = qc_config_schema.load_dependency_defaults()
     range_defaults = qc_config_schema.load_range_defaults()
@@ -162,7 +152,7 @@ def update(
             return None
 
         qc_config_schema.validate_qc_config_variables(
-            qc_config, qc_pipeline.checkable_variables(ds)
+            qc_config, qc_config_schema.checkable_variables(ds)
         )
         resolved_qc_config = qc_config_schema.resolve_qc_config(
             qc_config, dependency_defaults, range_defaults, ds
@@ -204,20 +194,7 @@ def _assign_L2_tail_attrs(ds: xr.Dataset, store_path: pathlib.Path) -> xr.Datase
     appending it unmodified would let append_zarr overwrite the store's own
     combined attrs with L1's, relabelling the store L1, jumping
     time_coverage_start forward and understating nc_nrecs.
-    Mirrors build_L1_zarr.assign_L1_data_full_attrs's tail-attrs handling.
     """
-    existing_attrs = dict(xr.open_zarr(store_path).attrs)
-    range_start = existing_attrs["time_coverage_start"]
-    nrecs_base = int(existing_attrs.get("nc_nrecs", 0))
-
-    ds.attrs.update(
-        {
-            "processing_level": PROCESSING_LEVEL,
-            "nc_nrecs": nrecs_base + ds.sizes["time"],
-            "time_coverage_start": range_start,
-            "time_coverage_end": pd.to_datetime(ds.time.values[-1]).strftime(
-                DATA_TIME_FORMAT
-            ),
-        }
-    )
-    return ds
+    range_start, nrecs_base = incremental_zarr.store_coverage(store_path)
+    ds.attrs["processing_level"] = PROCESSING_LEVEL
+    return assign_coverage_attrs(ds, range_start=range_start, nrecs_base=nrecs_base)

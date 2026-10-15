@@ -58,13 +58,27 @@ def build_dataframe_from_context(
     Returns:
         Canonical DataFrame with DatetimeIndex.
     """
+    df, _ = build_dataframe_and_specs(ctx, quantities=quantities, start_date=start_date)
+    return df
+
+
+def build_dataframe_and_specs(
+    ctx: SiteContext,
+    quantities: set[str] | None = None,
+    start_date: pd.Timestamp | None = None,
+) -> tuple[pd.DataFrame, dict[str, VariableSpec]]:
+    """As build_dataframe_from_context, also returning the alias-keyed specs.
+
+    The specs are the full set built from the context (not filtered by
+    `quantities`); dataset_builder derives variable attrs from them.
+    """
     runtime_cfg = ctx.runtime_config
     file_groups = build_file_groups(runtime_cfg)
     for group in file_groups.values():
         group.validate_or_raise()
     registry = build_variable_registry(runtime_cfg=runtime_cfg, file_groups=file_groups)
 
-    return build_dataframe(
+    df = build_dataframe(
         file_groups=file_groups,
         registry=registry,
         quantities=quantities,
@@ -73,6 +87,7 @@ def build_dataframe_from_context(
         flux_file=runtime_cfg.flux_file,
         time_step=ctx.metadata.time_step,
     )
+    return df, registry
 
 
 def build_dataframe(

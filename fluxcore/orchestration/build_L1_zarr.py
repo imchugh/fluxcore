@@ -30,15 +30,16 @@ import pathlib
 import pandas as pd
 import xarray as xr
 
-from fluxcore.domain.constants import DATA_TIME_FORMAT
 from fluxcore.infrastructure import file_io
 from fluxcore.orchestration import incremental_zarr
 from fluxcore.orchestration.build_L1_nc import (
+    assign_coverage_attrs,
     assign_crs_variable,
     assign_L1_global_generic_attrs,
     assign_variable_flags,
     do_dim_ops,
     filter_variable_attrs,
+    non_dim_variables,
     serialize_units,
     serialize_uri,
 )
@@ -46,11 +47,6 @@ from fluxcore.orchestration.dataset_builder import build_dataset_from_context
 from fluxcore.services.metadata.core.site_metadata_builder import SiteContext
 
 logger = logging.getLogger(__name__)
-
-
-def store_path_for(site_name: str, output_dir: pathlib.Path | str) -> pathlib.Path:
-    """Path of a site's L1 Zarr store within output_dir."""
-    return pathlib.Path(output_dir) / f"{site_name}_L1.zarr"
 
 
 def build(
@@ -81,12 +77,14 @@ def build(
     Returns:
         Path to the Zarr store written.
     """
-    store_path = store_path_for(ctx.runtime_config.site_name, output_dir)
+    store_path = incremental_zarr.store_path_for(
+        ctx.runtime_config.site_name, output_dir, "L1"
+    )
 
     start_date = pd.Timestamp(year, 1, 1) if year is not None else None
     ds = build_dataset_from_context(ctx=ctx, start_date=start_date)
     ds = build_L1_ds_complete(ds, global_attrs=global_attrs)
-    ds = build_L1_ds_full(ds)
+    ds = _finish_for_store(ds)
     ds.attrs["config_hash"] = incremental_zarr.hash_config(ctx.runtime_config)
 
     file_io.write_zarr(ds=ds, store_path=store_path)
@@ -134,7 +132,7 @@ def update(
         Path to the Zarr store (updated in place, or freshly built).
     """
     site_name = ctx.runtime_config.site_name
-    store_path = store_path_for(site_name, output_dir)
+    store_path = incremental_zarr.store_path_for(site_name, output_dir, "L1")
 
     def produce_tail(checkpoint: pd.Timestamp) -> xr.Dataset | None:
         time_step = int(xr.open_zarr(store_path).attrs["time_step"])
@@ -145,7 +143,7 @@ def update(
             return None
 
         ds = build_L1_ds_complete(ds, global_attrs=global_attrs)
-        return build_L1_ds_tail(ds, store_path=store_path)
+        return _finish_for_store(ds, append_to=store_path)
 
     def full_rebuild() -> pathlib.Path:
         return build(ctx, output_dir=output_dir, global_attrs=global_attrs)
@@ -161,10 +159,7 @@ def update(
 
 
 def build_L1_ds_complete(ds, global_attrs: dict | None = None):
-    """Apply spatial dims, CRS variable, and generic global attrs to the dataset.
-
-    Reused unchanged from build_L1_nc — none of these steps are year-scoped.
-    """
+    """Apply spatial dims, CRS variable, and generic global attrs to the dataset."""
     ds = do_dim_ops(ds=ds)
     ds = assign_crs_variable(ds=ds)
     ds = assign_L1_global_generic_attrs(ds=ds, global_attrs=global_attrs)
@@ -172,91 +167,34 @@ def build_L1_ds_complete(ds, global_attrs: dict | None = None):
     return ds
 
 
-def build_L1_ds_full(ds):
-    """Apply the flags/attrs/serialization pipeline over a whole-history dataset.
+def _finish_for_store(ds, append_to: pathlib.Path | None = None):
+    """Apply the flags/attrs/serialization pipeline for writing ds to a store.
 
     Covers the whole store rather than one calendar year: no time slicing,
-    and title/coverage attrs span the dataset's full time range. Used by
-    `build()`. See `build_L1_ds_tail` for the counterpart used by `update()`,
-    where the whole-history range must come from the existing store rather
-    than from `ds` itself.
+    and title/coverage attrs span the store's full time range. With
+    `append_to`, ds is a tail slice bound for that existing store, so the
+    coverage attrs combine the store's recorded start and record count with
+    the tail's; otherwise appending would make time_coverage_start jump
+    forward to the tail's start. instrument_history needs no such combining:
+    it's config-derived and stored in full structured form (see
+    `_json_safe_instrument_history`).
     """
-    ds = assign_variable_flags(ds)
-    ds = assign_L1_data_full_attrs(ds=ds)
-    ds = filter_variable_attrs(ds=ds)
-    ds = serialize_uri(ds=ds)
-    ds = _json_safe_instrument_history(ds=ds)
-    ds = serialize_units(ds=ds)
-    ds = file_io.serialize_dataset_attrs(ds=ds)
-
-    return ds
-
-
-def build_L1_ds_tail(ds, store_path: pathlib.Path):
-    """Apply the flags/attrs/serialization pipeline to a tail slice being appended.
-
-    Same steps as `build_L1_ds_full`, except the whole-history attrs
-    (title, `nc_nrecs`, time coverage) are computed against the *combined*
-    range — the existing store's recorded start and record count, plus
-    this tail slice — rather than the tail's own local bounds. Without
-    this, appending would make `time_coverage_start` jump forward to the
-    tail's start. `instrument_history` needs no such combining: it's
-    config-derived (independent of the queried date range) and stored in
-    full structured form via `_json_safe_instrument_history`, not clipped
-    at write time — see that function's docstring.
-
-    Args:
-        ds: tail-slice dataset, already passed through `build_L1_ds_complete`.
-        store_path: path to the existing store being appended to, read here
-            only for its current global attrs (cheap — no data load).
-    """
-    existing_attrs = dict(xr.open_zarr(store_path).attrs)
-    range_start = existing_attrs["time_coverage_start"]
-    nrecs_base = int(existing_attrs["nc_nrecs"])
+    range_start, nrecs_base = (
+        incremental_zarr.store_coverage(append_to) if append_to else (None, 0)
+    )
 
     ds = assign_variable_flags(ds)
-    ds = assign_L1_data_full_attrs(
-        ds=ds, range_start=range_start, nrecs_base=nrecs_base
+    ds = assign_coverage_attrs(
+        ds,
+        title=f"Flux tower data set from the {ds.site_name} site",
+        range_start=range_start,
+        nrecs_base=nrecs_base,
     )
     ds = filter_variable_attrs(ds=ds)
     ds = serialize_uri(ds=ds)
     ds = _json_safe_instrument_history(ds=ds)
     ds = serialize_units(ds=ds)
     ds = file_io.serialize_dataset_attrs(ds=ds)
-
-    return ds
-
-
-def assign_L1_data_full_attrs(ds, range_start=None, nrecs_base: int = 0):
-    """Add whole-history global attrs (title, record count, time coverage) to ds.
-
-    Whole-history counterpart of build_L1_nc.assign_L1_data_year_attrs.
-
-    Args:
-        ds: dataset — the full history for `build()`, or a tail slice for
-            `update()`.
-        range_start: if given, used as the store's `time_coverage_start`
-            instead of `ds.time.values[0]` — pass the *existing* store's
-            recorded start when `ds` is only a tail slice.
-        nrecs_base: record count already present in the store before this
-            call (0 for a full build); added to `len(ds.time)` for
-            `nc_nrecs`.
-    """
-
-    def _format_time(x):
-        return pd.to_datetime(x).strftime(DATA_TIME_FORMAT)
-
-    begin = _format_time(range_start if range_start is not None else ds.time.values[0])
-    end = _format_time(ds.time.values[-1])
-
-    ds.attrs.update(
-        {
-            "title": f"Flux tower data set from the {ds.site_name} site",
-            "nc_nrecs": nrecs_base + len(ds.time),
-            "time_coverage_start": begin,
-            "time_coverage_end": end,
-        }
-    )
 
     return ds
 
@@ -290,8 +228,7 @@ def _json_safe_instrument_history(ds):
             reflects the site's full history regardless of which slice of
             data `ds` covers, so no date-range argument is needed here.
     """
-    var_list = [var for var in ds.variables if var not in ds.dims]
-    for var in var_list:
+    for var in non_dim_variables(ds):
         attrs = ds[var].attrs
 
         inst = attrs.get("instrument")

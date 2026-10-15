@@ -6,8 +6,7 @@ do_dependencycheck, do_EPQCFlagCheck, do_madfilter/_1/_2), reimplemented as
 small pure functions against this pipeline's own pd.Series/numpy rather than
 PyFluxPro's configobj/DataStructure/masked-array machinery.
 
-`@register_check` populates CHECK_REGISTRY, keyed by check name; `get_check`
-looks it back up. Every check function returns a boolean "bad" mask (True =
+Every check function returns a boolean "bad" mask (True =
 fails this check), same length/index as its input — never a masked-and-filled
 series — so DependencyCheck can consume other checks' outputs uniformly, and
 all flag-combination policy stays in orchestration/qc_pipeline.py.
@@ -16,25 +15,13 @@ all flag-combination policy stays in orchestration/qc_pipeline.py.
 import numpy as np
 import pandas as pd
 
-CHECK_REGISTRY = {}
+# mad_filter defaults, also the defaults of qc_config_schema.MADFilterSpec.
+MAD_FSD_THRESHOLD = 12.0
+MAD_WINDOW_DAYS = 13
+MAD_ZFC = 5.5
+MAD_EDGE_THRESHOLD = (20.0, 80.0)
 
 
-def register_check(name):
-    """Register the decorated function in CHECK_REGISTRY under `name`."""
-
-    def decorator(func):
-        CHECK_REGISTRY[name] = func
-        return func
-
-    return decorator
-
-
-def get_check(name):
-    """Look up a registered check function by name."""
-    return CHECK_REGISTRY[name]
-
-
-@register_check("range_check")
 def range_check(series: pd.Series, lower: float, upper: float) -> pd.Series:
     """Boolean mask, True where series < lower or series > upper.
 
@@ -44,7 +31,6 @@ def range_check(series: pd.Series, lower: float, upper: float) -> pd.Series:
     return (series < lower) | (series > upper)
 
 
-@register_check("exclude_dates")
 def exclude_dates_check(index: pd.DatetimeIndex, ranges: list[tuple]) -> pd.Series:
     """Boolean mask, True where index falls within any [start, end] range (inclusive)."""
     bad = np.zeros(len(index), dtype=bool)
@@ -53,7 +39,6 @@ def exclude_dates_check(index: pd.DatetimeIndex, ranges: list[tuple]) -> pd.Seri
     return pd.Series(bad, index=index)
 
 
-@register_check("dependency_check")
 def dependency_check(dependency_flags: list[pd.Series]) -> pd.Series:
     """OR-combine already-computed boolean bad-flags for a variable's dependencies."""
     if not dependency_flags:
@@ -66,7 +51,6 @@ def dependency_check(dependency_flags: list[pd.Series]) -> pd.Series:
     return combined
 
 
-@register_check("flag_check")
 def flag_check(flag_series: list[pd.Series], reject: list[float]) -> pd.Series:
     """Boolean mask, True where any source flag equals any rejected value.
 
@@ -83,16 +67,15 @@ def flag_check(flag_series: list[pd.Series], reject: list[float]) -> pd.Series:
     return bad
 
 
-@register_check("mad_filter")
 def mad_filter(
     series: pd.Series,
     reference: pd.Series,
     *,
     time_step_minutes: int,
-    fsd_threshold: float = 12.0,
-    window_days: int = 13,
-    zfc: float = 5.5,
-    edge_threshold: float | tuple[float, float] = (20.0, 80.0),
+    fsd_threshold: float = MAD_FSD_THRESHOLD,
+    window_days: int = MAD_WINDOW_DAYS,
+    zfc: float = MAD_ZFC,
+    edge_threshold: float | tuple[float, float] = MAD_EDGE_THRESHOLD,
 ) -> pd.Series:
     """Boolean mask, True where series fails the two-stage MAD despike test.
 

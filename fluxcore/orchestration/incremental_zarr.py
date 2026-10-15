@@ -39,6 +39,23 @@ from pydantic import BaseModel
 from fluxcore.infrastructure import file_io
 
 
+def store_path_for(
+    site_name: str, output_dir: pathlib.Path | str, level: str
+) -> pathlib.Path:
+    """Path of a site's Zarr store for `level` ("L1", "L2") within output_dir."""
+    return pathlib.Path(output_dir) / f"{site_name}_{level}.zarr"
+
+
+def store_coverage(store_path: pathlib.Path) -> tuple[str, int]:
+    """An existing store's time_coverage_start and record count (nc_nrecs).
+
+    For a tail slice about to be appended: its coverage attrs must describe
+    the combined range, not the tail alone.
+    """
+    attrs = xr.open_zarr(store_path).attrs
+    return attrs["time_coverage_start"], int(attrs["nc_nrecs"])
+
+
 def last_store_timestamp(store_path: pathlib.Path) -> pd.Timestamp | None:
     """Return the store's last timestamp, or None if the store doesn't exist yet."""
     if not store_path.exists():

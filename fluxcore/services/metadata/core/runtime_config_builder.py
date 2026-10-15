@@ -30,7 +30,7 @@ from fluxcore.services.metadata.core.site_config_schema import (
     SiteConfig,
     validate_L1_config_structure,
 )
-from fluxcore.services.metadata.core.variable_name_parser import NameParser
+from fluxcore.services.metadata.core.variable_name_parser import parse_variable_name
 
 
 @dataclass(frozen=True)
@@ -90,42 +90,23 @@ class SiteRuntimeConfig:
         return self.get_filename(self.flux_file)
 
 
-def _check_name_config_consistency(
-    variable: str,
-    parsed_name,
-    statistic_type,
-    variable_type,
+def _check_statistic_matches_name(
+    variable: str, parsed_name, statistic_type: StatisticType | None
 ) -> None:
-    """Cross-check parsed name fields against config declarations.
+    """Raise if the name's statistic suffix (Av, Sd, Vr ...) disagrees with config.
 
-    The parser resolves the terminal suffix into either statistic_id (a
-    StatisticType suffix: Av, Sd, Vr ...) or variable_type_id (a
-    VariableType suffix: QC, Ct).  The config independently declares
-    statistic_type and variable_type.  This function verifies they agree.
-
-    Args:
-        variable:      canonical variable name (for error messages).
-        parsed_name:   ParsedVariableName produced by the parser.
-        statistic_type: StatisticType declared in the config, or None.
-        variable_type:  VariableType declared in the config.
+    The matching variable_type check (QC, Ct suffixes) is SiteConfig's
+    enforce_name_type_consistency, which has already run on validated_config.
     """
-    if parsed_name.statistic_id is not None:
-        stat_from_name = StatisticType.from_suffix(parsed_name.statistic_id)
-        if statistic_type != stat_from_name:
-            raise ValueError(
-                f"Variable '{variable}': name suffix '{parsed_name.statistic_id}'"
-                f" implies statistic_type={stat_from_name.value!r}, but config"
-                f" declares statistic_type={statistic_type!r}"
-            )
-
-    if parsed_name.variable_type_id is not None:
-        vtype_from_name = VariableType.from_suffix(parsed_name.variable_type_id)
-        if variable_type != vtype_from_name:
-            raise ValueError(
-                f"Variable '{variable}': name suffix '{parsed_name.variable_type_id}'"
-                f" implies variable_type={vtype_from_name.value!r}, but config"
-                f" declares variable_type={variable_type!r}"
-            )
+    if parsed_name.statistic_id is None:
+        return
+    stat_from_name = StatisticType.from_suffix(parsed_name.statistic_id)
+    if statistic_type != stat_from_name:
+        raise ValueError(
+            f"Variable '{variable}': name suffix '{parsed_name.statistic_id}'"
+            f" implies statistic_type={stat_from_name.value!r}, but config"
+            f" declares statistic_type={statistic_type!r}"
+        )
 
 
 def _check_no_repeated_instrument_era(
@@ -199,7 +180,6 @@ def build_runtime_config(
     """
     instrument_uris = instrument_uris or {}
 
-    name_parser = NameParser()
     canonical_metadata = build_canonical_quantity_registry()
 
     custom_metadata = (
@@ -211,14 +191,10 @@ def build_runtime_config(
     site_variables = {}
     for variable, raw_cfg in validated_config.variables.items():
         # Parse the variable name (syntax validation)
-        parsed_name_elems = name_parser.parse_variable_name(variable_name=variable)
+        parsed_name_elems = parse_variable_name(variable)
 
-        # Cross-check name suffix against config declarations
-        _check_name_config_consistency(
-            variable=variable,
-            parsed_name=parsed_name_elems,
-            statistic_type=raw_cfg.statistic_type,
-            variable_type=raw_cfg.variable_type,
+        _check_statistic_matches_name(
+            variable, parsed_name_elems, raw_cfg.statistic_type
         )
 
         # Ensure the quantity exists in canonical metadata

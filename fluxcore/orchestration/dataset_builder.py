@@ -5,8 +5,6 @@ Public API
 ----------
 build_dataset_from_context(ctx, pad_humidity, pad_co2, start_date) -> xr.Dataset
 
-DatasetBuildIntermediate  — exported for use by derived_quantities
-
 See also the TERN-EP pipeline's
 `orchestration.site_runner.build_dataset_from_site_name` for
 the TERN-adapter convenience wrapper that resolves a bare site name to a
@@ -14,30 +12,20 @@ context before delegating here.
 """
 
 import datetime
-from dataclasses import dataclass
 
 import pandas as pd
 import xarray as xr
 
 from fluxcore.domain.enums import StatisticType
-from fluxcore.orchestration.dataframe_builder import build_dataframe
-from fluxcore.services.metadata.core import file_group_builder
+from fluxcore.orchestration import derived_quantities
+from fluxcore.orchestration.dataframe_builder import build_dataframe_and_specs
+from fluxcore.orchestration.derived_quantities import DatasetBuildIntermediate
 from fluxcore.services.metadata.core.site_metadata_builder import SiteContext
 from fluxcore.services.metadata.core.variable_registry import (
     VariableSpec,
-    build_variable_registry,
     canonical_output_name,
     group_by_canonical_name,
 )
-
-
-@dataclass
-class DatasetBuildIntermediate:
-    """Staging object carrying the canonical DataFrame and xarray variable metadata."""
-
-    df: pd.DataFrame
-    var_attrs: dict[str, dict]
-
 
 ATTRS_SUBSET = [
     "site_name",
@@ -68,12 +56,7 @@ def build_dataset_from_context(
     ds = result.df.to_xarray()
     ds = _apply_variable_metadata(ds, result.var_attrs)
     ds = _apply_global_metadata(ds, ctx)
-
-    # Lazy import: derived_quantities imports DatasetBuildIntermediate from
-    # this module, so a top-level import here would be circular.
-    from fluxcore.orchestration.derived_quantities import add_day_night_indicator
-
-    ds = add_day_night_indicator(ds)
+    ds = derived_quantities.add_day_night_indicator(ds)
 
     return ds
 
@@ -83,24 +66,12 @@ def _apply_padding(
     pad_humidity: bool,
     pad_co2: bool,
 ) -> DatasetBuildIntermediate:
-    # Lazy import to avoid circular dependency (derived_quantities imports
-    # DatasetBuildIntermediate from this module)
-    from fluxcore.orchestration.derived_quantities import (
-        add_net_radiation as _add_net_radiation,
-    )
-    from fluxcore.orchestration.derived_quantities import (
-        pad_co2 as _pad_co2,
-    )
-    from fluxcore.orchestration.derived_quantities import (
-        pad_humidity as _pad_humidity,
-    )
-
     if pad_humidity:
-        result = _pad_humidity(result)
+        result = derived_quantities.pad_humidity(result)
     if pad_co2:
-        result = _pad_co2(result)
+        result = derived_quantities.pad_co2(result)
     # Always calculated, never gated -- see add_net_radiation's docstring.
-    result = _add_net_radiation(result)
+    result = derived_quantities.add_net_radiation(result)
     return result
 
 
@@ -155,23 +126,7 @@ def _build_result(
         DatasetBuildIntermediate containing the canonical dataframe and a dict
         of per-variable xarray attribute dicts keyed by canonical name.
     """
-    runtime_cfg = ctx.runtime_config
-
-    file_groups = file_group_builder.build_file_groups(runtime_cfg)
-    for group in file_groups.values():
-        group.validate_or_raise()
-
-    registry = build_variable_registry(runtime_cfg=runtime_cfg, file_groups=file_groups)
-
-    df = build_dataframe(
-        file_groups=file_groups,
-        registry=registry,
-        n_samples=ctx.metadata.n_samples,
-        start_date=start_date,
-        flux_file=runtime_cfg.flux_file,
-        time_step=ctx.metadata.time_step,
-    )
-
+    df, registry = build_dataframe_and_specs(ctx, start_date=start_date)
     var_attrs = _build_var_attrs(registry=registry)
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)

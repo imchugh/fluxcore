@@ -29,13 +29,13 @@ add_day_night_indicator(ds) -> xr.Dataset
 """
 
 import logging
+from dataclasses import dataclass
 
 import pandas as pd
 import xarray as xr
 
 from fluxcore.domain.enums import StatisticType
 from fluxcore.infrastructure import datetime_utils
-from fluxcore.orchestration.dataset_builder import DatasetBuildIntermediate
 from fluxcore.services.data.calculations import get_calculation
 from fluxcore.services.metadata.core.canonical_quantity_registry import (
     build_canonical_quantity_registry,
@@ -44,6 +44,14 @@ from fluxcore.services.metadata.core.canonical_quantity_registry import (
 logger = logging.getLogger(__name__)
 
 _HUMIDITY_QUANTITIES = frozenset({"Ta", "RH", "AH"})
+
+
+@dataclass
+class DatasetBuildIntermediate:
+    """Staging object carrying the canonical DataFrame and xarray variable metadata."""
+
+    df: pd.DataFrame
+    var_attrs: dict[str, dict]
 
 
 def pad_humidity(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:

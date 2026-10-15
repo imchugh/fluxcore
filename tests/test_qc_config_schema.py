@@ -129,9 +129,6 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
     """resolve_default_range: the Dataset-free lookup shared with the monitors."""
 
     def setUp(self):
-        from fluxcore.services.metadata.core.variable_name_parser import NameParser
-
-        self.parser = NameParser()
         self.defaults = {
             "Fco2": [-50, 30],
             "Ta": {"Av": [-10, 50], "Sd": [0, 5]},
@@ -139,9 +136,7 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
         }
 
     def _resolve(self, name, suffix=None):
-        return qc_config_schema.resolve_default_range(
-            name, suffix, self.defaults, self.parser
-        )
+        return qc_config_schema.resolve_default_range(name, suffix, self.defaults)
 
     def test_flat_quantity(self):
         self.assertEqual(self._resolve("Fco2"), (-50, 30))
@@ -167,13 +162,11 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
 
     def test_station_pressure_default_follows_elevation(self):
         defaults = {"ps": {"standard_pressure_pm": 10}}
-        sea = qc_config_schema.resolve_default_range(
-            "ps", None, defaults, self.parser, elevation=0
-        )
+        sea = qc_config_schema.resolve_default_range("ps", None, defaults, elevation=0)
         self.assertAlmostEqual(sea[0], 91.325, places=3)
         self.assertAlmostEqual(sea[1], 111.325, places=3)
         high = qc_config_schema.resolve_default_range(
-            "ps", None, defaults, self.parser, elevation=1650
+            "ps", None, defaults, elevation=1650
         )
         # ISA pressure at 1650 m is 83.0 kPa
         self.assertAlmostEqual((high[0] + high[1]) / 2, 83.0, delta=0.1)
@@ -181,20 +174,16 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
 
     def test_station_pressure_default_needs_an_elevation(self):
         defaults = {"ps": {"standard_pressure_pm": 10}}
-        self.assertIsNone(
-            qc_config_schema.resolve_default_range("ps", None, defaults, self.parser)
-        )
+        self.assertIsNone(qc_config_schema.resolve_default_range("ps", None, defaults))
 
     def test_lookup_wrapper_reads_elevation_off_dataset_attrs(self):
         defaults = {"ps": {"standard_pressure_pm": 10}}
         ds = _resolve_ds(["ps"])
         ds.attrs["elevation"] = 1650.0
-        lo, hi = qc_config_schema.lookup_default_range(ds, "ps", defaults, self.parser)
+        lo, hi = qc_config_schema.lookup_default_range(ds, "ps", defaults)
         self.assertAlmostEqual((lo + hi) / 2, 83.0, delta=0.1)
         del ds.attrs["elevation"]
-        self.assertIsNone(
-            qc_config_schema.lookup_default_range(ds, "ps", defaults, self.parser)
-        )
+        self.assertIsNone(qc_config_schema.lookup_default_range(ds, "ps", defaults))
 
     def test_real_ps_default_is_elevation_derived(self):
         real = qc_config_schema.load_range_defaults()
@@ -204,9 +193,7 @@ class ResolveDefaultRangeTestCase(unittest.TestCase):
         ds = _resolve_ds(["Ta_Av"])
         ds["Ta_Av"].attrs["statistic_type"] = "average"
         self.assertEqual(
-            qc_config_schema.lookup_default_range(
-                ds, "Ta_Av", self.defaults, self.parser
-            ),
+            qc_config_schema.lookup_default_range(ds, "Ta_Av", self.defaults),
             (-10, 50),
         )
 

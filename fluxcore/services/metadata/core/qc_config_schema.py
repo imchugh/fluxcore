@@ -25,10 +25,11 @@ from pydantic import BaseModel, ConfigDict, RootModel, field_validator, model_va
 from fluxcore.domain.enums import StatisticType, VariableType
 from fluxcore.infrastructure.file_io import read_yml
 from fluxcore.services import config_loader
+from fluxcore.services.data import qc_service
 from fluxcore.services.data.calculations import standard_pressure_kpa
 from fluxcore.services.metadata.core.variable_name_parser import (
-    NameParser,
     VariableNameParseError,
+    parse_variable_name,
 )
 
 QC_DEFAULTS_DIR = config_loader.CONFIG_PATH / "qc"
@@ -80,10 +81,10 @@ class MADFilterSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reference_var: str
-    window_days: int = 13
-    fsd_threshold: float = 12.0
-    zfc: float = 5.5
-    edge_threshold: float | tuple[float, float] = (20.0, 80.0)
+    window_days: int = qc_service.MAD_WINDOW_DAYS
+    fsd_threshold: float = qc_service.MAD_FSD_THRESHOLD
+    zfc: float = qc_service.MAD_ZFC
+    edge_threshold: float | tuple[float, float] = qc_service.MAD_EDGE_THRESHOLD
 
     @field_validator("window_days")
     @classmethod
@@ -153,6 +154,16 @@ class SiteQCConfig:
     site_name: str
     variables: dict[str, VariableQCSpec]
 
+    @property
+    def flag_sources(self) -> set[str]:
+        """Logger quality-flag variables named as a flag_check source."""
+        return {
+            src
+            for spec in self.variables.values()
+            if spec.flag_check is not None
+            for src in spec.flag_check.source
+        }
+
     def dependency_graph_order(self) -> list[str]:
         """Topologically sort configured variables by dependency_check edges.
 
@@ -183,6 +194,11 @@ class SiteQCConfig:
         for name in sorted(self.variables):
             visit(name, [])
         return order
+
+
+def checkable_variables(ds: xr.Dataset) -> set[str]:
+    """Data variables eligible to be QC-checked: excludes flags and crs."""
+    return {var for var in ds.data_vars if not var.endswith("_QCFlag") and var != "crs"}
 
 
 def load_qc_config(site_name: str, config_dir: Path | str) -> SiteQCConfig:
@@ -283,7 +299,6 @@ def resolve_default_range(
     var_name: str,
     statistic_suffix: str | None,
     range_defaults: dict,
-    name_parser: NameParser,
     elevation: float | None = None,
 ) -> tuple[float, float] | None:
     """Resolve var_name's default [min, max] from range_defaults, or None.
@@ -311,7 +326,7 @@ def resolve_default_range(
     orchestration.legacy_network_status).
     """
     try:
-        parsed = name_parser.parse_variable_name(var_name)
+        parsed = parse_variable_name(var_name)
     except VariableNameParseError:
         return None
 
@@ -346,7 +361,6 @@ def lookup_default_range(
     ds: xr.Dataset,
     var_name: str,
     range_defaults: dict,
-    name_parser: NameParser,
 ) -> tuple[float, float] | None:
     """resolve_default_range for a variable in ds.
 
@@ -362,7 +376,6 @@ def lookup_default_range(
         var_name,
         statistic_suffix,
         range_defaults,
-        name_parser,
         elevation=float(elevation) if elevation is not None else None,
     )
 
@@ -375,10 +388,8 @@ def resolve_qc_config(
 ) -> SiteQCConfig:
     """Merge network-wide defaults into a site's explicit QC config, field by field.
 
-    For every checkable variable in ds (mirrors qc_pipeline.checkable_variables's
-    own _QCFlag/crs exclusion, duplicated inline rather than imported since
-    qc_pipeline imports this module and importing back would be circular):
-    the site's own explicit VariableQCSpec field wins if set. Otherwise:
+    For every checkable variable in ds (see checkable_variables), the
+    site's own explicit VariableQCSpec field wins if set. Otherwise:
       - range_check falls back to dependency_defaults' own range_check (used
         by quality-flag variables like Diag_SONIC/Fco2_QC that have no
         _range_defaults.yml quantity entry of their own), then to
@@ -400,20 +411,14 @@ def resolve_qc_config(
     defaults) is omitted from the result, same as a variable with no config
     entry at all today.
     """
-    available = {v for v in ds.data_vars if not v.endswith("_QCFlag") and v != "crs"}
-    name_parser = NameParser()
+    available = checkable_variables(ds)
     merged: dict[str, VariableQCSpec] = {}
 
     # Logger quality-flag variables named as a flag_check source are gate-only
     # inputs: excluded here so they get no checks/no _QCFlag of their own at
     # all, not just no range (resolve_default_range already returns None for
     # any VariableType.QUALITY_FLAG variable) and no default dependency.
-    flag_sources = {
-        src
-        for spec in qc_config.variables.values()
-        if spec.flag_check is not None
-        for src in spec.flag_check.source
-    }
+    flag_sources = qc_config.flag_sources
 
     for var_name in available:
         site_spec = qc_config.variables.get(var_name)
@@ -426,7 +431,7 @@ def resolve_qc_config(
         if range_check is None and default_spec is not None:
             range_check = default_spec.range_check
         if range_check is None:
-            bounds = lookup_default_range(ds, var_name, range_defaults, name_parser)
+            bounds = lookup_default_range(ds, var_name, range_defaults)
             if bounds is not None:
                 range_check = RangeCheckSpec(lower=bounds[0], upper=bounds[1])
 

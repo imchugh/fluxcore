@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from fluxcore.services.data.qc_service import get_check
+from fluxcore.services.data import qc_service
 from fluxcore.services.metadata.core.qc_config_schema import SiteQCConfig
 
 # Matches PyFluxPro's own codes exactly (grepped from pfp_ck.py/pfp_io.py, not
@@ -40,11 +40,6 @@ QC_FLAG_CODES = {
     "dependency_check": 23,
     "mad_filter": 24,
 }
-
-
-def checkable_variables(ds: xr.Dataset) -> set[str]:
-    """Data variables eligible to be QC-checked: excludes flags and crs."""
-    return {var for var in ds.data_vars if not var.endswith("_QCFlag") and var != "crs"}
 
 
 def apply_qc(
@@ -84,23 +79,23 @@ def apply_qc(
         code[series.isnull()] = QC_FLAG_CODES["missing"]
 
         if spec.range_check is not None:
-            bad = get_check("range_check")(
+            bad = qc_service.range_check(
                 series, spec.range_check.lower, spec.range_check.upper
             )
             code[bad] = QC_FLAG_CODES["range_check"]
 
         if spec.flag_check is not None:
             flag_series = [_extract_series(ds, src) for src in spec.flag_check.source]
-            bad = get_check("flag_check")(flag_series, spec.flag_check.reject)
+            bad = qc_service.flag_check(flag_series, spec.flag_check.reject)
             code[bad] = QC_FLAG_CODES["flag_check"]
 
         if spec.exclude_dates is not None:
-            bad = get_check("exclude_dates")(series.index, spec.exclude_dates)
+            bad = qc_service.exclude_dates_check(series.index, spec.exclude_dates)
             code[bad] = QC_FLAG_CODES["exclude_dates"]
 
         if spec.mad_filter is not None:
             reference = _extract_series(ds, spec.mad_filter.reference_var)
-            bad = get_check("mad_filter")(
+            bad = qc_service.mad_filter(
                 series,
                 reference,
                 time_step_minutes=int(ds.attrs["time_step"]),
@@ -118,7 +113,7 @@ def apply_qc(
                 else _extract_series(ds, dep).isnull()
                 for dep in spec.dependency_check
             ]
-            bad = get_check("dependency_check")(dep_flags)
+            bad = qc_service.dependency_check(dep_flags)
             code[bad] = QC_FLAG_CODES["dependency_check"]
 
         resolved_bad[var_name] = code != 0
@@ -127,13 +122,7 @@ def apply_qc(
     # Logger quality-flag sources are gate-only: left unmasked, and L1's own
     # placeholder {src}_QCFlag is dropped rather than left looking like a real
     # L2 flag -- unless the site explicitly configured the flag variable itself.
-    flag_sources = {
-        src
-        for spec in qc_config.variables.values()
-        if spec.flag_check is not None
-        for src in spec.flag_check.source
-    }
-    for src in sorted(flag_sources - set(qc_config.variables)):
+    for src in sorted(qc_config.flag_sources - set(qc_config.variables)):
         if f"{src}_QCFlag" in ds:
             ds = ds.drop_vars(f"{src}_QCFlag")
 

@@ -16,16 +16,7 @@ live in orchestration/build_runner.py.
 
 import pathlib
 
-import xarray as xr
-
-from fluxcore.domain.constants import NC_ENCODING
-from fluxcore.infrastructure import file_io
-from fluxcore.orchestration.build_L1_nc import (
-    _rehydrate_instrument_history,
-    assign_L1_global_generic_attrs,
-    build_L1_year_from_zarr,
-    get_ds_years,
-)
+from fluxcore.orchestration.build_L1_nc import export_store
 from fluxcore.orchestration.build_L2_zarr import PROCESSING_LEVEL
 
 
@@ -50,25 +41,11 @@ def build_from_zarr(
     Returns:
         List of paths to files written.
     """
-    store_path = pathlib.Path(zarr_dir) / f"{site_name}_L2.zarr"
-
-    ds = xr.open_zarr(store_path).load()
-    ds = _rehydrate_instrument_history(ds)
-    # Refresh date_created/history to this NetCDF build's own time, rather
-    # than whenever the L2 Zarr store was last written/appended.
-    ds = assign_L1_global_generic_attrs(
-        ds, global_attrs=global_attrs, processing_level=PROCESSING_LEVEL
+    return export_store(
+        site_name,
+        zarr_dir,
+        output_dir,
+        level=PROCESSING_LEVEL,
+        year=year,
+        global_attrs=global_attrs,
     )
-
-    output_dir = pathlib.Path(output_dir)
-
-    years = [year] if year is not None else get_ds_years(ds)
-
-    written = []
-    for ds_year in years:
-        year_ds = build_L1_year_from_zarr(ds=ds, year=ds_year)
-        file_path = output_dir / f"{site_name}_{ds_year}_L2.nc"
-        file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
-        written.append(file_path)
-
-    return written

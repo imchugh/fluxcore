@@ -34,7 +34,7 @@
 #     no default.
 #   - Quantity keyed by INSTRUMENT QUALIFIER instead of statistic (Diag
 #     only -- see note below): nest one level under the qualifier
-#     (IRGA / SONIC), read off the variable name via NameParser (there is
+#     (IRGA / SONIC), read off the variable name via parse_variable_name (there is
 #     no separate short-form qualifier attr on the L1 store; ds[var].attrs
 #     ["instrument"] is the full model string, e.g. "LI-COR LI-7500RS").
 #
