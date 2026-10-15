@@ -2,13 +2,18 @@
 """Sun-position and timezone helpers, built on ephem and timezonefinder."""
 
 from datetime import UTC, datetime, time, timedelta, timezone
+from functools import cache
 from zoneinfo import ZoneInfo
 
 import ephem
 import pandas as pd
 from timezonefinder import TimezoneFinder
 
-tzf = TimezoneFinder()
+
+@cache
+def _timezone_finder() -> TimezoneFinder:
+    """Shared TimezoneFinder, built on first use (loading it takes ~0.4 s)."""
+    return TimezoneFinder()
 
 
 class SunTime:
@@ -136,4 +141,4 @@ def get_standard_timezone(tz_name: str) -> timezone:
 
 def get_timezone(lat: float, lon: float) -> str:
     """Return the IANA timezone name for a (lat, lon) coordinate."""
-    return tzf.timezone_at(lat=lat, lng=lon)
+    return _timezone_finder().timezone_at(lat=lat, lng=lon)

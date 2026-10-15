@@ -27,6 +27,32 @@ the reverse. Don't add a public helper without a caller in fluxcore or a
 contract need; `services/config_loader.py` loads only fluxcore's own
 packaged configs.
 
+## Public API
+
+`fluxcore/__init__.py` re-exports the supported surface (see its `__all__`):
+the level builders (`build_L1_zarr`, `build_L1_nc`, `build_L2_zarr`,
+`build_L2_nc` modules; `build_dataset_from_context`,
+`build_dataframe_from_context`), the contract objects, config assembly
+(`build_runtime_config[_from_file]`, `build_site_metadata_from_file`,
+`load_qc_config`, `validate_all`, ...), the domain vocabulary (enums,
+`DATA_TIME_FORMAT`, `SITE_PLACEHOLDER`), domain introspection (canonical
+quantities, `parse_variable_name`, range defaults, `resolve_qc_config`,
+`get_calculation`, `profile_storage`) and raw-file reading (`load_raw_data`,
+`load_raw_header`, `get_data_loader`, ...). Import these as `from fluxcore
+import X`. Anything reached by a deeper import is internal and may change
+without notice; `tests/test_public_api.py` checks every exported name
+resolves.
+
+Known borrowers of internals: TERN and `fluxtools` still import a few
+`fluxcore.infrastructure` utilities directly (`file_io.read_yml` and other
+`file_io` readers/writers, `data_conditioning.infer_interval`/
+`check_datetime_index`, `datetime_utils.SunTime`/`get_timezone`/
+`get_standard_timezone`). They are not API: before changing one, grep those
+repos, or copy what they need into `fluxtools` first.
+
+Adding to the API is a decision, not a side effect: a new public name needs a
+caller in fluxcore or a contract need (see the scope rule above).
+
 ## Development
 
 - Python 3.12; dependencies in `pyproject.toml`. On the TERN VM it is
