@@ -38,6 +38,13 @@ class HashConfigTestCase(unittest.TestCase):
             incremental_zarr.hash_config("b", "a"),
         )
 
+    def test_physical_constant_change_changes_hash(self):
+        cfg = _Cfg(a=1, b={})
+        before = incremental_zarr.hash_config(cfg)
+        changed = {**incremental_zarr.PROCESSING_CONSTANTS, "R": 8.3143}
+        with mock.patch.object(incremental_zarr, "PROCESSING_CONSTANTS", changed):
+            self.assertNotEqual(incremental_zarr.hash_config(cfg), before)
+
     def test_set_hashes_independent_of_iteration_order(self):
         cfg1 = _Cfg(a=1, b={"s": {"alpha", "beta", "gamma"}})
         cfg2 = _Cfg(a=1, b={"s": {"gamma", "alpha", "beta"}})
