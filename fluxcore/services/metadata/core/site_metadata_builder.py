@@ -1,25 +1,15 @@
 #!/usr/bin/env python3
-"""Generic-core, strict, file-based loader for a single site's SiteMetadata.
+"""SiteContext, and a strict file-based loader for a site's SiteMetadata.
 
-Companion to runtime_config_builder.py, for the other half of a SiteContext
-— also defined here (the seam contract object combining both halves), since
-neither half's own module should have to import the other just to build it.
-TERN's own production pipeline is unaffected by this module — it keeps
-sourcing SiteMetadata as an object via SiteRegistry.get_metadata()
-(services/metadata/site_registry.py), reading configs/site_metadata.yml or
-the RDF endpoint. This module exists purely as a standalone, file-based
-entry point for a non-TERN caller who has no adapter of their own.
+SiteContext (SiteRuntimeConfig + SiteMetadata) is defined here so that
+neither half's own module has to import the other.
 
-Deliberately a single file (schema + builder together) rather than mirroring
-SiteConfig's schema/builder split — this piece is small enough not to earn
-the extra file.
-
-Deliberately strict (raises clearly on malformed input), unlike
-SiteMetadata's own tolerant coercion (domain/data_models/metadata_classes.py,
-SiteMetadata.__init__), which logs a warning and keeps bad values raw. That
-tolerant behaviour is a TERN accommodation for messy upstream RDF/yml data;
-it stays untouched, and is never exercised by this module, since validation
-here happens strictly before SiteMetadata's constructor ever sees the data.
+build_site_metadata_from_file() is for callers without an adapter of their
+own: it validates a single-site metadata YAML strictly (raising on malformed
+input) before building SiteMetadata. That differs on purpose from
+SiteMetadata.__init__'s tolerant coercion, which logs and keeps bad values
+raw for adapters fed by messier upstream sources; it is never exercised by
+this path, since validation runs first.
 """
 
 from dataclasses import dataclass
@@ -37,11 +27,9 @@ from fluxcore.services.metadata.core.runtime_config_builder import SiteRuntimeCo
 class SiteContext:
     """Combined runtime objects for a configured pipeline site.
 
-    One of the tier-1 contract objects (alongside SiteRuntimeConfig,
-    VariableSpec, FileGroup, CanonicalQuantityMetadata) any adapter can
-    produce to drive the generic core — defined here rather than in a
-    TERN-adapter module so a non-TERN caller never needs to import TERN
-    code just to get this type.
+    One of the contract objects (alongside SiteRuntimeConfig, VariableSpec,
+    FileGroup, CanonicalQuantityMetadata) an adapter produces to drive
+    fluxcore.
     """
 
     runtime_config: SiteRuntimeConfig
@@ -93,12 +81,9 @@ def validate_site_metadata_structure(file: Path) -> SiteMetadataSchema:
 def build_site_metadata_from_file(file_path: Path) -> SiteMetadata:
     """Build a SiteMetadata from a single-site metadata YAML file.
 
-    Generic-core entry point, strict validation — raises clearly on
-    malformed input. See tests/test_site_metadata_builder.py for a worked
-    example based on a real site's metadata record (one block of
-    TERN's configs/site_metadata.yml, unwrapped to a standalone file — TERN's own
-    yml_loader() never produces this shape as a standalone file, so this is
-    the reference example for a non-TERN user).
+    Strict validation — raises clearly on malformed input. See
+    tests/test_site_metadata_builder.py for a worked example based on a real
+    site's metadata record.
 
     Args:
         file_path: absolute path to the single-site metadata YAML.
@@ -107,9 +92,8 @@ def build_site_metadata_from_file(file_path: Path) -> SiteMetadata:
         SiteMetadata.
     """
     validated = validate_site_metadata_structure(file=file_path)
-    # mode="json": datetime -> ISO string, matching the string-typed shape
-    # SiteMetadata.__init__ expects (and real TERN records already carry) —
-    # feeding it a native datetime object instead trips its
+    # mode="json": datetime -> ISO string, the string-typed shape
+    # SiteMetadata.__init__ expects. A native datetime would trip its
     # datetime.fromisoformat(value) coercion (str-only) into a needless
     # warning-and-keep-raw fallback.
     return SiteMetadata(data=validated.model_dump(mode="json"))

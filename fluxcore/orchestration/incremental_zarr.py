@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Shared incremental-update envelope for a per-site whole-history Zarr store.
 
-Generic core (tier 1): no TERN dependency, no knowledge of L1 vs L2.
-`build_L1_zarr.update()` and `build_L2_zarr.update()` each supply the
-level-specific pieces (how to produce a processed tail dataset, how to do a
-full rebuild) as callbacks; this module owns only the shared envelope:
+Knows nothing of L1 vs L2: `build_L1_zarr.update()` and
+`build_L2_zarr.update()` each supply the level-specific pieces (how to
+produce a processed tail dataset, how to do a full rebuild) as callbacks;
+this module owns only the shared envelope:
 
     store doesn't exist?  -> full_rebuild()
     stored config hash != current config hash?  -> full_rebuild()
@@ -20,7 +20,8 @@ full rebuild) as callbacks; this module owns only the shared envelope:
 (not raw YAML text, so a comment or key-reorder edit doesn't force a
 rebuild) -- `full_rebuild()` implementations are expected to stamp the
 resulting hash onto the store's `config_hash` attr so the next cycle's
-comparison is meaningful.
+comparison is meaningful. The hash covers field names too, so renaming a
+config field forces one rebuild per store.
 """
 
 import dataclasses

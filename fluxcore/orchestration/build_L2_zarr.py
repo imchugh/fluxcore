@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
 """Apply L2 QC to a site's L1 Zarr store, writing a whole-history L2 Zarr store.
 
-Structural mirror of orchestration/build_L1_zarr.py's build()/update()
-duality, but reads from the site's existing L1 store (orchestration/
-build_L1_zarr.py) instead of rebuilding from raw data — L1 is already fully
-built, so this is a store-to-store transform via qc_pipeline.apply_qc, not
-another dataframe_builder/dataset_builder pass.
+Mirrors build_L1_zarr's build()/update() pair, but reads the site's L1 store
+rather than raw data: a store-to-store transform via qc_pipeline.apply_qc.
 
-`build()` does a full rebuild: read the entire L1 store, run QC, overwrite
-the L2 store. `update()` is the cheap incremental path: checkpoint off the
-L2 store's own last timestamp, read only the new tail from L1 (plus a
-lookback window sized to the largest configured mad_filter.window_days, so
-the despike test gets a genuine neighbourhood rather than being starved by a
-handful of new records — see update()'s docstring), and append. Falls back
-to a full build() on any exception, same pattern as L1's update().
+`build()` is a full rebuild: read the whole L1 store, run QC, overwrite the
+L2 store. `update()` is the incremental path: checkpoint off the L2 store's
+own last timestamp, read the new L1 tail plus a lookback window sized to the
+largest configured mad_filter.window_days (so the despike test gets a real
+neighbourhood; see update()), and append. Falls back to build() on any
+exception.
 
-Generic core: takes an already-loaded SiteQCConfig and explicit store
-directories. The TERN site-name wrappers and CLI live in
-orchestration/build_runner.py.
+Takes an already-loaded SiteQCConfig and explicit store directories.
 """
 
 import logging

@@ -15,23 +15,15 @@ import xarray as xr
 from fluxcore.services.data import qc_service
 from fluxcore.services.metadata.core.qc_config_schema import SiteQCConfig
 
-# Matches PyFluxPro's own codes exactly (grepped from pfp_ck.py/pfp_io.py, not
-# from memory), so {var}_QCFlag is directly comparable against real PyFluxPro
-# output for benchmarking. 0 = OK. Combination is PyFluxPro's own scheme too:
-# each check unconditionally overwrites the code wherever it fires, applied in
-# PyFluxPro's own execution order (range_check -> flag_check ->
-# exclude_dates -> mad_filter, dependency_check as a separate later pass) -- the *last* check to
-# fire wins, not a sum. A missing value's comparisons never evaluate true (NaN < lower is
-# False, same as PyFluxPro's masked-array behaviour), so "missing" survives
-# being run through the other checks with no special-casing needed.
-#
-# An OR'd bitmask (missing=1, range_check=2, exclude_dates=4, mad_filter=8,
-# dependency_check=16) was built and considered here instead -- a genuine
-# improvement over PyFluxPro's own lossy overwrite (see pfp_ck.do_rangecheck's
-# unconditional Flag[idx] = code, which silently drops an earlier cause) since
-# it preserves every cause a record failed rather than just the last. Shelved
-# in favour of benchmark comparability, not lost: see git commits dafe90a and
-# 95606ee if multi-cause tracking becomes more valuable than that comparability.
+# PyFluxPro's own codes (from pfp_ck.py/pfp_io.py), so {var}_QCFlag is directly
+# comparable with real PyFluxPro output for benchmarking. 0 = OK. Combination
+# is PyFluxPro's scheme too: each check overwrites the code wherever it fires,
+# in PyFluxPro's execution order (range_check -> flag_check -> exclude_dates ->
+# mad_filter, then dependency_check), so the *last* check to fire wins. A
+# missing value's comparisons are never true (NaN < lower is False, as with
+# PyFluxPro's masked arrays), so "missing" survives the other checks with no
+# special-casing. An OR'd bitmask would keep every cause rather than the last,
+# but would lose that comparability.
 QC_FLAG_CODES = {
     "missing": 1,
     "range_check": 2,
@@ -56,17 +48,12 @@ def apply_qc(
     configured variable is resolved directly from isnull() rather than an
     ordered flag.
 
-    qc_config is expected to already be fully resolved (site config merged
-    with configs/qc/_range_defaults.yml and _dependency_defaults.yml via
-    qc_config_schema.resolve_qc_config) before it reaches this function —
-    apply_qc itself no longer knows about defaults or does any fallback
-    lookup. This used to be a separate two-pass design (a loop over
-    explicitly-configured variables, then a second fallback pass applying
-    range_defaults to anything left unconfigured) — collapsed into a single
-    pass once defaults needed to participate in dependency_check resolution
-    too (a Diag_SONIC default range_check has to be visible to any
-    dependency_check that names it, which only happens via
-    dependency_graph_order()/resolved_bad below, not a separate later pass).
+    qc_config must already be fully resolved (site config merged with
+    configs/qc/_range_defaults.yml and _dependency_defaults.yml via
+    qc_config_schema.resolve_qc_config); apply_qc knows nothing about
+    defaults. Defaults therefore take part in dependency resolution like any
+    other entry: a default range_check on Diag_SONIC is visible to every
+    dependency_check that names it.
     """
     ds = ds.copy()
     resolved_bad: dict[str, pd.Series] = {}

@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
-"""Export step: convert an L2 xarray Dataset into annual NetCDF files.
+"""Export step: write a site's L2 Zarr store out as annual NetCDF files.
 
-L2's Zarr store (orchestration/build_L2_zarr.py) is already QC-flagged/
-masked and fully attributed (inherited unchanged from L1, whose own build
-already ran filter_variable_attrs), so this only slices by year, re-derives
-the year-scoped title/record-count/time-coverage attrs, and writes NetCDF —
-reusing build_L1_nc.py's already-generic Zarr-sourced helpers directly rather
-than duplicating them.
-
-Not wired into tasks/build_tasks.py -- built for manual benchmarking against
-real PyFluxPro L2 NetCDF output (the L2 Zarr store itself is rebuilt
-nightly by the rebuild_L2_zarr task). The TERN site-name wrapper and CLI
-live in orchestration/build_runner.py.
+The L2 store is already QC-flagged, masked and attributed, so this is the
+same per-year export as L1's (build_L1_nc.export_store).
 """
 
 import pathlib

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Assemble SiteRuntimeConfig from a structurally-validated SiteConfig.
 
-Generic EC core: name syntax, quantity/units checks, and object assembly
-only. No TERN-specific resolution (instrument vocab/RDF lookups) happens
-here — `instrument_uris` is an optional adapter-supplied enrichment map;
-when omitted, every variable's `instrument_uri` resolves to None.
+Name syntax, quantity/units checks, and object assembly only; no external
+lookups. Two inputs are optional, adapter-supplied data: `instrument_uris`
+(instrument name -> URI; omitted, every `instrument_uri` is None) and
+`input_data_path` (where the site's raw files live; required later by
+file_group_builder.build_file_groups).
 
 Two entry points:
-    - build_runtime_config_from_file(file_path): raw YAML in, no TERN
-      dependency at all.
-    - build_runtime_config(validated_config, instrument_uris=None): an
-      already-validated SiteConfig in (e.g. produced/enriched by a TERN
-      adapter such as services/metadata/runtime_config_loader.py), plus an
-      optional name -> URI enrichment map.
+    - build_runtime_config_from_file(file_path, input_data_path=None): raw
+      site-config YAML in.
+    - build_runtime_config(validated_config, instrument_uris=None,
+      input_data_path=None): an already-validated (possibly adapter-enriched)
+      SiteConfig in.
 """
 
 from dataclasses import dataclass
@@ -130,7 +130,8 @@ def _resolve_instrument_uri(
     """Resolve instrument name(s) to enrichment URI(s); None if unresolved.
 
     Pure lookup against an already-resolved map — this function makes no
-    external calls itself. Producing the map (e.g. via TERN's RDF vocab) is
+    external calls itself. Producing the map (e.g. from a network's
+    instrument vocabulary) is
     the caller's responsibility; an empty/omitted map simply leaves every
     instrument_uri as None.
 
@@ -151,10 +152,10 @@ def build_runtime_config(
     """Build a SiteRuntimeConfig from a structurally-validated SiteConfig.
 
     Performs name-syntax, quantity-existence, and units checks as part of
-    assembly, raising on the first failure found. No TERN/instrument-vocab
-    calls are made here — `instrument_uris` is optional, adapter-supplied
-    enrichment; instruments referenced in `validated_config` but absent
-    from the map simply resolve to instrument_uri=None. Likewise,
+    assembly, raising on the first failure found. No external lookups are
+    made here — `instrument_uris` is optional, adapter-supplied enrichment;
+    instruments referenced in `validated_config` but absent from the map
+    simply resolve to instrument_uri=None. Likewise,
     `input_data_path` is optional adapter-supplied data (where this site's
     raw files live); left None, callers requiring it (e.g.
     file_group_builder.build_file_groups) will raise.
@@ -267,17 +268,13 @@ def build_runtime_config_from_file(
 ) -> SiteRuntimeConfig:
     """Assemble a SiteRuntimeConfig from a site YAML file.
 
-    Generic-core entry point: structural validation plus assembly only, no
-    TERN vocab/registry calls of any kind — every variable's instrument_uri
-    resolves to None. For TERN's instrument-validated/URI-enriched
-    equivalent, see the TERN-EP pipeline's
-    services.metadata.runtime_config_loader.load_runtime_config.
+    Structural validation plus assembly only, with no enrichment: every
+    variable's instrument_uri is None. An adapter that validates instruments
+    or resolves URIs builds its own SiteConfig and calls build_runtime_config.
 
-    `input_data_path` is optional, caller-supplied data (where this site's
-    raw files live) — left None, callers requiring it (e.g.
-    file_group_builder.build_file_groups) will raise. A non-TERN caller who
-    wants a fully runnable config from a single call passes their own path
-    here directly.
+    `input_data_path` is where this site's raw files live; pass it to get a
+    runnable config in one call. Left None, callers requiring it (e.g.
+    file_group_builder.build_file_groups) will raise.
 
     Args:
         file_path: absolute path to the site config YAML.

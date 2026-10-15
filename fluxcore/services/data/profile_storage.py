@@ -2,10 +2,10 @@
 """Site-agnostic CO2 storage-term (Sco2) calculation.
 
 Operates on a `(time, height)` xarray Dataset with `CO2` (umol/mol), `Tair`
-(degC) and `P` (kPa) data variables — the contract that site-specific
-normalizers in `profile_loader.py` must produce. Layer boundaries and depths
-are derived from the `height` coordinate, so this generalises to any number
-of intake heights without per-site changes.
+(degC) and `P` (kPa) data variables — the contract a caller's site-specific
+profile loaders must produce. Layer boundaries and depths are derived from
+the `height` coordinate, so this generalises to any number of intake heights
+without per-site changes.
 """
 
 import numpy as np

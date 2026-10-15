@@ -57,9 +57,9 @@ class CanonicalQuantityMetadata:
 class VariableDefinition:
     """Complete definition of one canonical variable.
 
-    Assembled from its raw inputs, canonical quantity metadata, and parsed
-    name — the unit that `services/metadata/core/variable_registry.py` builds
-    per raw-to-canonical mapping.
+    Assembled by runtime_config_builder from its raw inputs, canonical
+    quantity metadata, and parsed name. variable_registry then flattens each
+    of its raw inputs into a VariableSpec.
     """
 
     # Core identity

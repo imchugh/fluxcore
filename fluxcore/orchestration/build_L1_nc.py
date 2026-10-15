@@ -2,26 +2,15 @@
 """Export step: write a site's L1 Zarr store out as annual NetCDF files.
 
 NetCDF is export-only: build_from_zarr() reads the already-processed L1 Zarr
-store (orchestration/build_L1_zarr.py), never raw data, splits it by calendar
-year and writes one file per year. To export a site that has no store yet,
-build the store first with build_L1_zarr.build().
+store (build_L1_zarr), never raw data, splits it by calendar year and writes
+one file per year. To export a site that has no store yet, build the store
+first with build_L1_zarr.build(). export_store() is the level-agnostic
+exporter that build_L2_nc uses too.
 
-The dataset-finishing helpers defined here (spatial dims, QC flags, attr
-filtering and serialization) are also used by build_L1_zarr when it writes
-the store.
-
-slice_year_from_store, decode_instrument_history,
-assign_global_attrs, and get_ds_years are also reused by
-orchestration/build_L2_nc.py -- their content is generic to any
-Zarr-sourced, already-processed dataset, not specific to L1, despite the
-naming.
-
-Generic core: takes a SiteContext and explicit directories, never a bare
-site name to resolve. Every file gets the network-agnostic global attributes
-in configs/nc_global_attrs.yml; network-specific ones (e.g. TERN's
-configs/nc_metadata.yml) are passed in as `global_attrs` by the caller
-and override them per key. The TERN site-name wrappers live in
-orchestration/build_runner.py.
+Every file gets the network-agnostic global attributes in
+configs/nc_global_attrs.yml, overlaid per key by a caller's `global_attrs`
+(see dataset_finishing.assign_global_attrs). Directories are arguments;
+site_name is used only for file naming.
 """
 
 import datetime

@@ -86,7 +86,7 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
         ValueError: if runtime_cfg.input_data_path is None — this function
             needs to know where the site's raw files live, but has no
             opinion of its own about where that is; the caller (typically
-            a TERN-adapter loader) must have resolved and set it.
+            a network adapter) must have resolved and set it.
     """
     if runtime_cfg.input_data_path is None:
         raise ValueError(

@@ -74,8 +74,8 @@ def assign_global_attrs(
 
     The core's network-agnostic attrs (NC_GLOBAL_ATTRS, from
     configs/nc_global_attrs.yml) are always applied. global_attrs is a
-    network's own global attribute template (e.g. TERN's
-    configs/nc_metadata.yml), overriding the core attrs per key. Any
+    network's own global attribute template, overriding the core attrs per
+    key. Any
     string value containing SITE_PLACEHOLDER has it replaced with the
     dataset's site_name. processing_level is set by the level's own builder
     and always overrides any value from either source.

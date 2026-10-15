@@ -3,12 +3,8 @@
 
 Public API
 ----------
-build_dataset_from_context(ctx, derive_humidity, derive_co2, start_date) -> xr.Dataset
-
-See also the TERN-EP pipeline's
-`orchestration.site_runner.build_dataset_from_site_name` for
-the TERN-adapter convenience wrapper that resolves a bare site name to a
-context before delegating here.
+build_dataset_from_context(ctx, derive_humidity, derive_co2, start_date)
+    -> xr.Dataset
 """
 
 import datetime

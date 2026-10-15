@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """Pydantic schema, loading, and validation for per-site L2 QC YAML configs.
 
-Unlike site_config_schema.py, this module also assembles the frozen contract
-object itself (SiteQCConfig) rather than handing off to a separate TERN-adapter
-loader: QC config content (canonical variable names + numeric thresholds) needs
-no TERN-specific resolution, so the whole load path stays in tier 1 (generic
-core) — see CLAUDE.md's "Generic-core / TERN-adapter / ops boundary".
+Unlike site_config_schema.py, this module also assembles the contract object
+(SiteQCConfig): QC config content (canonical variable names and numeric
+thresholds) needs no network-specific resolution.
 
 Where a site's own QC config file lives is the caller's concern
-(load_qc_config takes the directory explicitly; TERN's is resolved by
-services/metadata/qc_config_loader.py). The shared, site-independent
+(load_qc_config takes the directory explicitly). The shared, site-independent
 defaults tables (configs/qc/_range_defaults.yml, _dependency_defaults.yml)
 ship with the code: they change with it and apply to every site.
 """
@@ -320,10 +317,9 @@ def resolve_default_range(
     own range entry must not apply), the quantity has no entry, or the entry
     is a dict with no matching qualifier or statistic key.
 
-    Public: used by lookup_default_range and, in the TERN-EP pipeline,
-    orchestration.legacy_rtmc_export
-    and the site monitors (services.network.data_monitor,
-    orchestration.legacy_network_status).
+    Public, and Dataset-free, so callers can look up a default range for a
+    variable that isn't in a Dataset (lookup_default_range wraps it for one
+    that is).
     """
     try:
         parsed = parse_variable_name(var_name)

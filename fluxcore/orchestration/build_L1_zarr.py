@@ -1,27 +1,17 @@
 #!/usr/bin/env python3
-"""Export an L1 xarray Dataset to a single whole-history Zarr store per site.
+"""Build and incrementally update a site's whole-history L1 Zarr store.
 
-Wired into the production task registry as construct_L1_zarr (30-min
-incremental) and rebuild_L1_zarr (nightly full-rebuild reconciliation) —
-see tasks/build_tasks.py. construct_L1_nc (build_L1_nc.build_from_zarr)
-now reads its NetCDF output from this store instead of rebuilding from raw
-data. Mirrors build_L1_nc.py's structure and reuses its dataset-preparation
-functions where they aren't year-scoped, writing one Zarr store per site
-(covering all data years) instead of one NetCDF file per calendar year.
+One store per site, covering every data year. `build()` is a full rebuild
+from all raw data (to seed a store, or reconcile it periodically);
+`update()` is the cheap incremental path: it reads the store's last
+timestamp as a checkpoint, then loads and appends only newer records.
 
-`build()` does a full rebuild from all raw data (used to seed a new store,
-and for the periodic full-rebuild reconciliation pass). `update()` is the
-cheap 30-minute-cadence path: reads the store's last timestamp as a
-checkpoint, loads and appends only newer records.
+`instrument_history` is stored in full structured form (JSON-safe, see
+dataset_finishing.encode_instrument_history), not flattened and clipped to a
+year as in NetCDF; the NetCDF exporter decodes it and does the clipping.
 
-Unlike build_L1_nc.py's NetCDF path, `instrument_history` is stored here
-in full structured form (JSON-safe: timestamps as ISO strings), not
-flattened to a year-clipped string — Zarr attrs are JSON-native, so this
-survives the round trip natively. NetCDF export re-hydrates it and
-reproduces the year clipping itself; see `encode_instrument_history`.
-
-Generic core: takes a SiteContext and an explicit output directory. The TERN
-site-name wrappers and CLI live in orchestration/build_runner.py.
+Takes a SiteContext and an explicit output directory, never a site name to
+resolve.
 """
 
 import logging

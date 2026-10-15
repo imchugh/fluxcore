@@ -3,16 +3,12 @@
 
 Public API
 ----------
-build_dataframe_from_context(ctx, quantities, n_samples, start_date)
+build_dataframe_from_context(ctx, quantities, start_date) -> pd.DataFrame
+build_dataframe_and_specs(ctx, quantities, start_date)
+    -> (pd.DataFrame, dict[str, VariableSpec])
+build_dataframe(file_groups, specs_by_alias, n_samples, start_date,
+                flux_file, time_step, quantities)
     -> pd.DataFrame
-build_dataframe(file_groups, specs_by_alias, quantities, n_samples, start_date,
-                flux_file, time_step)
-    -> pd.DataFrame
-
-See also the TERN-EP pipeline's
-`orchestration.site_runner.build_dataframe_from_site_name`
-for the TERN-adapter convenience wrapper that resolves a bare site name to
-a context before delegating here.
 """
 
 from collections.abc import Callable

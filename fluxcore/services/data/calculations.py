@@ -84,14 +84,12 @@ def calculate_vpd(Ta: ArrayLike, RH: ArrayLike) -> ArrayLike:
 def calculate_net_radiation(
     Fsd: ArrayLike, Fsu: ArrayLike, Fld: ArrayLike, Flu: ArrayLike
 ) -> ArrayLike:
-    """Net radiation (W/m^2) from the four downwelling/upwelling shortwave/longwave components.
+    """Net radiation (W/m^2) from the four shortwave/longwave components.
 
-    Always used in preference to any raw on-logger Fn: a network-wide audit
-    (2026-09-29) found a site's own logger-computed Fn is either exactly this
-    sum (same instrument, redundant) or a genuinely different secondary
-    "NR Lite"-family net radiometer that disagrees by hundreds of W/m^2 --
-    deliberately no longer imported (see orchestration/derived_quantities.py's
-    add_net_radiation).
+    Always used in preference to a logger-computed Fn, which is either
+    exactly this sum (same instrument, redundant) or comes from a different,
+    secondary net radiometer (e.g. "NR Lite"-family) that can disagree by
+    hundreds of W/m^2. See derived_quantities.add_net_radiation.
     """
     return Fsd - Fsu + Fld - Flu
 
@@ -108,8 +106,8 @@ def calculate_dew_point(Ta: ArrayLike, RH: ArrayLike) -> ArrayLike:
 
     Inverts the Buck (1981) form es = 0.61121 exp(17.502 T / (240.97 + T)),
     which reproduces calculate_es (Buck 1996) to within 0.01 K over -10 to
-    40 degC, so the dew point equals air temperature at RH = 100. (It was
-    previously paired with Bolton's 243.5, which overshot by up to 0.4 K.)
+    40 degC, so the dew point equals air temperature at RH = 100. (Pairing
+    it with Bolton's constant 243.5 instead overshoots by up to 0.4 K.)
     """
     e = calculate_e(Ta=Ta, RH=RH)
     ln_ratio = np.log(e / 0.61121)
