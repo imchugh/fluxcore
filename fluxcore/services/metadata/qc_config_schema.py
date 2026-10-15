@@ -19,9 +19,9 @@ from pathlib import Path
 import xarray as xr
 from pydantic import BaseModel, ConfigDict, RootModel, field_validator, model_validator
 
+from fluxcore.domain.constants import CONFIG_PATH
 from fluxcore.domain.enums import StatisticType, VariableType
 from fluxcore.infrastructure.file_io import read_yml
-from fluxcore.services import config_loader
 from fluxcore.services.data import qc_service
 from fluxcore.services.data.calculations import standard_pressure_kpa
 from fluxcore.services.metadata.variable_name_parser import (
@@ -29,7 +29,7 @@ from fluxcore.services.metadata.variable_name_parser import (
     parse_variable_name,
 )
 
-QC_DEFAULTS_DIR = config_loader.CONFIG_PATH / "qc"
+QC_DEFAULTS_DIR = CONFIG_PATH / "qc"
 
 
 class RangeCheckSpec(BaseModel):

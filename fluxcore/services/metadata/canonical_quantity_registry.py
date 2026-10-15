@@ -7,8 +7,9 @@ from functools import cache
 from pydantic.dataclasses import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
+from fluxcore.domain.constants import CONFIG_PATH
 from fluxcore.domain.enums import StatisticType, VariableType
-from fluxcore.services import config_loader
+from fluxcore.infrastructure.file_io import read_yml
 
 _VARIANCE_UNIT_MAP: dict[str, str] = {
     "g^2/m^6": "g/m^3",
@@ -152,7 +153,7 @@ def build_canonical_quantity_registry() -> CanonicalQuantityRegistry:
     subsequent call. In tests that need an isolated instance, call
     ``build_canonical_quantity_registry.cache_clear()`` in teardown.
     """
-    raw = config_loader.load_config("canonical_quantities")
+    raw = read_yml(file_path=CONFIG_PATH / "canonical_quantities.yml")
     return CanonicalQuantityRegistry(
         quantity_definitions={
             quantity: CanonicalQuantityMetadata(**quantity_dict)

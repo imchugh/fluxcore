@@ -13,11 +13,11 @@ import datetime
 import numpy as np
 import pandas as pd
 
-from fluxcore.domain.constants import DATA_TIME_FORMAT, SITE_PLACEHOLDER
-from fluxcore.services import config_loader
+from fluxcore.domain.constants import CONFIG_PATH, DATA_TIME_FORMAT, SITE_PLACEHOLDER
+from fluxcore.infrastructure.file_io import read_yml
 
-NC_DIM_ATTRS = config_loader.load_config("nc_dim_attrs")
-NC_GLOBAL_ATTRS = config_loader.load_config("nc_global_attrs")
+NC_DIM_ATTRS = read_yml(file_path=CONFIG_PATH / "nc_dim_attrs.yml")
+NC_GLOBAL_ATTRS = read_yml(file_path=CONFIG_PATH / "nc_global_attrs.yml")
 VARIABLE_NC_ATTRS = {
     "units",
     "long_name",

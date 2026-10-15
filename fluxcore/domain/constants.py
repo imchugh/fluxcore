@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Physical, temporal, and formatting constants shared across the pipeline."""
 
+from pathlib import Path
+
+# fluxcore's packaged configs, located relative to this installed module so it
+# resolves wherever fluxcore is installed (shipped via pyproject package-data).
+CONFIG_PATH = Path(__file__).parents[1] / "configs"
+
 # Domain constants
 SITE_PLACEHOLDER = "<site>"
 TIME_INDEX_NAME = "time"
