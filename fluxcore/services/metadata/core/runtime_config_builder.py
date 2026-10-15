@@ -141,6 +141,31 @@ def _check_name_config_consistency(
             )
 
 
+def _check_no_repeated_instrument_era(
+    variable: str, instruments: list[str | dict[str, str]]
+) -> None:
+    """Raise if an instrument returns after a changeover (e.g. A -> B -> A).
+
+    Instrument history is keyed by instrument name, so a repeated era would
+    silently overwrite the earlier one. Inputs that all share one instrument
+    carry no history and are fine.
+    """
+    if isinstance(instruments[0], dict):
+        sequences = {
+            alias: [inst[alias] for inst in instruments] for alias in instruments[0]
+        }
+    else:
+        sequences = {"instrument": instruments}
+
+    for role, sequence in sequences.items():
+        if 1 < len(set(sequence)) < len(sequence):
+            raise ValueError(
+                f"Variable '{variable}': {role} returns to an earlier instrument "
+                f"({' -> '.join(sequence)}); instrument history cannot represent "
+                "a repeated era"
+            )
+
+
 def _resolve_instrument_uri(
     instrument: str | dict[str, str],
     instrument_uris: dict[str, str | None],
@@ -237,6 +262,10 @@ def build_runtime_config(
                         f"'{quantity}'. Expected one of: "
                         f"{quantity_canonical_metadata.valid_input_units}"
                     )
+
+        _check_no_repeated_instrument_era(
+            variable, [cfg.instrument for cfg in raw_cfg.input_variables.values()]
+        )
 
         # Assemble per-input metadata
         raw_inputs = tuple(
