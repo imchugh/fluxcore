@@ -37,7 +37,6 @@ import pandas as pd
 import xarray as xr
 from pydantic import BaseModel
 
-from fluxcore.domain.constants import PROCESSING_CONSTANTS
 from fluxcore.infrastructure import file_io
 
 
@@ -74,14 +73,9 @@ def hash_config(*configs: object) -> str:
     Pass every piece that feeds processing (e.g. a site's own QC overrides
     plus the shared defaults tables) as separate positional args; argument
     order is part of the hash, so a caller must pass them in the same order
-    every time. The physical constants (constants.PROCESSING_CONSTANTS) are
-    always included, so a change to one also invalidates every store.
+    every time.
     """
-    blob = json.dumps(
-        [PROCESSING_CONSTANTS, *(_to_jsonable(c) for c in configs)],
-        sort_keys=True,
-        default=str,
-    )
+    blob = json.dumps([_to_jsonable(c) for c in configs], sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()
 
 

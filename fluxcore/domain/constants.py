@@ -16,14 +16,3 @@ H2O_MOL_MASS = 18.02
 ZERO_C_IN_K = 273.15
 # Molar gas constant (J/mol/K): exact since the 2019 SI redefinition (CODATA).
 R = 8.314462618
-
-# Every numerical constant that feeds processing. Hashed into each Zarr
-# store's config_hash, so changing one forces a rebuild rather than
-# appending records computed with the new value onto history computed with
-# the old. Add any new processing constant here too.
-PROCESSING_CONSTANTS = {
-    "CO2_MOL_MASS": CO2_MOL_MASS,
-    "H2O_MOL_MASS": H2O_MOL_MASS,
-    "ZERO_C_IN_K": ZERO_C_IN_K,
-    "R": R,
-}
