@@ -6,9 +6,7 @@ masked and fully attributed (inherited unchanged from L1, whose own build
 already ran filter_variable_attrs), so this only slices by year, re-derives
 the year-scoped title/record-count/time-coverage attrs, and writes NetCDF —
 reusing build_L1_nc.py's already-generic Zarr-sourced helpers directly rather
-than duplicating them. Unlike L1, there is no from-scratch raw-data build
-path here: L2 is always QC-derived from L1's Zarr store, never rebuilt
-directly from raw data, so this module has one entry point, not a pair.
+than duplicating them.
 
 Not wired into tasks/build_tasks.py -- built for manual benchmarking against
 real PyFluxPro L2 NetCDF output (the L2 Zarr store itself is rebuilt

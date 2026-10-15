@@ -280,6 +280,27 @@ class SiteConfig(BaseModel):
 
         return self
 
+    @model_validator(mode="after")
+    def enforce_file_formats_complete(self):
+        """Require file_formats to list exactly the files the variables use."""
+        used = {
+            input_cfg.file
+            for var_cfg in self.variables.values()
+            for input_cfg in var_cfg.input_variables.values()
+        }
+        declared = set(self.file_formats)
+        if used - declared:
+            raise ValueError(
+                "Input variables use files not declared in file_formats: "
+                f"{sorted(used - declared)}"
+            )
+        if declared - used:
+            raise ValueError(
+                "file_formats declares files no input variable uses: "
+                f"{sorted(declared - used)}"
+            )
+        return self
+
     # Canonical EC flux quantities: the sole source for the site's flux-system
     # sonic/irga instrument identity (see enforce_compound_instrument_consistency).
     flux_quantities: ClassVar[set[str]] = {"Fco2", "Fh", "Fe"}
@@ -327,15 +348,6 @@ class SiteConfig(BaseModel):
             )
 
         return self
-
-
-def validate_variable(config_data: dict, key: str) -> tuple[bool, list]:
-    """External variable validator, e.g. for testing UI-entered config validity."""
-    try:
-        VariableConfig(**config_data["variables"][key])
-        return True, []
-    except ValidationError as e:
-        return False, e.errors()
 
 
 def validate_all(config_data: dict) -> tuple[bool, list]:

@@ -192,10 +192,3 @@ class SiteMetadata(dict):
         """Return a short repr showing the site name, or 'unknown' if absent."""
         label = self.get("site_name", "unknown")
         return f"<SiteMetadata {label}>"
-
-    def to_yaml_dict(self):
-        """Return a plain dict with datetime values ISO-formatted, ready for YAML."""
-        return {
-            k: (v.isoformat() if isinstance(v, datetime) else v)
-            for k, v in self.items()
-        }

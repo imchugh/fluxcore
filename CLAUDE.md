@@ -16,6 +16,17 @@ network-specific input arrives as a contract object or argument built by
 an adapter. `tests/test_self_contained.py` enforces that every first-party
 import stays inside `fluxcore`.
 
+**Scope rule: fluxcore is a processing core, not a toolbox.** Its public
+surface is the entry points and contract objects below, plus introspection of
+its own domain (canonical quantities, name parser, range defaults, QC config
+resolution, raw-file reading). It only ever *reads* raw files. Writing or
+splicing raw files and general-purpose helpers (JSON/YAML writers, file
+finders, local-time helpers, gap diagnostics) live outside it — currently in
+the TERN pipeline's `fluxtools/` package, which depends on fluxcore and not
+the reverse. Don't add a public helper without a caller in fluxcore or a
+contract need; `services/config_loader.py` loads only fluxcore's own
+packaged configs.
+
 ## Development
 
 - Python 3.12; dependencies in `pyproject.toml`. On the TERN VM it is
@@ -28,7 +39,7 @@ import stays inside `fluxcore`.
 
 ```
 fluxcore/domain/          enums, constants, Pydantic data models (no I/O)
-fluxcore/infrastructure/  file I/O, data conditioning/diagnostics, datetime utils
+fluxcore/infrastructure/  file I/O, data conditioning, sun-position/timezone utils
 fluxcore/services/        config_loader; data/ (loaders, conversions, calculations,
                           QC checks, storage term); metadata/core/ (schemas,
                           config assembly, registries)
@@ -42,7 +53,7 @@ fluxcore/configs/         package data: canonical_quantities, nc_dim_attrs,
 
 - **Function 1 — live objects in** (what adapters use): `build_dataset_from_context(ctx)`,
   `build_L1_zarr.build/update(ctx, output_dir, global_attrs=None)`,
-  `build_L1_nc.build/build_from_zarr(...)`, `build_L2_zarr.build/update(qc_config, output_dir, l1_dir)`,
+  `build_L1_nc.build_from_zarr(...)`, `build_L2_zarr.build/update(qc_config, output_dir, l1_dir)`,
   `build_L2_nc.build_from_zarr(...)`. Contract objects: `SiteContext`
   (`SiteRuntimeConfig` + `SiteMetadata`), `SiteQCConfig`, `VariableSpec`,
   `FileGroup`, `CanonicalQuantityMetadata` — all in `fluxcore/services/metadata/core/`.
@@ -75,7 +86,7 @@ fluxcore/configs/         package data: canonical_quantities, nc_dim_attrs,
 | `fluxcore/orchestration/derived_quantities.py` | Derives missing RH↔AH and CO2 mole fraction; maintains metadata lineage. Also always (re)computes `Fn` (net radiation) from `Fsd`/`Fsu`/`Fld`/`Flu` — unlike the RH/CO2 gap-fills, no site imports a raw `Fn` (retired 2026-09-29: it was either redundant with this same sum or a disagreeing secondary "NR Lite"-family instrument deliberately dropped). |
 | `fluxcore/orchestration/build_L1_zarr.py` | **Generic core**: `build(ctx, output_dir, year=None, global_attrs=None)` / `update(ctx, output_dir, global_attrs=None)` — takes a `SiteContext` and an explicit directory, never a site name to resolve (TERN wrappers: `fluxcore/orchestration/build_runner.py`). Writes a per-site whole-history Zarr store (one store per site, no year-splitting) — the canonical L1 intermediate `build_L1_nc.py`'s operational path reads from. `update()` is the 30-min-cadence path (`construct_L1_zarr` task): delegates to `orchestration.incremental_zarr.incremental_update` for the checkpoint/tail-append/fallback envelope, supplying a `produce_tail` callback (raw-data reload from the checkpoint) and a `full_rebuild` callback (`build()`). `build()` is a full rebuild from all raw data — used to seed a new store and by the nightly `rebuild_L1_zarr` reconciliation task; it also stamps the store with a hash of the site's assembled `SiteRuntimeConfig`, which `update()` checks every cycle to force a rebuild on config drift (see `incremental_zarr`). `instrument_history` is stored in full structured form (not flattened/year-clipped like NetCDF's) since Zarr attrs are JSON-native; `build_L1_nc.build_from_zarr()` rehydrates it and reproduces the year-clipping itself. |
 | `fluxcore/orchestration/incremental_zarr.py` | **Generic core.** Shared checkpoint/tail-append/fallback envelope used by both `build_L1_zarr.update()` and `build_L2_zarr.update()` — `incremental_update(store_path, config_hash, produce_tail, full_rebuild, logger, label)`: store missing or `config_hash` mismatch → `full_rebuild()`; else read the checkpoint, call `produce_tail(checkpoint)`, append if non-empty; any exception → `full_rebuild()`. All level-specific logic (raw-data reload, QC + MAD lookback window, tail-attrs refresh) lives in each caller's `produce_tail`/`full_rebuild` closures, not here. `hash_config(*configs)` hashes the assembled config object(s) that drive processing (dataclasses — stdlib or pydantic —, pydantic models, dicts/enums/paths/datetimes), not raw YAML text, so cosmetic edits don't force a rebuild. Implemented 2026-10-01, closing the config-change-rebuild gap described below. |
-| `fluxcore/orchestration/build_L1_nc.py` | **Generic core.** Export step (export-only — see "NetCDF export"): converts L1 xarray Dataset to annual NetCDF files. `build(ctx, output_dir, ...)` / `build_from_zarr(site_name, zarr_dir, output_dir, ...)` — directories required; `site_name` is used only for leaf file naming. Network global attributes are a `global_attrs` dict argument (TERN passes `configs/nc_metadata.yml`; `<site>` placeholders in string values are substituted); only the generic CF `nc_dim_attrs.yml` is loaded here. Adds spatial dims, QC flags, global/variable metadata. Separate from dataset construction by design. `build_from_zarr()` (operational path, used by `construct_L1_nc`) reads an already-processed site from its Zarr store (`fluxcore/orchestration/build_L1_zarr.py`) instead of rebuilding from raw data; `build()` (raw-data, from scratch) is kept for manual/legacy/bootstrap use. |
+| `fluxcore/orchestration/build_L1_nc.py` | **Generic core.** Export step (export-only — see "NetCDF export"): writes a site's L1 Zarr store out as annual NetCDF files. `build_from_zarr(site_name, zarr_dir, output_dir, ...)` — directories required; `site_name` is used only for leaf file naming. Network global attributes are a `global_attrs` dict argument (TERN passes `configs/nc_metadata.yml`; `<site>` placeholders in string values are substituted); only the generic CF `nc_dim_attrs.yml` is loaded here. Adds spatial dims, QC flags, global/variable metadata. Separate from dataset construction by design. Reads only the already-processed Zarr store (`fluxcore/orchestration/build_L1_zarr.py`), never raw data — there is no raw-to-NetCDF path; to export a site without a store, run `build_L1_zarr.build()` first. |
 | `fluxcore/services/metadata/core/qc_config_schema.py` | **Generic core** (moved from `fluxcore/services/metadata/` 2026-10-06). L2 QC config schema (`VariableQCSpec`: `range_check` / `exclude_dates` / `dependency_check` / `flag_check` / `mad_filter`), loaders (`load_qc_config`, `load_range_defaults`, `load_dependency_defaults`) and `resolve_qc_config`, which merges a site's config with the shared defaults field by field. `load_qc_config(site_name, config_dir)` takes the directory explicitly; the shared defaults load from `QC_DEFAULTS_DIR` (`configs/qc`, via `config_loader.CONFIG_PATH`). TERN's site-file location is resolved by `fluxcore/services/metadata/qc_config_loader.py::load_site_qc_config(site_name)`. |
 | `fluxcore/services/data/qc_service.py` | The L2 checks themselves: small pure functions returning a boolean "bad" mask, registered via `@register_check` (`get_check(name)`). `mad_filter` is directly callable on pandas Series. |
 | `fluxcore/orchestration/qc_pipeline.py` | `apply_qc(ds, qc_config)`: runs the resolved config over an xarray Dataset in dependency order, masks flagged values to NaN and writes `{var}_QCFlag` with PyFluxPro's codes. Knows nothing about defaults. |

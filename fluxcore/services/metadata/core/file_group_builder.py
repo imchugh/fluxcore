@@ -61,38 +61,17 @@ class FileGroup:
                 f"{sorted(missing)} not found in {[str(f) for f in self.all_files]}"
             )
 
-    def files_for_variable(self, variable: str) -> list[Path]:
-        """Return the list of files in which the variable was found."""
-        return [f for f, vars in self.variables_by_file.items() if variable in vars]
 
-
-def get_variables_from_file(
-    file_path: Path | str, system_type: str, incl_backups: bool = False
-):
-    """Get the variable names from the file header."""
-    # Set FileType
-    ftype = FileType[system_type]
-
-    # Sort out paths
+def get_variables_from_file(file_path: Path | str, system_type: str) -> list[str]:
+    """Return the sorted variable names from a raw file's header."""
     file_path = Path(file_path)
     if not file_path.exists():
         raise FileNotFoundError(f"File {file_path} does not exist!")
 
-    # Build iterable
-    file_list = [file_path]
-    if incl_backups:
-        file_list.extend(file_io.get_backup_files(file_path=file_path))
-
-    # Load adapter
-    header_adapter = raw_data_loader.get_header_adapter(system_type=ftype.name)
-
-    # Iterate over files
-    rslt = set()
-    for file in file_list:
-        rslt.update(header_adapter(file)["variable"])
-
-    # Return a list
-    return sorted(rslt)
+    header_adapter = raw_data_loader.get_header_adapter(
+        system_type=FileType[system_type].name
+    )
+    return sorted(set(header_adapter(file_path)["variable"]))
 
 
 def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:

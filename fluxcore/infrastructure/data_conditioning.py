@@ -93,16 +93,3 @@ def apply_linear_correction(
     index = series.index if isinstance(series, pd.Series) else None
     result = np.array(series, dtype=float) * slope + intercept
     return pd.Series(result, index=index) if index is not None else result
-
-
-def apply_range_limits(
-    series: ArrayLike, lower_limit: float = None, upper_limit: float = None
-) -> ArrayLike:
-    """Mask values outside [lower_limit, upper_limit] to NaN (bounds are optional)."""
-    index = series.index if isinstance(series, pd.Series) else None
-    result = np.array(series, dtype=float)
-    if lower_limit is not None:
-        result[result < lower_limit] = np.nan
-    if upper_limit is not None:
-        result[result > upper_limit] = np.nan
-    return pd.Series(result, index=index) if index is not None else result

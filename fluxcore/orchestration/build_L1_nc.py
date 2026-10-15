@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Export step: convert an L1 xarray Dataset into annual NetCDF files.
+"""Export step: write a site's L1 Zarr store out as annual NetCDF files.
 
-Adds spatial dims, QC flags, global/variable metadata, then splits by
-calendar year and writes one NetCDF file per year.
+NetCDF is export-only: build_from_zarr() reads the already-processed L1 Zarr
+store (orchestration/build_L1_zarr.py), never raw data, splits it by calendar
+year and writes one file per year. To export a site that has no store yet,
+build the store first with build_L1_zarr.build().
 
-build_from_zarr() is the operational path (construct_L1_nc): reads an
-already-processed site from its Zarr store (orchestration/build_L1_zarr.py)
-rather than rebuilding from raw data. build() (raw-data, from scratch) is
-kept for manual/legacy rebuilds, bootstrapping a site before its Zarr store
-exists, and diagnosing zarr/raw discrepancies.
+The dataset-finishing helpers defined here (spatial dims, QC flags, attr
+filtering and serialization) are also used by build_L1_zarr when it writes
+the store.
 
 build_L1_year_from_zarr, _rehydrate_instrument_history,
 assign_L1_global_generic_attrs, and get_ds_years are also reused by
@@ -33,12 +33,10 @@ import xarray as xr
 
 from fluxcore.domain.constants import DATA_TIME_FORMAT, NC_ENCODING, SITE_PLACEHOLDER
 from fluxcore.infrastructure import file_io
-from fluxcore.orchestration.dataset_builder import build_dataset_from_context
 from fluxcore.services import config_loader
-from fluxcore.services.metadata.core.site_metadata_builder import SiteContext
 
-NC_DIM_ATTRS = config_loader.load_config_file_from_name(name="nc_dim_attrs")
-NC_GLOBAL_ATTRS = config_loader.load_config_file_from_name(name="nc_global_attrs")
+NC_DIM_ATTRS = config_loader.load_config("nc_dim_attrs")
+NC_GLOBAL_ATTRS = config_loader.load_config("nc_global_attrs")
 
 VARIABLE_NC_ATTRS = {
     "units",
@@ -60,50 +58,6 @@ def get_ds_years(ds):
     return np.unique(ds.time.dt.year).tolist()
 
 
-def build(
-    ctx: SiteContext,
-    output_dir: pathlib.Path | str,
-    year: int | None = None,
-    global_attrs: dict | None = None,
-) -> list[pathlib.Path]:
-    """Build L1 NetCDF files for all data years at a site.
-
-    Constructs the base L1 dataset from the site context, augments it with
-    NetCDF global attributes and spatial dimensions, then writes one file
-    per data year to output_dir.
-
-    The dataset is truncated to the temporal extent of the flux file group,
-    so ancillary data (e.g. soil loggers) predating the flux system does not
-    produce empty output years.
-
-    Args:
-        ctx: the site's assembled runtime config and metadata.
-        output_dir: directory to write files into.
-        year: if provided, only build that calendar year and discard all
-            earlier records during data loading.
-        global_attrs: extra global attributes to stamp on every file (see
-            assign_L1_global_generic_attrs).
-
-    Returns:
-        List of paths to files written.
-    """
-    site_name = ctx.runtime_config.site_name
-    output_dir = pathlib.Path(output_dir)
-
-    start_date = pd.Timestamp(year, 1, 1) if year is not None else None
-    ds = build_dataset_from_context(ctx=ctx, start_date=start_date)
-    ds = build_L1_ds_complete(ds, global_attrs=global_attrs)
-
-    written = []
-    for ds_year in get_ds_years(ds):
-        year_ds = build_L1_ds_by_year(ds=ds, year=ds_year)
-        file_path = output_dir / f"{site_name}_{ds_year}_L1.nc"
-        file_io.write_netcdf(ds=year_ds, file_path=file_path, time_units=NC_ENCODING)
-        written.append(file_path)
-
-    return written
-
-
 def build_from_zarr(
     site_name: str,
     zarr_dir: pathlib.Path | str,
@@ -113,15 +67,9 @@ def build_from_zarr(
 ) -> list[pathlib.Path]:
     """Build L1 NetCDF files for a site by reading from its Zarr store.
 
-    Replaces build()'s raw-data rebuild for the operational cron path: the
-    store (kept current by construct_L1_zarr/rebuild_L1_zarr — see
-    orchestration/build_L1_zarr.py) is already unit-converted, merged,
-    QC-flagged, and attributed, so this only slices by year, re-derives the
-    year-scoped attrs, and writes NetCDF. See build() for the from-scratch
-    raw-data path (manual/legacy/bootstrap use, or diagnosing zarr/raw
-    discrepancies) — also the fallback if a site's Zarr store doesn't exist
-    yet; this function raises rather than silently falling back to it,
-    matching the fail-closed style already used for tasks.csv.
+    The store is already unit-converted, merged, QC-flagged and attributed,
+    so this only slices by year, re-derives the year-scoped attrs, and
+    writes NetCDF. Raises if the site's store doesn't exist yet.
 
     Args:
         site_name: the site's name, used only for store/file naming
@@ -157,15 +105,6 @@ def build_from_zarr(
     return written
 
 
-def build_L1_ds_complete(ds, global_attrs: dict | None = None):
-    """Apply spatial dims, CRS variable, and generic global attrs to the dataset."""
-    ds = do_dim_ops(ds=ds)
-    ds = assign_crs_variable(ds=ds)
-    ds = assign_L1_global_generic_attrs(ds=ds, global_attrs=global_attrs)
-
-    return ds
-
-
 def _year_time_bounds(ds, year) -> list[str]:
     """Calendar-year time_bounds for slicing ds, as DATA_TIME_FORMAT strings."""
     time_step = ds.attrs["time_step"]
@@ -178,38 +117,13 @@ def _year_time_bounds(ds, year) -> list[str]:
     ]
 
 
-def build_L1_ds_by_year(ds, year):
-    """Slice ds to one calendar year and apply the per-year attrs/serialization steps.
-
-    Args:
-        ds: xarray dataset already assembled for the full site history.
-        year: calendar year to slice out.
-
-    Returns:
-        Sliced, fully attributed and serialized single-year dataset.
-    """
-    year_ds = ds.sel(time=slice(*_year_time_bounds(ds, year)))
-    year_ds = assign_variable_flags(year_ds)
-    year_ds = assign_L1_data_year_attrs(ds=year_ds, year=year)
-    year_ds = filter_variable_attrs(ds=year_ds)
-    year_ds = serialize_uri(ds=year_ds)
-    year_ds = serialize_inst_history(ds=year_ds, year=year)
-    year_ds = serialize_units(ds=year_ds)
-    year_ds = file_io.serialize_dataset_attrs(ds=year_ds)
-
-    return year_ds
-
-
 def build_L1_year_from_zarr(ds, year):
     """Slice a Zarr-sourced (already-processed) dataset to one year.
 
-    Counterpart to build_L1_ds_by_year for data sourced from
-    build_from_zarr rather than freshly built from raw: skips the steps
-    already baked into the Zarr store (QC flags, attr filtering,
-    uri/units serialization) and only re-derives what's
-    genuinely year-scoped — title/record-count/time-coverage attrs and
-    instrument-history clipping — reusing the existing
-    assign_L1_data_year_attrs/serialize_inst_history unchanged.
+    Skips the steps already baked into the store (QC flags, attr filtering,
+    uri/units serialization) and only re-derives what's genuinely
+    year-scoped: title/record-count/time-coverage attrs and
+    instrument-history clipping.
 
     Args:
         ds: xarray dataset loaded from a site's Zarr store (already passed

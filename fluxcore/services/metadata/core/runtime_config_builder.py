@@ -16,7 +16,6 @@ Two entry points:
 """
 
 from dataclasses import dataclass
-from functools import cached_property
 from pathlib import Path
 
 from fluxcore.domain.data_models.metadata_classes import (
@@ -89,18 +88,6 @@ class SiteRuntimeConfig:
     def flux_filename(self) -> str:
         """Canonical flux filename."""
         return self.get_filename(self.flux_file)
-
-    @cached_property
-    def input_file_groups(self) -> tuple[str, ...]:
-        """Sorted, deduplicated file-group names referenced by any raw input."""
-        rslt = {
-            raw_var.file
-            for attrs in self.variables.values()
-            for raw_var in attrs.raw_inputs
-            if raw_var.file
-        }
-
-        return tuple(sorted(rslt))
 
 
 def _check_name_config_consistency(

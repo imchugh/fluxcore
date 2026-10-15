@@ -175,13 +175,11 @@ def build_L1_ds_complete(ds, global_attrs: dict | None = None):
 def build_L1_ds_full(ds):
     """Apply the flags/attrs/serialization pipeline over a whole-history dataset.
 
-    Adaptation of build_L1_nc.build_L1_ds_by_year for a single store spanning
-    every data year instead of one file per year: no time slicing, and the
-    two steps that clip to a calendar year (title/coverage attrs, instrument
-    history serialization) clip to the dataset's actual full time range
-    instead. Used by `build()`. See `build_L1_ds_tail` for the counterpart
-    used by `update()`, where the whole-history range must come from the
-    existing store rather than from `ds` itself.
+    Covers the whole store rather than one calendar year: no time slicing,
+    and title/coverage attrs span the dataset's full time range. Used by
+    `build()`. See `build_L1_ds_tail` for the counterpart used by `update()`,
+    where the whole-history range must come from the existing store rather
+    than from `ds` itself.
     """
     ds = assign_variable_flags(ds)
     ds = assign_L1_data_full_attrs(ds=ds)

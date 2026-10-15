@@ -6,11 +6,12 @@ anyway). The tests below treat `load_raw_data(...)` trimmed to
 `df.index >= start_date` as the golden reference and assert the fast path
 always produces the same result.
 
-Fixtures are built with the production TOA5/EddyPro writers
-(file_io.write_toa5_csv / write_eddypro_csv) so file content matches real
-quoting/formatting conventions rather than hand-crafted text.
+Fixtures are written with each format's quoting conventions (TOA5: quoted
+headers and timestamps, bare numbers, comma-separated; EddyPro: minimal
+quoting, tab-separated).
 """
 
+import csv
 import tempfile
 import unittest
 from pathlib import Path
@@ -47,10 +48,23 @@ def _toa5_frame(timestamps: list[pd.Timestamp]) -> pd.DataFrame:
     )
 
 
+def _write(path: Path, headers: list[list], data: pd.DataFrame, toa5: bool) -> None:
+    sep = "," if toa5 else "\t"
+    with open(path, "w", newline="\n") as f:
+        header_quoting = csv.QUOTE_ALL if toa5 else csv.QUOTE_MINIMAL
+        csv.writer(f, delimiter=sep, quoting=header_quoting).writerows(headers)
+        data.to_csv(
+            f,
+            header=False,
+            index=False,
+            sep=sep,
+            quoting=csv.QUOTE_NONNUMERIC if toa5 else csv.QUOTE_MINIMAL,
+            lineterminator="\n",
+        )
+
+
 def _write_toa5(path: Path, timestamps: list[pd.Timestamp]) -> None:
-    file_io.write_toa5_csv(
-        file_path=path, headers=TOA5_HEADERS, data=_toa5_frame(timestamps)
-    )
+    _write(path, TOA5_HEADERS, _toa5_frame(timestamps), toa5=True)
 
 
 def _eddypro_frame(timestamps: list[pd.Timestamp]) -> pd.DataFrame:
@@ -68,9 +82,7 @@ def _eddypro_frame(timestamps: list[pd.Timestamp]) -> pd.DataFrame:
 
 
 def _write_eddypro(path: Path, timestamps: list[pd.Timestamp]) -> None:
-    file_io.write_eddypro_csv(
-        file_path=path, headers=EDDYPRO_HEADERS, data=_eddypro_frame(timestamps)
-    )
+    _write(path, EDDYPRO_HEADERS, _eddypro_frame(timestamps), toa5=False)
 
 
 def _corrupt_lines(

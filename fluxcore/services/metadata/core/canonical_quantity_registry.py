@@ -136,7 +136,7 @@ def build_canonical_quantity_registry() -> CanonicalQuantityRegistry:
     subsequent call. In tests that need an isolated instance, call
     ``build_canonical_quantity_registry.cache_clear()`` in teardown.
     """
-    raw = config_loader.load_config_file_from_name("canonical_quantities")
+    raw = config_loader.load_config("canonical_quantities")
     return CanonicalQuantityRegistry(
         quantity_definitions={
             quantity: CanonicalQuantityMetadata(**quantity_dict)

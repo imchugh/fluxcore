@@ -57,6 +57,18 @@ class RuntimeConfigBuilderTestCase(unittest.TestCase):
         cfg = self._build(CHANGEOVER_YAML.format(third="Sensor C"))
         self.assertEqual(len(cfg.variables["Ta_Av"].raw_inputs), 3)
 
+    def test_input_file_missing_from_file_formats_is_rejected(self):
+        yaml_text = VALID_YAML.replace("file: flux", "file: met").replace(
+            "flux_file: flux", "flux_file: met"
+        )
+        with self.assertRaisesRegex(ValueError, r"not declared in file_formats.*met"):
+            self._build(yaml_text)
+
+    def test_unused_file_formats_entry_is_rejected(self):
+        yaml_text = VALID_YAML.replace("  flux: CSI\n", "  flux: CSI\n  spare: CSI\n")
+        with self.assertRaisesRegex(ValueError, r"no input variable uses.*spare"):
+            self._build(yaml_text)
+
 
 CHANGEOVER_YAML = """\
 site: TestSite

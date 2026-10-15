@@ -120,16 +120,14 @@ _TAIL_PEEK_BYTES = {"TOA5": 65536, "EddyPro": 16384}
 def peek_last_timestamp(file_path, file_format: str) -> pd.Timestamp | None:
     """Read the last data line's timestamp without parsing the whole file.
 
-    Shared by load_raw_data_since's tail-peek short-circuit and
-    eddypro_concatenator.select_new_slaves' new-candidate pre-filter — both
-    need "what's the newest record in this file" without a full parse.
+    Used by load_raw_data_since's tail-peek short-circuit, and public for
+    callers that need "what's the newest record in this file" without a
+    full parse (e.g. a file-splicing tool pre-filtering candidates).
 
     Returns None if no line in the peek window parses (e.g. a header-only
     file, or — defensively — a truncated in-progress write). Callers
     should treat None as "nothing to compare against": load_raw_data_since
-    treats it the same as "last record predates start_date" (skip);
-    select_new_slaves treats it as "nothing to filter against" (keep
-    every candidate).
+    treats it the same as "last record predates start_date" (skip).
     """
     path = pathlib.Path(file_path)
     window = _TAIL_PEEK_BYTES[file_format]
