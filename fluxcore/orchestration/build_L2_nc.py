@@ -36,7 +36,7 @@ def build_from_zarr(
         output_dir: directory to write NetCDF files into.
         year: if provided, only build that calendar year's file.
         global_attrs: extra global attributes to (re)stamp on every file
-            (see build_L1_nc.assign_L1_global_generic_attrs).
+            (see dataset_finishing.assign_global_attrs).
 
     Returns:
         List of paths to files written.

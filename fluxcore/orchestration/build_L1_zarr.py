@@ -18,7 +18,7 @@ Unlike build_L1_nc.py's NetCDF path, `instrument_history` is stored here
 in full structured form (JSON-safe: timestamps as ISO strings), not
 flattened to a year-clipped string — Zarr attrs are JSON-native, so this
 survives the round trip natively. NetCDF export re-hydrates it and
-reproduces the year clipping itself; see `_json_safe_instrument_history`.
+reproduces the year clipping itself; see `encode_instrument_history`.
 
 Generic core: takes a SiteContext and an explicit output directory. The TERN
 site-name wrappers and CLI live in orchestration/build_runner.py.
@@ -32,18 +32,18 @@ import xarray as xr
 
 from fluxcore.infrastructure import file_io
 from fluxcore.orchestration import incremental_zarr
-from fluxcore.orchestration.build_L1_nc import (
+from fluxcore.orchestration.dataset_builder import build_dataset_from_context
+from fluxcore.orchestration.dataset_finishing import (
+    add_missing_value_flags,
+    add_spatial_dims,
     assign_coverage_attrs,
     assign_crs_variable,
-    assign_L1_global_generic_attrs,
-    assign_variable_flags,
-    do_dim_ops,
+    assign_global_attrs,
+    cf_normalise_units,
+    encode_instrument_history,
     filter_variable_attrs,
-    non_dim_variables,
-    serialize_units,
-    serialize_uri,
+    flatten_instrument_uri,
 )
-from fluxcore.orchestration.dataset_builder import build_dataset_from_context
 from fluxcore.services.metadata.core.site_metadata_builder import SiteContext
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def build(
         year: if provided, discard all records before this calendar year
             during data loading.
         global_attrs: extra global attributes to stamp on the store (see
-            build_L1_nc.assign_L1_global_generic_attrs).
+            dataset_finishing.assign_global_attrs).
 
     Returns:
         Path to the Zarr store written.
@@ -83,7 +83,7 @@ def build(
 
     start_date = pd.Timestamp(year, 1, 1) if year is not None else None
     ds = build_dataset_from_context(ctx=ctx, start_date=start_date)
-    ds = build_L1_ds_complete(ds, global_attrs=global_attrs)
+    ds = _add_dims_crs_and_global_attrs(ds, global_attrs=global_attrs)
     ds = _finish_for_store(ds)
     ds.attrs["config_hash"] = incremental_zarr.hash_config(ctx.runtime_config)
 
@@ -126,7 +126,7 @@ def update(
         ctx: the site's assembled runtime config and metadata.
         output_dir: directory containing the store.
         global_attrs: extra global attributes to stamp on the store (see
-            build_L1_nc.assign_L1_global_generic_attrs).
+            dataset_finishing.assign_global_attrs).
 
     Returns:
         Path to the Zarr store (updated in place, or freshly built).
@@ -142,7 +142,7 @@ def update(
         if ds.sizes["time"] == 0:
             return None
 
-        ds = build_L1_ds_complete(ds, global_attrs=global_attrs)
+        ds = _add_dims_crs_and_global_attrs(ds, global_attrs=global_attrs)
         return _finish_for_store(ds, append_to=store_path)
 
     def full_rebuild() -> pathlib.Path:
@@ -158,11 +158,11 @@ def update(
     )
 
 
-def build_L1_ds_complete(ds, global_attrs: dict | None = None):
+def _add_dims_crs_and_global_attrs(ds, global_attrs: dict | None = None):
     """Apply spatial dims, CRS variable, and generic global attrs to the dataset."""
-    ds = do_dim_ops(ds=ds)
+    ds = add_spatial_dims(ds=ds)
     ds = assign_crs_variable(ds=ds)
-    ds = assign_L1_global_generic_attrs(ds=ds, global_attrs=global_attrs)
+    ds = assign_global_attrs(ds=ds, global_attrs=global_attrs)
 
     return ds
 
@@ -177,13 +177,13 @@ def _finish_for_store(ds, append_to: pathlib.Path | None = None):
     the tail's; otherwise appending would make time_coverage_start jump
     forward to the tail's start. instrument_history needs no such combining:
     it's config-derived and stored in full structured form (see
-    `_json_safe_instrument_history`).
+    `encode_instrument_history`).
     """
     range_start, nrecs_base = (
         incremental_zarr.store_coverage(append_to) if append_to else (None, 0)
     )
 
-    ds = assign_variable_flags(ds)
+    ds = add_missing_value_flags(ds)
     ds = assign_coverage_attrs(
         ds,
         title=f"Flux tower data set from the {ds.site_name} site",
@@ -191,78 +191,9 @@ def _finish_for_store(ds, append_to: pathlib.Path | None = None):
         nrecs_base=nrecs_base,
     )
     ds = filter_variable_attrs(ds=ds)
-    ds = serialize_uri(ds=ds)
-    ds = _json_safe_instrument_history(ds=ds)
-    ds = serialize_units(ds=ds)
+    ds = flatten_instrument_uri(ds=ds)
+    ds = encode_instrument_history(ds=ds)
+    ds = cf_normalise_units(ds=ds)
     ds = file_io.serialize_dataset_attrs(ds=ds)
 
     return ds
-
-
-def _json_safe_instrument_history(ds):
-    """Make each variable's instrument/instrument_history attrs Zarr-safe.
-
-    Converts nested start_date/end_date timestamps to ISO strings without
-    collapsing or year-clipping the structure — unlike
-    build_L1_nc.serialize_inst_history, which flattens *and* clips to one
-    calendar year. Preserving the structure here (rather than flattening
-    at Zarr-write time) is what lets NetCDF export reproduce that per-year
-    clipping later, from data that's otherwise already fully processed by
-    the time it reaches this store — see build_L1_nc.build_from_zarr and
-    its _rehydrate_instrument_history counterpart.
-
-    Also converts any alias-keyed dict — the compound-instrument
-    `instrument` attr itself ({"sonic_anemometer": name, "irga": name}),
-    and instrument_history's alias-level structure — to an ordered list of
-    [key, value] pairs. Zarr's attrs JSON writer alphabetizes dict keys but
-    preserves list order (confirmed empirically: a {"sonic_anemometer":
-    ..., "irga": ...} dict comes back key-alphabetised after a
-    to_zarr/open_zarr round trip, silently swapping which value is which
-    instrument once downstream code joins .values() positionally). A list
-    of pairs round-trips exactly as written, so this is a real fix rather
-    than a guessed fixed key order applied after the fact.
-
-    Args:
-        ds: dataset — the full history for `build()`, or a tail slice for
-            `update()`. instrument_history is config-derived and always
-            reflects the site's full history regardless of which slice of
-            data `ds` covers, so no date-range argument is needed here.
-    """
-    for var in non_dim_variables(ds):
-        attrs = ds[var].attrs
-
-        inst = attrs.get("instrument")
-        if isinstance(inst, dict):
-            attrs["instrument"] = list(inst.items())
-
-        history = attrs.get("instrument_history")
-        if history is None:
-            continue
-
-        first_val = next(iter(history.values()))
-        if "start_date" in first_val:
-            # Simple: {inst_name: {start_date, end_date}}
-            attrs["instrument_history"] = _isoformat_history(history)
-        else:
-            # Compound: {alias: {inst_name: {start_date, end_date}}}
-            attrs["instrument_history"] = [
-                [alias, _isoformat_history(inst_history)]
-                for alias, inst_history in history.items()
-            ]
-
-    return ds
-
-
-def _isoformat_history(history: dict) -> dict:
-    """ISO-format start_date/end_date within a simple instrument-history dict."""
-    return {
-        inst: {
-            "start_date": dates["start_date"].isoformat()
-            if dates["start_date"] is not None
-            else None,
-            "end_date": dates["end_date"].isoformat()
-            if dates["end_date"] is not None
-            else None,
-        }
-        for inst, dates in history.items()
-    }

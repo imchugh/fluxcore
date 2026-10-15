@@ -13,7 +13,7 @@ services/data/unit_conversions.py.
 import numpy as np
 from numpy.typing import ArrayLike
 
-from fluxcore.domain.constants import CO2_MOL_MASS, H2O_MOL_MASS, K, R
+from fluxcore.domain.constants import CO2_MOL_MASS, H2O_MOL_MASS, ZERO_C_IN_K, R
 
 CALCULATION_REGISTRY = {}
 
@@ -99,7 +99,7 @@ def calculate_net_radiation(
 @register_calculation("rho_mol")
 def calculate_molar_density(ps: ArrayLike, Ta: ArrayLike) -> ArrayLike:
     """Molar density (mol/m^3) from air pressure (kPa) and air temperature (degC)."""
-    return ps * 1000 / ((Ta + K) * R)
+    return ps * 1000 / ((Ta + ZERO_C_IN_K) * R)
 
 
 @register_calculation("Td")

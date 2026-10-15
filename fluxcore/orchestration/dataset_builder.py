@@ -3,7 +3,7 @@
 
 Public API
 ----------
-build_dataset_from_context(ctx, pad_humidity, pad_co2, start_date) -> xr.Dataset
+build_dataset_from_context(ctx, derive_humidity, derive_co2, start_date) -> xr.Dataset
 
 See also the TERN-EP pipeline's
 `orchestration.site_runner.build_dataset_from_site_name` for
@@ -45,13 +45,15 @@ ATTRS_SUBSET = [
 
 def build_dataset_from_context(
     ctx: SiteContext,
-    pad_humidity: bool = True,
-    pad_co2: bool = True,
+    derive_humidity: bool = True,
+    derive_co2: bool = True,
     start_date: pd.Timestamp | None = None,
 ) -> xr.Dataset:
     """Build an L1 xarray dataset from a fully-assembled site context."""
     result = _build_result(ctx, start_date=start_date)
-    result = _apply_padding(result, pad_humidity=pad_humidity, pad_co2=pad_co2)
+    result = _derive_quantities(
+        result, derive_humidity=derive_humidity, derive_co2=derive_co2
+    )
 
     ds = result.df.to_xarray()
     ds = _apply_variable_metadata(ds, result.var_attrs)
@@ -61,15 +63,15 @@ def build_dataset_from_context(
     return ds
 
 
-def _apply_padding(
+def _derive_quantities(
     result: DatasetBuildIntermediate,
-    pad_humidity: bool,
-    pad_co2: bool,
+    derive_humidity: bool,
+    derive_co2: bool,
 ) -> DatasetBuildIntermediate:
-    if pad_humidity:
-        result = derived_quantities.pad_humidity(result)
-    if pad_co2:
-        result = derived_quantities.pad_co2(result)
+    if derive_humidity:
+        result = derived_quantities.derive_missing_humidity(result)
+    if derive_co2:
+        result = derived_quantities.derive_co2_mole_fraction(result)
     # Always calculated, never gated -- see add_net_radiation's docstring.
     result = derived_quantities.add_net_radiation(result)
     return result
@@ -126,8 +128,8 @@ def _build_result(
         DatasetBuildIntermediate containing the canonical dataframe and a dict
         of per-variable xarray attribute dicts keyed by canonical name.
     """
-    df, registry = build_dataframe_and_specs(ctx, start_date=start_date)
-    var_attrs = _build_var_attrs(registry=registry)
+    df, specs_by_alias = build_dataframe_and_specs(ctx, start_date=start_date)
+    var_attrs = _build_var_attrs(specs_by_alias=specs_by_alias)
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
@@ -135,11 +137,11 @@ def _build_result(
 # Variable attribute construction
 
 
-def _build_var_attrs(registry: dict[str, VariableSpec]) -> dict[str, dict]:
+def _build_var_attrs(specs_by_alias: dict[str, VariableSpec]) -> dict[str, dict]:
     """Build per-variable xarray attribute dicts keyed by canonical output name."""
     rslt = {}
 
-    canonical_groups = group_by_canonical_name(registry)
+    canonical_groups = group_by_canonical_name(specs_by_alias)
 
     for _, var_specs in canonical_groups.items():
         main_spec = var_specs[-1]

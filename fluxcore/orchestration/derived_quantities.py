@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Derive and pad missing quantities not directly measured.
+"""Derive quantities that aren't directly measured.
 
-pad_humidity: for each (instrument, height) group with Ta and exactly one of
-{RH, AH}, derives the missing variable from the other plus Ta and ps.
+derive_missing_humidity: for each (instrument, height) group with Ta and
+exactly one of {RH, AH}, derives the missing variable from the other plus Ta and ps.
 
-pad_co2: for each CO2c column (Av and Sd only), derives the corresponding CO2
-dry mole fraction if not already present. Ta_Av and ps_Av are used as
+derive_co2_mole_fraction: for each CO2c column (Av and Sd only), derives the
+corresponding CO2 dry mole fraction if not already present. Ta_Av and ps_Av are used as
 period-representative inputs for both Av and Sd derivations.
 
-add_net_radiation: unlike pad_humidity/pad_co2, always (over)writes Fn from
+add_net_radiation: unlike the two above, always (over)writes Fn from
 Fsd - Fsu + Fld - Flu rather than filling a gap -- a raw on-logger Fn is never
 imported as of 2026-09-29 (see services/data/calculations.py's
 calculate_net_radiation for why: it's either redundant with this same sum or a
@@ -22,10 +22,10 @@ that same variable).
 
 Public API
 ----------
-pad_humidity(result)     -> DatasetBuildIntermediate
-pad_co2(result)          -> DatasetBuildIntermediate
-add_net_radiation(result) -> DatasetBuildIntermediate
-add_day_night_indicator(ds) -> xr.Dataset
+derive_missing_humidity(result)  -> DatasetBuildIntermediate
+derive_co2_mole_fraction(result) -> DatasetBuildIntermediate
+add_net_radiation(result)        -> DatasetBuildIntermediate
+add_day_night_indicator(ds)      -> xr.Dataset
 """
 
 import logging
@@ -54,7 +54,9 @@ class DatasetBuildIntermediate:
     var_attrs: dict[str, dict]
 
 
-def pad_humidity(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:
+def derive_missing_humidity(
+    result: DatasetBuildIntermediate,
+) -> DatasetBuildIntermediate:
     """Derive and add the missing humidity variable (RH or AH) for each group.
 
     A group is an instrument+height combination that has Ta and exactly one
@@ -100,7 +102,9 @@ def pad_humidity(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
 
-def pad_co2(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:
+def derive_co2_mole_fraction(
+    result: DatasetBuildIntermediate,
+) -> DatasetBuildIntermediate:
     """Derive CO2 dry mole fraction (umol/mol) from CO2c for all sites.
 
     Processes Av and Sd columns; skips counters and any column where the
@@ -137,8 +141,8 @@ def pad_co2(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:
 def add_net_radiation(result: DatasetBuildIntermediate) -> DatasetBuildIntermediate:
     """Always (re)compute Fn from Fsd - Fsu + Fld - Flu; never import a raw Fn.
 
-    Unlike pad_humidity/pad_co2, this does not check whether Fn already
-    exists -- no site's config imports a raw Fn as of 2026-09-29 (see
+    Unlike the humidity and CO2 derivations, this does not check whether Fn
+    already exists -- no site's config imports a raw Fn as of 2026-09-29 (see
     calculate_net_radiation's docstring for why), so there is nothing to
     overwrite in practice, but the unconditional write is deliberate: this
     function is the sole source of Fn, not a gap-filler for one.

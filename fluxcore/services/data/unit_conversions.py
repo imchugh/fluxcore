@@ -10,7 +10,7 @@ services/data/calculations.py.
 
 import numpy as np
 
-from fluxcore.domain.constants import CO2_MOL_MASS, H2O_MOL_MASS, K
+from fluxcore.domain.constants import CO2_MOL_MASS, H2O_MOL_MASS, ZERO_C_IN_K
 
 CONVERSION_REGISTRY = {}
 
@@ -122,7 +122,7 @@ def convert_Sws(data, from_units="percent"):
 def convert_temperature(data, from_units="K"):
     """Convert temperature from Kelvin to canonical degrees Celsius."""
     if from_units == "K":
-        return data - K
+        return data - ZERO_C_IN_K
     raise ValueError(
         f"Unsupported from_units {from_units!r} for temperature conversion"
     )
@@ -149,10 +149,10 @@ def convert_tbody(data, from_units="K"):
     Callendar-Van Dusen quadratic correction only matters well outside that.
     """
     if from_units == "K":
-        return data - K
+        return data - ZERO_C_IN_K
     if from_units == "ohms_ntc":
         ln_r = np.log(data)
-        return 1 / (1.0295e-3 + 2.391e-4 * ln_r + 1.568e-7 * ln_r**3) - K
+        return 1 / (1.0295e-3 + 2.391e-4 * ln_r + 1.568e-7 * ln_r**3) - ZERO_C_IN_K
     if from_units == "ohms_pt100":
         r0, alpha = 100.0, 0.00385
         return (data / r0 - 1) / alpha

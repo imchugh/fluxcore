@@ -346,13 +346,13 @@ class TestGetDataAdapter(unittest.TestCase):
 
     def test_dispatches_to_load_raw_data_since_when_start_date_given(self):
         start = self.timestamps[500]
-        loader = rdl.get_data_adapter(system_type="CSI", start_date=start)
+        loader = rdl.get_data_loader("TOA5", start_date=start)
         full = rdl.load_raw_data(file_path=self.path, file_format="TOA5")
         expected = full[full.index >= start]
         pd.testing.assert_frame_equal(loader(self.path), expected)
 
     def test_dispatches_to_load_raw_data_when_start_date_none(self):
-        loader = rdl.get_data_adapter(system_type="CSI")
+        loader = rdl.get_data_loader("TOA5")
         expected = rdl.load_raw_data(file_path=self.path, file_format="TOA5")
         pd.testing.assert_frame_equal(loader(self.path), expected)
 

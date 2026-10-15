@@ -29,7 +29,7 @@ import xarray as xr
 
 from fluxcore.infrastructure import file_io
 from fluxcore.orchestration import incremental_zarr, qc_pipeline
-from fluxcore.orchestration.build_L1_nc import assign_coverage_attrs
+from fluxcore.orchestration.dataset_finishing import assign_coverage_attrs
 from fluxcore.services.metadata.core import qc_config_schema
 from fluxcore.services.metadata.core.qc_config_schema import SiteQCConfig
 

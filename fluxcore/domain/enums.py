@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enums for statistics, variable types, file formats, and flux systems."""
+"""Enums for statistics, variable types, loggers, file formats, and flux systems."""
 
 from enum import Enum
 
@@ -66,21 +66,36 @@ class VariableType(str, Enum):
         return _find_by_attr(cls, "suffix", suffix, "variable type suffix")
 
 
-class FileType(str, Enum):
-    """Raw instrument file format, mapped to its on-disk file extension."""
+class LoggerType(str, Enum):
+    """Logger family that wrote a file group (the site config's file_formats values).
 
-    CSI = "dat"
-    LICOR = "txt"
+    Not a file format: Campbell (CSI) loggers can write TOA5, TOB1, TOB3 and
+    more. DEFAULT_FILE_FORMAT says which format fluxcore reads for each.
+    """
+
+    CSI = "CSI"
+    LICOR = "LICOR"
+
+
+class FileFormat(str, Enum):
+    """Raw file format fluxcore can parse."""
+
+    TOA5 = "TOA5"
+    EDDYPRO = "EddyPro"
 
     @property
     def extension(self) -> str:
-        """File extension for this format, without a leading dot."""
-        return self.value
+        """On-disk file extension, without a leading dot."""
+        return {FileFormat.TOA5: "dat", FileFormat.EDDYPRO: "txt"}[self]
 
-    @classmethod
-    def from_extension(cls, ext: str) -> "FileType":
-        """Return the member whose file extension matches `ext`."""
-        return _find_by_attr(cls, "value", ext, "FileType for extension")
+
+# The one place fluxcore assumes which format each logger family writes (a
+# CSI logger's TOB3 output, for one, must be converted to TOA5 upstream).
+# Letting site configs state the format per file group would replace this.
+DEFAULT_FILE_FORMAT = {
+    LoggerType.CSI: FileFormat.TOA5,
+    LoggerType.LICOR: FileFormat.EDDYPRO,
+}
 
 
 class FluxSystemType(str, Enum):

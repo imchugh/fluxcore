@@ -4,7 +4,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fluxcore.domain.enums import FileType
+from fluxcore.domain.enums import DEFAULT_FILE_FORMAT, FileFormat, LoggerType
 from fluxcore.infrastructure import file_io
 from fluxcore.services.data import raw_data_loader
 from fluxcore.services.metadata.core.runtime_config_builder import SiteRuntimeConfig
@@ -20,11 +20,16 @@ class FileGroup:
     group: str
     master: Path
     backups: list[Path]
-    file_format: str
+    logger_type: LoggerType
     expected_variables: set[str] = field(default_factory=set)
     _variables_by_file_cache: dict[Path, set[str]] = field(
         default_factory=dict, init=False, repr=False
     )
+
+    @property
+    def file_format(self) -> FileFormat:
+        """File format this group's files are read as."""
+        return DEFAULT_FILE_FORMAT[self.logger_type]
 
     @property
     def all_files(self) -> list[Path]:
@@ -37,7 +42,7 @@ class FileGroup:
         if not self._variables_by_file_cache:
             for file in self.all_files:
                 header_vars = get_variables_from_file(
-                    file_path=file, system_type=self.file_format
+                    file_path=file, file_format=self.file_format
                 )
                 self._variables_by_file_cache[file] = set(header_vars)
         return self._variables_by_file_cache
@@ -62,16 +67,16 @@ class FileGroup:
             )
 
 
-def get_variables_from_file(file_path: Path | str, system_type: str) -> list[str]:
+def get_variables_from_file(
+    file_path: Path | str, file_format: FileFormat | str
+) -> list[str]:
     """Return the sorted variable names from a raw file's header."""
     file_path = Path(file_path)
     if not file_path.exists():
         raise FileNotFoundError(f"File {file_path} does not exist!")
 
-    header_adapter = raw_data_loader.get_header_adapter(
-        system_type=FileType[system_type].name
-    )
-    return sorted(set(header_adapter(file_path)["variable"]))
+    header = raw_data_loader.load_raw_header(file_path, file_format)
+    return sorted(set(header["variable"]))
 
 
 def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
@@ -94,11 +99,9 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
     for var_def in runtime_cfg.variables.values():
         for raw_var in var_def.raw_inputs:
             group_name = raw_var.file
-            file_format = runtime_cfg.get_file_format(group_name)
-            file_ext = FileType[file_format].extension
             group = groups.get(group_name)
             if group is None:
-                master = base_path / f"{group_name}.{file_ext}"
+                master = base_path / runtime_cfg.get_filename(group_name)
                 backups = file_io.get_backup_files(
                     file_path=master,
                     abs_path=True,
@@ -107,7 +110,7 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
                     group=group_name,
                     master=master,
                     backups=backups,
-                    file_format=file_format,
+                    logger_type=runtime_cfg.get_logger_type(group_name),
                 )
                 groups[group_name] = group
 

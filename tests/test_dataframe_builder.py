@@ -19,7 +19,7 @@ def _registry(*raw_names, group="g"):
     }
 
 
-def _mapper(files, expected, group="g"):
+def _file_group(files, expected, group="g"):
     return SimpleNamespace(
         group=group,
         variables_by_file={f: None for f in files},
@@ -44,9 +44,9 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
 
     def _build(self, frames_by_file, expected, start_date=None):
         return dataframe_builder._build_file_group_dataframe(
-            mapper=_mapper(frames_by_file, expected),
+            file_group=_file_group(frames_by_file, expected),
             loader=lambda f: frames_by_file[f],
-            registry=_registry(*expected),
+            specs_by_alias=_registry(*expected),
             start_date=start_date,
             time_step=30,
         )

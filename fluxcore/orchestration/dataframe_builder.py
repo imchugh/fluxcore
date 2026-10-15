@@ -5,7 +5,7 @@ Public API
 ----------
 build_dataframe_from_context(ctx, quantities, n_samples, start_date)
     -> pd.DataFrame
-build_dataframe(file_groups, registry, quantities, n_samples, start_date,
+build_dataframe(file_groups, specs_by_alias, quantities, n_samples, start_date,
                 flux_file, time_step)
     -> pd.DataFrame
 
@@ -45,7 +45,7 @@ def build_dataframe_from_context(
 ) -> pd.DataFrame:
     """Build a canonical DataFrame from a fully-assembled site context.
 
-    Assembles file_groups and registry from the context, then delegates to
+    Assembles file_groups and specs_by_alias from the context, then delegates to
     build_dataframe. All site-specific parameters (n_samples, flux_file,
     time_step) are sourced from the context.
 
@@ -76,23 +76,25 @@ def build_dataframe_and_specs(
     file_groups = build_file_groups(runtime_cfg)
     for group in file_groups.values():
         group.validate_or_raise()
-    registry = build_variable_registry(runtime_cfg=runtime_cfg, file_groups=file_groups)
+    specs_by_alias = build_variable_registry(
+        runtime_cfg=runtime_cfg, file_groups=file_groups
+    )
 
     df = build_dataframe(
         file_groups=file_groups,
-        registry=registry,
+        specs_by_alias=specs_by_alias,
         quantities=quantities,
         n_samples=ctx.metadata.n_samples,
         start_date=start_date,
         flux_file=runtime_cfg.flux_file,
         time_step=ctx.metadata.time_step,
     )
-    return df, registry
+    return df, specs_by_alias
 
 
 def build_dataframe(
     file_groups: dict[str, FileGroup],
-    registry: dict[str, VariableSpec],
+    specs_by_alias: dict[str, VariableSpec],
     n_samples: int | None = None,
     start_date: pd.Timestamp | None = None,
     flux_file: str | None = None,
@@ -101,10 +103,10 @@ def build_dataframe(
 ) -> pd.DataFrame:
     """Build the canonical dataframe.
 
-    When ``quantities`` is supplied, the registry is filtered to only entries
+    When ``quantities`` is supplied, the specs_by_alias is filtered to only entries
     where ``spec.quantity in quantities``, and ``file_groups`` is further
-    reduced to only those groups referenced by the filtered registry.  When
-    ``None``, the full registry and all file groups are used.
+    reduced to only those groups referenced by the filtered specs_by_alias.  When
+    ``None``, the full specs_by_alias and all file groups are used.
 
     Step 1 — per file group: load all files, apply aliasing, conversions,
               condition, and concatenate vertically.
@@ -115,12 +117,12 @@ def build_dataframe(
               data predating the flux system does not produce empty output years.
     """
     if quantities is not None:
-        registry = {
+        specs_by_alias = {
             alias: spec
-            for alias, spec in registry.items()
+            for alias, spec in specs_by_alias.items()
             if spec.quantity in quantities
         }
-        active_groups = {spec.file_group for spec in registry.values()}
+        active_groups = {spec.file_group for spec in specs_by_alias.values()}
         file_groups = {
             name: fg for name, fg in file_groups.items() if name in active_groups
         }
@@ -128,14 +130,14 @@ def build_dataframe(
     # Step 1
     dfs = []
     flux_index = None
-    for group_name, mapper in file_groups.items():
-        loader = raw_data_loader.get_data_adapter(
-            system_type=mapper.file_format, start_date=start_date
+    for group_name, file_group in file_groups.items():
+        loader = raw_data_loader.get_data_loader(
+            file_group.file_format, start_date=start_date
         )
         group_df = _build_file_group_dataframe(
-            mapper=mapper,
+            file_group=file_group,
             loader=loader,
-            registry=registry,
+            specs_by_alias=specs_by_alias,
             n_samples=n_samples,
             start_date=start_date,
             time_step=time_step,
@@ -159,10 +161,10 @@ def build_dataframe(
     df = pd.concat(dfs, axis=1)
 
     # Step 3
-    df = _merge_overlapping_variables(df=df, registry=registry)
+    df = _merge_overlapping_variables(df=df, specs_by_alias=specs_by_alias)
 
     # Step 4
-    df = _rename_to_canonical(df=df, registry=registry)
+    df = _rename_to_canonical(df=df, specs_by_alias=specs_by_alias)
 
     # Step 5
     if flux_index is not None:
@@ -172,9 +174,9 @@ def build_dataframe(
 
 
 def _build_file_group_dataframe(
-    mapper: FileGroup,
+    file_group: FileGroup,
     loader: Callable,
-    registry: dict[str, VariableSpec],
+    specs_by_alias: dict[str, VariableSpec],
     n_samples: int | None = None,
     start_date: pd.Timestamp | None = None,
     time_step: int | None = None,
@@ -188,12 +190,12 @@ def _build_file_group_dataframe(
     """
     rename_map = {
         entry.raw_name: entry.alias
-        for entry in registry.values()
-        if entry.file_group == mapper.group
+        for entry in specs_by_alias.values()
+        if entry.file_group == file_group.group
     }
 
     dfs = []
-    for file in mapper.variables_by_file:
+    for file in file_group.variables_by_file:
         df = loader(file)
 
         if start_date is not None:
@@ -201,13 +203,15 @@ def _build_file_group_dataframe(
                 continue
             df = df[df.index >= start_date]
 
-        df = _filter_variables(df=df, variables=mapper.expected_variables)
+        df = _filter_variables(df=df, variables=file_group.expected_variables)
 
         df = df.rename(
             columns={col: rename_map[col] for col in df.columns if col in rename_map}
         )
 
-        df = _apply_conversions(df=df, registry=registry, n_samples=n_samples)
+        df = _apply_conversions(
+            df=df, specs_by_alias=specs_by_alias, n_samples=n_samples
+        )
 
         dfs.append(df)
 
@@ -252,7 +256,7 @@ def _filter_variables(df: pd.DataFrame, variables: set) -> pd.DataFrame:
 
 def _apply_conversions(
     df: pd.DataFrame,
-    registry: dict[str, VariableSpec],
+    specs_by_alias: dict[str, VariableSpec],
     n_samples: int | None = None,
 ) -> pd.DataFrame:
     """Apply statistical transforms and unit conversions in a single pass.
@@ -271,10 +275,10 @@ def _apply_conversions(
     QC variables (dimensionless on both sides) pass through unchanged.
     """
     for variable in df.columns:
-        if variable not in registry:
+        if variable not in specs_by_alias:
             continue
 
-        spec = registry[variable]
+        spec = specs_by_alias[variable]
         from_units = spec.site_units
 
         if spec.statistic_type == StatisticType.VAR:
@@ -318,7 +322,7 @@ def _apply_conversions(
     return df
 
 
-def _get_merge_blocks(registry: dict[str, VariableSpec]) -> dict:
+def _get_merge_blocks(specs_by_alias: dict[str, VariableSpec]) -> dict:
     """Identify canonical variables constructed from multiple raw inputs.
 
     These are instrument changeovers.
@@ -328,7 +332,7 @@ def _get_merge_blocks(registry: dict[str, VariableSpec]) -> dict:
     """
     rslt = {}
 
-    for canonical_name, var_specs in group_by_canonical_name(registry).items():
+    for canonical_name, var_specs in group_by_canonical_name(specs_by_alias).items():
         if len(var_specs) <= 1:
             continue
 
@@ -341,10 +345,10 @@ def _get_merge_blocks(registry: dict[str, VariableSpec]) -> dict:
 
 def _merge_overlapping_variables(
     df: pd.DataFrame,
-    registry: dict[str, VariableSpec],
+    specs_by_alias: dict[str, VariableSpec],
 ) -> pd.DataFrame:
     """Merge overlapping instrument periods into single canonical columns."""
-    merge_blocks = _get_merge_blocks(registry)
+    merge_blocks = _get_merge_blocks(specs_by_alias)
 
     if not merge_blocks:
         return df
@@ -380,12 +384,12 @@ def _merge_block(
 
 def _rename_to_canonical(
     df: pd.DataFrame,
-    registry: dict[str, VariableSpec],
+    specs_by_alias: dict[str, VariableSpec],
 ) -> pd.DataFrame:
     """Rename aliased columns to their canonical output names."""
     rename_map = {
         alias: canonical_output_name(spec)
-        for alias, spec in registry.items()
+        for alias, spec in specs_by_alias.items()
         if alias in df.columns
     }
 

@@ -103,29 +103,29 @@ def read_lines(
     return [line for line in csv.reader(line_list, delimiter=sep)]
 
 
-def _csv_format_kwargs(file_format: dict) -> dict:
+def _csv_layout_kwargs(layout: dict) -> dict:
     """Assemble the pandas.read_csv kwargs shared by full-file and tail reads.
 
-    Derives sep/dtype/na_values/quoting from a file_format dict (see
+    Derives sep/dtype/na_values/quoting from a layout dict (see
     read_csv_data). Excludes header/skiprows/names, which differ between a
     full read (starts at the file's header) and a tail read (starts
     mid-file, past a header already consumed elsewhere) — see
     read_csv_data vs read_csv_tail.
     """
     return {
-        "sep": file_format.get("separator", ","),
-        "dtype": {col: str for col in file_format.get("non_numeric_cols", [])},
-        "na_values": file_format.get("na_values", None),
-        "quoting": file_format.get("quoting", 0),
+        "sep": layout.get("separator", ","),
+        "dtype": {col: str for col in layout.get("non_numeric_cols", [])},
+        "na_values": layout.get("na_values", None),
+        "quoting": layout.get("quoting", 0),
     }
 
 
-def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
-    """Read a CSV/TSV file according to the provided file_format dictionary.
+def read_csv_data(file_path: str, layout: dict, **kwargs) -> pd.DataFrame:
+    """Read a CSV/TSV file according to a file layout dictionary.
 
     Args:
         file_path: path to the data file.
-        file_format: dictionary containing parsing information. Expected
+        layout: dictionary describing the file's layout. Expected
             keys: ``header_lines`` (dict with keys 'variable', 'units',
             'sampling'), ``separator`` (column separator), ``non_numeric_cols``
             (columns to treat as strings), ``na_values`` (value(s) to treat
@@ -137,7 +137,7 @@ def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
         Parsed DataFrame.
     """
     # Extract skiprows and header line
-    header_lines = file_format.get("header_lines", {})
+    header_lines = layout.get("header_lines", {})
     variable_row = header_lines.get("variable", 0)
     skiprows = set(header_lines.values()) - {variable_row}
 
@@ -146,14 +146,14 @@ def read_csv_data(file_path: str, file_format: dict, **kwargs) -> pd.DataFrame:
         file_path,
         skiprows=skiprows,
         header=0,
-        **_csv_format_kwargs(file_format),
+        **_csv_layout_kwargs(layout),
         **kwargs,  # pass any extra kwargs
     )
 
 
 def read_csv_tail(
     file_path: str | Path,
-    file_format: dict,
+    layout: dict,
     names: list[str],
     seek_offset: int,
     **kwargs,
@@ -167,7 +167,7 @@ def read_csv_tail(
 
     Args:
         file_path: path to the data file.
-        file_format: same shape as read_csv_data's file_format.
+        layout: same shape as read_csv_data's layout.
         names: column names, in file order, including the timestamp
             column(s) (e.g. TOA5's 'TIMESTAMP').
         seek_offset: byte offset to start reading from; must be a valid
@@ -185,7 +185,7 @@ def read_csv_tail(
             f,
             header=None,
             names=names,
-            **_csv_format_kwargs(file_format),
+            **_csv_layout_kwargs(layout),
             **kwargs,
         )
 

@@ -9,6 +9,7 @@ from typing import ClassVar
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Field,
     ValidationError,
     field_validator,
     model_validator,
@@ -16,15 +17,12 @@ from pydantic import (
 
 from fluxcore.domain.enums import (
     DiagnosticType,
-    FileType,
     FluxSystemType,
+    LoggerType,
     StatisticType,
     VariableType,
 )
 from fluxcore.infrastructure.file_io import read_yml
-
-VALID_FILE_TYPES = [x.name for x in FileType]
-
 
 # Input-level configuration
 
@@ -178,7 +176,9 @@ class SiteConfig(BaseModel):
     # Define attributes
 
     site: str
-    file_formats: dict[str, str]
+    # The YAML key is file_formats, but its values name the logger family
+    # (CSI, LICOR), not a file format: see enums.DEFAULT_FILE_FORMAT.
+    logger_types: dict[str, LoggerType] = Field(alias="file_formats")
     flux_system: FluxSystemType
     flux_file: str
     variables: dict[str, VariableConfig]
@@ -187,18 +187,6 @@ class SiteConfig(BaseModel):
 
     # class-level constants for validation
     diag_prefixes: ClassVar[list[str]] = ["Diag_"]
-
-    @field_validator("file_formats")
-    @classmethod
-    def validate_file_formats(cls, v: dict[str, str]) -> dict[str, str]:
-        """Ensure every file_formats value is a recognised FileType name."""
-        invalid = {k: val for k, val in v.items() if val not in VALID_FILE_TYPES}
-        if invalid:
-            raise ValueError(
-                f"file_formats values must be one of {VALID_FILE_TYPES}; "
-                f"invalid entries: {invalid}"
-            )
-        return v
 
     @model_validator(mode="after")
     def enforce_diag_rules(self):
@@ -288,7 +276,7 @@ class SiteConfig(BaseModel):
             for var_cfg in self.variables.values()
             for input_cfg in var_cfg.input_variables.values()
         }
-        declared = set(self.file_formats)
+        declared = set(self.logger_types)
         if used - declared:
             raise ValueError(
                 "Input variables use files not declared in file_formats: "

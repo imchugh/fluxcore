@@ -10,5 +10,5 @@ NC_ENCODING = "seconds since 1800-01-01 00:00:00.0"
 # Scientific numerical constants
 CO2_MOL_MASS = 44
 H2O_MOL_MASS = 18
-K = 273.15
+ZERO_C_IN_K = 273.15
 R = 8.3143

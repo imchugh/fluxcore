@@ -32,7 +32,7 @@ def _build_l2_dataset(n=48 * 2, time_step=30, start="2020-01-01"):
                     "units": "degC",
                     "statistic_type": "average",
                     # A real L2 store inherits this already-Zarr-safe shape
-                    # from L1's own build (build_L1_zarr._json_safe_instrument_history
+                    # from L1's own build (dataset_finishing.encode_instrument_history
                     # converts a compound instrument dict to an ordered list
                     # of pairs before writing, since Zarr's attrs writer
                     # alphabetizes dict keys but preserves list order).
@@ -137,7 +137,7 @@ class BuildL2NcTestCase(unittest.TestCase):
         # sonic_anemometer), so `instrument` is written as an ordered list
         # of [key, value] pairs (which Zarr's JSON writer does preserve) and
         # reconstructed into a dict in that exact order by
-        # _rehydrate_instrument_history -- without that, the joined string
+        # decode_instrument_history -- without that, the joined string
         # would come out as "LI-7500RS,CSAT3B" instead.
         ds = _build_l2_dataset()
         self._write_l2(ds)

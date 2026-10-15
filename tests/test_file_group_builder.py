@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from fluxcore.domain.enums import LoggerType
 from fluxcore.services.metadata.core.file_group_builder import (
     FileGroup,
     build_file_groups,
@@ -45,7 +46,7 @@ def _make_group(expected_variables, found_variables):
         group="flux",
         master=MASTER,
         backups=[],
-        file_format="TOA5",
+        logger_type=LoggerType.CSI,
         expected_variables=expected_variables,
     )
     group._variables_by_file_cache = {MASTER: found_variables}

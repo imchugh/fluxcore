@@ -8,15 +8,15 @@ import pathlib
 import pandas as pd
 
 from fluxcore.domain.constants import DATA_TIME_FORMAT, TIME_INDEX_NAME
+from fluxcore.domain.enums import FileFormat
 from fluxcore.infrastructure import file_io
 
 logger = logging.getLogger(__name__)
 
-# TOA5 and EddyPro are fixed industry-standard formats; these constants
-# capture only the fields consumed by this module (header line positions,
-# separator, non-numeric columns, NA sentinel, and CSV quoting mode).
-_FILE_FORMATS = {
-    "TOA5": {
+# Each format's file layout, as consumed by file_io.read_csv_data: header line
+# positions, separator, non-numeric columns, NA sentinel, and CSV quoting mode.
+_LAYOUTS = {
+    FileFormat.TOA5: {
         "header_lines": {"info": 0, "variable": 1, "units": 2, "sampling": 3},
         "separator": ",",
         "non_numeric_cols": ["TIMESTAMP"],
@@ -26,7 +26,7 @@ _FILE_FORMATS = {
         "na_values": ["NAN", "-2147483648"],
         "quoting": csv.QUOTE_NONNUMERIC,
     },
-    "EddyPro": {
+    FileFormat.EDDYPRO: {
         "header_lines": {"variable": 0, "units": 1},
         "separator": "\t",
         "non_numeric_cols": ["DATAH", "filename", "date", "time"],
@@ -35,13 +35,10 @@ _FILE_FORMATS = {
     },
 }
 
-# Maps the site config's logger system_type to the file format it produces.
-_SYSTEM_TYPE_FORMAT_MAP = {"CSI": "TOA5", "LICOR": "EddyPro"}
-
 
 def load_raw_data(
     file_path: pathlib.Path,
-    file_format: str,
+    file_format: FileFormat | str,
     **read_csv_kwargs,
 ) -> pd.DataFrame:
     """Load a raw TOA5/EddyPro file into a time-indexed DataFrame.
@@ -52,9 +49,10 @@ def load_raw_data(
     column(s) ('TIMESTAMP' for TOA5; 'date' and 'time' for EddyPro), since
     the date formatter below depends on them.
     """
+    file_format = FileFormat(file_format)
     df = file_io.read_csv_data(
         file_path=file_path,
-        file_format=_FILE_FORMATS[file_format],
+        layout=_LAYOUTS[file_format],
         on_bad_lines="skip",
         **read_csv_kwargs,
     )
@@ -78,8 +76,8 @@ def _EddyPro_date_formatter(df):
 
 
 DATE_FORMATTERS = {
-    "TOA5": _TOA5_date_formatter,
-    "EddyPro": _EddyPro_date_formatter,
+    FileFormat.TOA5: _TOA5_date_formatter,
+    FileFormat.EDDYPRO: _EddyPro_date_formatter,
 }
 
 
@@ -106,18 +104,20 @@ def _eddypro_line_timestamp(line: str) -> pd.Timestamp | None:
 
 
 LINE_TIMESTAMP_PARSERS = {
-    "TOA5": _toa5_line_timestamp,
-    "EddyPro": _eddypro_line_timestamp,
+    FileFormat.TOA5: _toa5_line_timestamp,
+    FileFormat.EDDYPRO: _eddypro_line_timestamp,
 }
 
 # Bytes read from the end of a master file to recover its last record's
 # timestamp without loading the whole file. TOA5 flux-slow tables can run
 # to 100+ float columns (several KB/line); EddyPro summary lines are much
 # narrower. Generous on both sides — the read itself is cheap either way.
-_TAIL_PEEK_BYTES = {"TOA5": 65536, "EddyPro": 16384}
+_TAIL_PEEK_BYTES = {FileFormat.TOA5: 65536, FileFormat.EDDYPRO: 16384}
 
 
-def peek_last_timestamp(file_path, file_format: str) -> pd.Timestamp | None:
+def peek_last_timestamp(
+    file_path, file_format: FileFormat | str
+) -> pd.Timestamp | None:
     """Read the last data line's timestamp without parsing the whole file.
 
     Used by load_raw_data_since's tail-peek short-circuit, and public for
@@ -129,6 +129,7 @@ def peek_last_timestamp(file_path, file_format: str) -> pd.Timestamp | None:
     should treat None as "nothing to compare against": load_raw_data_since
     treats it the same as "last record predates start_date" (skip).
     """
+    file_format = FileFormat(file_format)
     path = pathlib.Path(file_path)
     window = _TAIL_PEEK_BYTES[file_format]
     size = path.stat().st_size
@@ -147,7 +148,7 @@ def peek_last_timestamp(file_path, file_format: str) -> pd.Timestamp | None:
 
 def load_raw_data_since(
     file_path: pathlib.Path,
-    file_format: str,
+    file_format: FileFormat | str,
     start_date: pd.Timestamp,
     **read_csv_kwargs,
 ) -> pd.DataFrame:
@@ -172,6 +173,7 @@ def load_raw_data_since(
     Returns:
         Time-indexed DataFrame containing only rows with index >= start_date.
     """
+    file_format = FileFormat(file_format)
     if not read_csv_kwargs:
         try:
             return _load_raw_data_since_fast(
@@ -193,18 +195,18 @@ def load_raw_data_since(
 
 def _load_raw_data_since_fast(
     file_path: pathlib.Path,
-    file_format: str,
+    file_format: FileFormat,
     start_date: pd.Timestamp,
 ) -> pd.DataFrame:
     """Fast path for load_raw_data_since: tail-peek + binary search + seeked read."""
-    fmt = _FILE_FORMATS[file_format]
+    layout = _LAYOUTS[file_format]
     parser = LINE_TIMESTAMP_PARSERS[file_format]
 
     last_ts = peek_last_timestamp(file_path, file_format)
     if last_ts is None or last_ts < start_date:
         return pd.DataFrame()
 
-    n_header_lines = max(fmt["header_lines"].values()) + 1
+    n_header_lines = max(layout["header_lines"].values()) + 1
     low = file_io.header_end_offset(file_path, n_header_lines)
     high = pathlib.Path(file_path).stat().st_size
 
@@ -216,17 +218,17 @@ def _load_raw_data_since_fast(
         file_path=file_path, low=low, high=high, line_qualifies=line_qualifies
     )
 
-    variable_row = fmt["header_lines"]["variable"]
+    variable_row = layout["header_lines"]["variable"]
     names = file_io.read_lines(
         file_path=file_path,
         begin=variable_row,
         end=variable_row,
-        sep=fmt["separator"],
+        sep=layout["separator"],
     )[0]
 
     df = file_io.read_csv_tail(
         file_path=file_path,
-        file_format=fmt,
+        layout=layout,
         names=names,
         seek_offset=seek_offset,
         on_bad_lines="skip",
@@ -235,14 +237,16 @@ def _load_raw_data_since_fast(
     return df[df.index >= start_date]
 
 
-def get_data_adapter(system_type: str, start_date: pd.Timestamp | None = None):
-    """Return a `load(file_path)` closure bound to `system_type`'s file format.
+def get_data_loader(
+    file_format: FileFormat | str, start_date: pd.Timestamp | None = None
+):
+    """Return a `load(file_path)` closure bound to file_format.
 
     If start_date is given, the closure uses load_raw_data_since (skips
     parsing rows before start_date where possible) instead of the default
     full-file load_raw_data.
     """
-    file_format = _SYSTEM_TYPE_FORMAT_MAP[system_type]
+    file_format = FileFormat(file_format)
 
     def load(file_path):
         if start_date is not None:
@@ -254,14 +258,14 @@ def get_data_adapter(system_type: str, start_date: pd.Timestamp | None = None):
     return load
 
 
-def load_raw_header(file_path, file_format: str) -> dict:
+def load_raw_header(file_path, file_format: FileFormat | str) -> dict:
     """Read a raw file's header rows, keyed by line type ('variable', 'units', etc).
 
-    Non-numeric columns (per `_FILE_FORMATS`) are dropped from every header
-    row.
+    Non-numeric columns (per the format's layout) are dropped from every
+    header row.
     """
-    fmt = _FILE_FORMATS[file_format]
-    header_dict = fmt.get("header_lines")
+    layout = _LAYOUTS[FileFormat(file_format)]
+    header_dict = layout.get("header_lines")
     lines = list(header_dict.values())
     keys = list(header_dict.keys())
     result = dict(
@@ -271,11 +275,11 @@ def load_raw_header(file_path, file_format: str) -> dict:
                 file_path=file_path,
                 begin=min(lines),
                 end=max(lines),
-                sep=fmt["separator"],
+                sep=layout["separator"],
             ),
         )
     )
-    non_numeric = set(fmt.get("non_numeric_cols", []))
+    non_numeric = set(layout.get("non_numeric_cols", []))
     if "variable" in result and non_numeric:
         drop_indices = {i for i, v in enumerate(result["variable"]) if v in non_numeric}
         for key in ("variable", "units", "sampling"):
@@ -286,9 +290,9 @@ def load_raw_header(file_path, file_format: str) -> dict:
     return result
 
 
-def get_header_adapter(system_type: str):
-    """Return a `load(file_path)` closure bound to `system_type`'s file format."""
-    file_format = _SYSTEM_TYPE_FORMAT_MAP[system_type]
+def get_header_loader(file_format: FileFormat | str):
+    """Return a `load(file_path)` closure bound to file_format."""
+    file_format = FileFormat(file_format)
 
     def load(file_path):
         return load_raw_header(file_path=file_path, file_format=file_format)

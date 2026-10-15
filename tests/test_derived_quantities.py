@@ -1,6 +1,5 @@
 """Tests for orchestration/derived_quantities.py."""
 
-import logging
 import unittest
 from datetime import datetime, timedelta
 
@@ -54,8 +53,8 @@ class AddNetRadiationTestCase(unittest.TestCase):
         self.assertIs(out, result)
 
     def test_overwrites_any_preexisting_fn_column(self):
-        # Deliberately unconditional (unlike pad_humidity/pad_co2): Fn is never
-        # imported as of 2026-09-29, but if a stray column existed it would
+        # Deliberately unconditional (unlike the humidity/CO2 derivations): Fn
+        # is never imported as of 2026-09-29, but if a stray column existed it would
         # still be replaced, not left alone.
         df = pd.DataFrame(
             {

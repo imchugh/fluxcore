@@ -113,7 +113,7 @@ def calculate_CO2_density_layers(ds: xr.Dataset) -> xr.DataArray:
     return layer_da.transpose(TIME_DIM, LAYER_DIM)
 
 
-def calculate_delta_CO2_storage(ds: xr.Dataset) -> xr.DataArray:
+def layer_co2_storage(ds: xr.Dataset) -> xr.DataArray:
     """Per-layer CO2 storage flux (Sco2, umol/m^2/s)."""
     layer_da = calculate_CO2_density_layers(ds)
     layer_da = layer_da / CO2_MOL_MASS * 10**3  # mg/m^3 -> umol/m^3
@@ -127,13 +127,13 @@ def calculate_delta_CO2_storage(ds: xr.Dataset) -> xr.DataArray:
     return diff_da
 
 
-def calculate_summed_CO2_storage(ds: xr.Dataset) -> xr.DataArray:
+def total_co2_storage(ds: xr.Dataset) -> xr.DataArray:
     """Total CO2 storage flux (Sco2, umol/m^2/s), summed across layers.
 
     `skipna=False` deliberately: a missing layer nulls the total rather
     than silently underestimating it.
     """
-    da = calculate_delta_CO2_storage(ds).sum(LAYER_DIM, skipna=False)
+    da = layer_co2_storage(ds).sum(LAYER_DIM, skipna=False)
     da.name = "Sco2"
     da.attrs = {"units": "umol/m^2/s"}
     return da

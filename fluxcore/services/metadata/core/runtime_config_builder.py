@@ -22,7 +22,14 @@ from fluxcore.domain.data_models.metadata_classes import (
     RawVariableMetadata,
     VariableDefinition,
 )
-from fluxcore.domain.enums import FileType, FluxSystemType, StatisticType, VariableType
+from fluxcore.domain.enums import (
+    DEFAULT_FILE_FORMAT,
+    FileFormat,
+    FluxSystemType,
+    LoggerType,
+    StatisticType,
+    VariableType,
+)
 from fluxcore.services.metadata.core.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
@@ -39,8 +46,8 @@ class SiteRuntimeConfig:
 
     site_name: str
 
-    # Store FILE FORMATS, not extensions; keyed by file stem
-    file_formats: dict[str, str]
+    # Logger family per file group (the site config's file_formats values)
+    logger_types: dict[str, LoggerType]
 
     flux_system: FluxSystemType
     flux_file: str
@@ -54,35 +61,17 @@ class SiteRuntimeConfig:
     # instrument_uri. Required by file_group_builder.build_file_groups.
     input_data_path: Path | None = None
 
-    # File format helpers
+    def get_logger_type(self, file_group: str) -> LoggerType:
+        """Logger family that wrote file_group."""
+        return self.logger_types[file_group]
 
-    def get_file_format(self, file_group: str) -> str:
-        """Resolve file format name for file group.
-
-        Returns:
-            e.g. 'CSI'
-        """
-        return self.file_formats[file_group]
-
-    def get_file_type(self, file_group: str) -> FileType:
-        """Resolve FileType enum for file group."""
-        format_name = self.get_file_format(file_group)
-
-        return FileType[format_name]
-
-    def get_file_extension(self, file_group: str) -> str:
-        """Resolve extension for file group.
-
-        Returns:
-            e.g. 'dat'
-        """
-        return self.get_file_type(file_group).extension
+    def get_file_format(self, file_group: str) -> FileFormat:
+        """File format fluxcore reads file_group as."""
+        return DEFAULT_FILE_FORMAT[self.get_logger_type(file_group)]
 
     def get_filename(self, file_group: str) -> str:
-        """Construct canonical filename."""
-        ext = self.get_file_extension(file_group)
-
-        return f"{file_group}.{ext}"
+        """File group's master file name, e.g. 'Site_EC_flux.dat'."""
+        return f"{file_group}.{self.get_file_format(file_group).extension}"
 
     @property
     def flux_filename(self) -> str:
@@ -263,7 +252,7 @@ def build_runtime_config(
 
     return SiteRuntimeConfig(
         site_name=validated_config.site,
-        file_formats=validated_config.file_formats,
+        logger_types=validated_config.logger_types,
         flux_system=validated_config.flux_system,
         flux_file=validated_config.flux_file,
         custom_metadata=custom_metadata,
