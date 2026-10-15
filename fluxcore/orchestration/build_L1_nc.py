@@ -88,6 +88,8 @@ def export_store(
     store_path = incremental_zarr.store_path_for(site_name, zarr_dir, level)
 
     ds = xr.open_zarr(store_path).load()
+    # The store's config_hash is incremental-update bookkeeping, not metadata.
+    ds.attrs.pop("config_hash", None)
     ds = decode_instrument_history(ds)
     # Refresh date_created/history to this NetCDF build's own time, rather
     # than whenever the Zarr store was last written/appended.

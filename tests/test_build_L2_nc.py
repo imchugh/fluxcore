@@ -114,6 +114,19 @@ class BuildL2NcTestCase(unittest.TestCase):
         self.assertEqual(out.attrs["Conventions"], "CF-1.8")
         out.close()
 
+    def test_store_config_hash_is_not_exported(self):
+        ds = _build_l2_dataset()
+        ds.attrs["config_hash"] = "abc123"
+        self._write_l2(ds)
+
+        written = build_L2_nc.build_from_zarr(
+            "TestSite", zarr_dir=self.zarr_dir, output_dir=self.nc_dir, year=2020
+        )
+        out = xr.open_dataset(written[0])
+        self.assertNotIn("config_hash", out.attrs)
+        self.assertEqual(out.attrs["site_name"], "TestSite")
+        out.close()
+
     def test_qc_flag_values_and_attrs_survive(self):
         ds = _build_l2_dataset()
         flagged_time = ds.time.values[5]
