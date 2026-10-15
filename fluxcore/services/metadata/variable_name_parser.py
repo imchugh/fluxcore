@@ -1,8 +1,24 @@
 #!/usr/bin/env python3
 """Parse canonical variable names into their component parts."""
 
-from fluxcore.domain.data_models.metadata_classes import ParsedVariableName
+from pydantic.dataclasses import dataclass as pydantic_dataclass
+
 from fluxcore.domain.enums import StatisticType, VariableType
+
+
+@pydantic_dataclass(frozen=True)
+class ParsedVariableName:
+    """Components parsed out of a canonical variable name string."""
+
+    quantity: str
+    qualifier: str | None = None
+    vertical_location: str | None = None
+    horizontal_location: str | None = None
+    replicate: str | None = None
+    statistic_id: str | None = (
+        None  # set when suffix is a StatisticType (Av, Sd, Vr ...)
+    )
+    variable_type_id: str | None = None  # set when suffix is a VariableType  (QC, Ct)
 
 
 class VariableNameParseError(Exception):

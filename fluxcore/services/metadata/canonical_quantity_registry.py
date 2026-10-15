@@ -4,7 +4,9 @@
 from dataclasses import asdict
 from functools import cache
 
-from fluxcore.domain.data_models.metadata_classes import CanonicalQuantityMetadata
+from pydantic.dataclasses import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
+
 from fluxcore.domain.enums import StatisticType, VariableType
 from fluxcore.services import config_loader
 
@@ -18,6 +20,20 @@ _VARIANCE_UNIT_MAP: dict[str, str] = {
     "mmol/mol": "mmol/mol",
     "K^2": "K",
 }
+
+
+@pydantic_dataclass(frozen=True, config=ConfigDict(extra="forbid"))
+class CanonicalQuantityMetadata:
+    """Registry metadata for one canonical quantity: units and naming.
+
+    Value ranges are deliberately not held here: configs/qc/_range_defaults.yml
+    is the single source of range limits.
+    """
+
+    long_name: str
+    standard_name: str | None
+    standard_units: str
+    valid_input_units: list[str]
 
 
 def resolve_variance_units(units: str, to_stdev: bool = True) -> str:

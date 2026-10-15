@@ -288,13 +288,3 @@ def load_raw_header(file_path, file_format: FileFormat | str) -> dict:
                     v for i, v in enumerate(result[key]) if i not in drop_indices
                 ]
     return result
-
-
-def get_header_loader(file_format: FileFormat | str):
-    """Return a `load(file_path)` closure bound to file_format."""
-    file_format = FileFormat(file_format)
-
-    def load(file_path):
-        return load_raw_header(file_path=file_path, file_format=file_format)
-
-    return load

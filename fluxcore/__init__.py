@@ -6,10 +6,6 @@ introspection of fluxcore's own domain. Anything reached by a deeper import
 """
 
 from fluxcore.domain.constants import DATA_TIME_FORMAT, SITE_PLACEHOLDER
-from fluxcore.domain.data_models.metadata_classes import (
-    CanonicalQuantityMetadata,
-    SiteMetadata,
-)
 from fluxcore.domain.enums import (
     DEFAULT_FILE_FORMAT,
     DiagnosticType,
@@ -37,6 +33,7 @@ from fluxcore.services.data.raw_data_loader import (
     peek_last_timestamp,
 )
 from fluxcore.services.metadata.canonical_quantity_registry import (
+    CanonicalQuantityMetadata,
     build_canonical_quantity_registry,
 )
 from fluxcore.services.metadata.file_group_builder import (
@@ -66,6 +63,7 @@ from fluxcore.services.metadata.site_config_schema import (
 )
 from fluxcore.services.metadata.site_metadata_builder import (
     SiteContext,
+    SiteMetadata,
     build_site_metadata_from_file,
 )
 from fluxcore.services.metadata.variable_name_parser import parse_variable_name

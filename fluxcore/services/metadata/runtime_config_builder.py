@@ -16,14 +16,14 @@ Two entry points:
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
-from fluxcore.domain.data_models.metadata_classes import (
-    RawVariableMetadata,
-    VariableDefinition,
-)
+from pydantic.dataclasses import dataclass as pydantic_dataclass
+
 from fluxcore.domain.enums import (
     DEFAULT_FILE_FORMAT,
+    DiagnosticType,
     FileFormat,
     FluxSystemType,
     LoggerType,
@@ -31,13 +31,60 @@ from fluxcore.domain.enums import (
     VariableType,
 )
 from fluxcore.services.metadata.canonical_quantity_registry import (
+    CanonicalQuantityMetadata,
     build_canonical_quantity_registry,
 )
 from fluxcore.services.metadata.site_config_schema import (
     SiteConfig,
     validate_L1_config_structure,
 )
-from fluxcore.services.metadata.variable_name_parser import parse_variable_name
+from fluxcore.services.metadata.variable_name_parser import (
+    ParsedVariableName,
+    parse_variable_name,
+)
+
+
+@pydantic_dataclass(frozen=True)
+class RawVariableMetadata:
+    """Metadata for one raw instrument-file input that feeds a canonical variable."""
+
+    raw_name: str
+    raw_units: str
+    file: str
+    instrument: str | dict[str, str]
+    begin: datetime | str | None = None
+    end: datetime | str | None = None
+    instrument_uri: str | dict[str, str | None] | None = None
+
+
+@pydantic_dataclass(frozen=True)
+class VariableDefinition:
+    """Complete definition of one canonical variable.
+
+    Assembled by runtime_config_builder from its raw inputs, canonical
+    quantity metadata, and parsed name. variable_registry then flattens each
+    of its raw inputs into a VariableSpec.
+    """
+
+    # Core identity
+    variable_name: str
+    quantity: str
+    variable_type: VariableType
+
+    # Physical metadata
+    instrument: str | dict[str, str]
+    height: float
+
+    # Structural metadata
+    raw_inputs: tuple[RawVariableMetadata, ...]
+    canonical: CanonicalQuantityMetadata
+    parsed_name_elems: ParsedVariableName
+
+    # Optionals
+    height_range: tuple[float, float] | None = None
+    statistic_type: StatisticType | None = None
+    diag_type: DiagnosticType | None = None
+    instrument_uri: str | dict[str, str | None] | None = None
 
 
 @dataclass(frozen=True)
