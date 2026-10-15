@@ -266,19 +266,14 @@ def load_raw_header(file_path, file_format: FileFormat | str) -> dict:
     """
     layout = _LAYOUTS[FileFormat(file_format)]
     header_dict = layout.get("header_lines")
-    lines = list(header_dict.values())
-    keys = list(header_dict.keys())
-    result = dict(
-        zip(
-            keys,
-            file_io.read_lines(
-                file_path=file_path,
-                begin=min(lines),
-                end=max(lines),
-                sep=layout["separator"],
-            ),
-        )
+    first = min(header_dict.values())
+    rows = file_io.read_lines(
+        file_path=file_path,
+        begin=first,
+        end=max(header_dict.values()),
+        sep=layout["separator"],
     )
+    result = {key: rows[line - first] for key, line in header_dict.items()}
     non_numeric = set(layout.get("non_numeric_cols", []))
     if "variable" in result and non_numeric:
         drop_indices = {i for i, v in enumerate(result["variable"]) if v in non_numeric}

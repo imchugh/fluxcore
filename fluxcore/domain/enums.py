@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Enums for statistics, variable types, loggers, file formats, and flux systems."""
 
-from enum import Enum
+from enum import StrEnum
 
 
 def _find_by_attr(cls, attr: str, value, label: str):
@@ -12,14 +12,14 @@ def _find_by_attr(cls, attr: str, value, label: str):
     raise ValueError(f"Unknown {label}: {value!r}")
 
 
-class DiagnosticType(str, Enum):
+class DiagnosticType(StrEnum):
     """Direction of a diagnostic counter: which state it counts toward."""
 
     VALID_COUNT = "valid_count"
     INVALID_COUNT = "invalid_count"
 
 
-class StatisticType(str, Enum):
+class StatisticType(StrEnum):
     """Statistic computed over an averaging period, with its canonical name suffix."""
 
     AVG = ("average", "Av")
@@ -44,7 +44,7 @@ class StatisticType(str, Enum):
         return _find_by_attr(cls, "suffix", suffix, "statistic suffix")
 
 
-class VariableType(str, Enum):
+class VariableType(StrEnum):
     """Semantic type of a variable, with its canonical name suffix (if any)."""
 
     CONTINUOUS = ("continuous", None)
@@ -66,7 +66,7 @@ class VariableType(str, Enum):
         return _find_by_attr(cls, "suffix", suffix, "variable type suffix")
 
 
-class LoggerType(str, Enum):
+class LoggerType(StrEnum):
     """Logger family that wrote a file group (the site config's file_formats values).
 
     Not a file format: Campbell (CSI) loggers can write TOA5, TOB1, TOB3 and
@@ -77,7 +77,7 @@ class LoggerType(str, Enum):
     LICOR = "LICOR"
 
 
-class FileFormat(str, Enum):
+class FileFormat(StrEnum):
     """Raw file format fluxcore can parse."""
 
     TOA5 = "TOA5"
@@ -98,7 +98,7 @@ DEFAULT_FILE_FORMAT = {
 }
 
 
-class FluxSystemType(str, Enum):
+class FluxSystemType(StrEnum):
     """Flux-processing software that produced a site's EddyPro-format output."""
 
     TERNFLUX = "TERNFLUX"
