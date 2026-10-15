@@ -486,5 +486,54 @@ class ResolveQCConfigTestCase(unittest.TestCase):
         self.assertEqual(merged.variables, {})
 
 
+class CorrectionSchemaTestCase(unittest.TestCase):
+    def _spec(self, **fields):
+        return qc_config_schema.VariableQCSpec.model_validate(fields)
+
+    def test_open_ended_windows_parse(self):
+        spec = self._spec(
+            linear=[{"end": "2023-06-01 00:00", "slope": 1.05}],
+            wd_offset=[{"start": "2024-01-01 00:00", "offset": -12}],
+        )
+        self.assertIsNone(spec.linear[0].start)
+        self.assertEqual(spec.linear[0].offset, 0.0)
+        self.assertIsNone(spec.wd_offset[0].end)
+
+    def test_start_after_end_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._spec(
+                linear=[{"start": "2023-06-01", "end": "2023-01-01", "slope": 2}]
+            )
+
+    def test_empty_correction_list_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._spec(linear=[])
+
+    def test_wd_offset_only_for_wind_direction(self):
+        for name in ("Ta_Av", "Wd_SONIC_Sd"):
+            cfg = qc_config_schema.SiteQCConfig(
+                site_name="TestSite",
+                variables={name: self._spec(wd_offset=[{"offset": 10}])},
+            )
+            with self.assertRaises(ValueError) as ctx:
+                qc_config_schema.validate_qc_config_variables(cfg, {name})
+            self.assertIn("wd_offset", str(ctx.exception))
+
+        cfg = qc_config_schema.SiteQCConfig(
+            site_name="TestSite",
+            variables={"Wd_SONIC_Av": self._spec(wd_offset=[{"offset": 10}])},
+        )
+        qc_config_schema.validate_qc_config_variables(cfg, {"Wd_SONIC_Av"})
+
+    def test_resolve_carries_a_correction_only_entry(self):
+        ds = _resolve_ds(["Fco2"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test",
+            variables={"Fco2": self._spec(linear=[{"slope": 1.1}])},
+        )
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables["Fco2"].linear[0].slope, 1.1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -156,5 +156,48 @@ class MADFilterTestCase(unittest.TestCase):
         self.assertEqual(nrecs // window_nrecs, 3)
 
 
+def _window(start=None, end=None, **values):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        start=None if start is None else pd.Timestamp(start),
+        end=None if end is None else pd.Timestamp(end),
+        **values,
+    )
+
+
+class LinearCorrectionTestCase(unittest.TestCase):
+    def setUp(self):
+        idx = pd.date_range("2020-01-01 00:30", periods=4, freq="30min")
+        self.series = pd.Series([1.0, 2.0, np.nan, 4.0], index=idx)
+
+    def test_window_is_inclusive_and_values_outside_untouched(self):
+        out, changed = qc_service.linear_correction(
+            self.series,
+            [_window("2020-01-01 01:00", "2020-01-01 01:30", slope=2.0, offset=1.0)],
+        )
+        np.testing.assert_array_equal(out.to_numpy(), [1.0, 5.0, np.nan, 4.0])
+        self.assertEqual(changed.tolist(), [False, True, True, False])
+
+    def test_open_ended_window_and_windows_apply_in_order(self):
+        out, _ = qc_service.linear_correction(
+            self.series,
+            [
+                _window(None, "2020-01-01 01:00", slope=10.0, offset=0.0),
+                _window("2020-01-01 01:00", None, slope=1.0, offset=-1.0),
+            ],
+        )
+        np.testing.assert_array_equal(out.to_numpy(), [10.0, 19.0, np.nan, 3.0])
+
+
+class WdOffsetTestCase(unittest.TestCase):
+    def test_offset_wraps_into_0_360(self):
+        idx = pd.date_range("2020-01-01 00:30", periods=3, freq="30min")
+        series = pd.Series([350.0, 10.0, 180.0], index=idx)
+        out, changed = qc_service.wd_offset(series, [_window(offset=20.0)])
+        np.testing.assert_array_equal(out.to_numpy(), [10.0, 30.0, 200.0])
+        self.assertTrue(changed.all())
+
+
 if __name__ == "__main__":
     unittest.main()

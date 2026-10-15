@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""L2 QC check registry: Range, ExcludeDates, Dependency, Flag, MADFilter checks.
+"""L2 corrections and checks.
 
-Ported from PyFluxPro's scripts/pfp_ck.py (do_rangecheck, do_excludedates,
+Corrections: Linear, WdOffset. Checks: Range, ExcludeDates, Dependency, Flag,
+MADFilter. Ported from PyFluxPro's scripts/pfp_ts.py (ApplyLinear,
+ApplyWdOffset) and scripts/pfp_ck.py (do_rangecheck, do_excludedates,
 do_dependencycheck, do_EPQCFlagCheck, do_madfilter/_1/_2), reimplemented as
 small pure functions against this pipeline's own pd.Series/numpy rather than
 PyFluxPro's configobj/DataStructure/masked-array machinery.
@@ -9,7 +11,9 @@ PyFluxPro's configobj/DataStructure/masked-array machinery.
 Every check function returns a boolean "bad" mask (True =
 fails this check), same length/index as its input — never a masked-and-filled
 series — so DependencyCheck can consume other checks' outputs uniformly, and
-all flag-combination policy stays in orchestration/qc_pipeline.py.
+all flag-combination policy stays in orchestration/qc_pipeline.py. The two
+corrections instead return (corrected series, mask of the records they
+changed).
 """
 
 import numpy as np
@@ -22,6 +26,46 @@ MAD_ZFC = 5.5
 MAD_EDGE_THRESHOLD = (20.0, 80.0)
 
 
+def in_window(index: pd.DatetimeIndex, start, end) -> np.ndarray:
+    """True where index falls within [start, end], inclusive; None is open-ended."""
+    inside = np.ones(len(index), dtype=bool)
+    if start is not None:
+        inside &= index >= pd.Timestamp(start)
+    if end is not None:
+        inside &= index <= pd.Timestamp(end)
+    return inside
+
+
+def linear_correction(series: pd.Series, windows) -> tuple[pd.Series, pd.Series]:
+    """Apply slope * value + offset within each window, in order.
+
+    For instruments or logger programs deployed with wrong scaling
+    coefficients. `windows` have start/end/slope/offset attributes.
+    """
+    series = series.copy()
+    changed = np.zeros(len(series), dtype=bool)
+    for w in windows:
+        inside = in_window(series.index, w.start, w.end)
+        series[inside] = series[inside] * w.slope + w.offset
+        changed |= inside
+    return series, pd.Series(changed, index=series.index)
+
+
+def wd_offset(series: pd.Series, windows) -> tuple[pd.Series, pd.Series]:
+    """Add an offset to wind direction within each window, wrapping to [0, 360).
+
+    For a wind vane or sonic installed with a misaligned north. `windows`
+    have start/end/offset attributes.
+    """
+    series = series.copy()
+    changed = np.zeros(len(series), dtype=bool)
+    for w in windows:
+        inside = in_window(series.index, w.start, w.end)
+        series[inside] = (series[inside] + w.offset) % 360
+        changed |= inside
+    return series, pd.Series(changed, index=series.index)
+
+
 def range_check(series: pd.Series, lower: float, upper: float) -> pd.Series:
     """Boolean mask, True where series < lower or series > upper.
 
@@ -32,10 +76,10 @@ def range_check(series: pd.Series, lower: float, upper: float) -> pd.Series:
 
 
 def exclude_dates_check(index: pd.DatetimeIndex, ranges: list[tuple]) -> pd.Series:
-    """Boolean mask, True where index falls within any [start, end] range (inclusive)."""
+    """Boolean mask, True where index falls within any [start, end] range."""
     bad = np.zeros(len(index), dtype=bool)
     for start, end in ranges:
-        bad |= (index >= pd.Timestamp(start)) & (index <= pd.Timestamp(end))
+        bad |= in_window(index, start, end)
     return pd.Series(bad, index=index)
 
 

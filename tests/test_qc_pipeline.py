@@ -246,5 +246,50 @@ class ApplyQCWithResolvedDefaultsIntegrationTestCase(unittest.TestCase):
         self.assertEqual(fco2_flags[0], 0)
 
 
+class CorrectionTestCase(unittest.TestCase):
+    def _run(self, **spec):
+        ds = _build_dataset()
+        ds["Ta_Av"][5, 0, 0] = np.nan
+        qc_config = SiteQCConfig(
+            site_name="TestSite",
+            variables={"Ta_Av": VariableQCSpec.model_validate(spec)},
+        )
+        out = qc_pipeline.apply_qc(ds, qc_config)
+        return (
+            out["Ta_Av"].squeeze().to_numpy(),
+            out["Ta_Av_QCFlag"].squeeze().to_numpy(),
+            out["Ta_Av"].attrs,
+        )
+
+    def test_corrected_values_kept_and_flagged_10(self):
+        # Window covers records 2-5: 3 is out of range after correction,
+        # 5 is missing.
+        values, flags, attrs = self._run(
+            linear=[
+                {"start": "2020-01-01 01:00", "end": "2020-01-01 02:30", "slope": 2.0}
+            ],
+            range_check={"lower": -10, "upper": 50},
+        )
+        self.assertEqual(values[2], 20.0)
+        self.assertEqual(flags.tolist()[:7], [0, 0, 10, 2, 10, 1, 0])
+        self.assertTrue(np.isnan(values[3]))
+        self.assertEqual(
+            attrs["linear_correction"], "2020-01-01 01:00,2020-01-01 02:30,2.0,0.0"
+        )
+
+    def test_corrected_variable_is_good_for_dependents(self):
+        ds = _build_dataset()
+        qc_config = SiteQCConfig(
+            site_name="TestSite",
+            variables={
+                "Ta_Av": VariableQCSpec.model_validate({"linear": [{"slope": 1.0}]}),
+                "Fco2": VariableQCSpec(dependency_check=["Ta_Av"]),
+            },
+        )
+        out = qc_pipeline.apply_qc(ds, qc_config)
+        self.assertEqual(int(out["Fco2_QCFlag"].sum()), 0)
+        self.assertEqual(int(out["Fco2"].isnull().sum()), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

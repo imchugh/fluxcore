@@ -100,11 +100,54 @@ class MADFilterSpec(BaseModel):
         return v
 
 
-class VariableQCSpec(BaseModel):
-    """The checks configured for one L1 output variable (exact store name)."""
+class _DateWindow(BaseModel):
+    """A date range, inclusive; a missing start or end is open-ended."""
 
     model_config = ConfigDict(extra="forbid")
 
+    start: datetime | None = None
+    end: datetime | None = None
+
+    @model_validator(mode="after")
+    def check_order(self):
+        """Enforce start <= end when both are given."""
+        if self.start and self.end and self.start > self.end:
+            raise ValueError(f"start ({self.start}) must not be after end ({self.end})")
+        return self
+
+
+class LinearCorrectionSpec(_DateWindow):
+    """Rescale values within a date range: slope * value + offset.
+
+    Ported from PyFluxPro's Linear (pfp_ts.ApplyLinear), for an instrument or
+    logger program deployed with wrong scaling coefficients. Applied in
+    canonical units, before the checks.
+    """
+
+    slope: float = 1.0
+    offset: float = 0.0
+
+
+class WdOffsetSpec(_DateWindow):
+    """Add an offset to wind direction within a date range, modulo 360.
+
+    Ported from PyFluxPro's Wd offset (pfp_ts.ApplyWdOffset), for a vane or
+    sonic installed with a misaligned north. Applied before the checks.
+    """
+
+    offset: float
+
+
+class VariableQCSpec(BaseModel):
+    """The corrections and checks configured for one L1 output variable.
+
+    Keyed by the variable's exact store name.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    linear: list[LinearCorrectionSpec] | None = None
+    wd_offset: list[WdOffsetSpec] | None = None
     range_check: RangeCheckSpec | None = None
     exclude_dates: list[tuple[datetime, datetime]] | None = None
     dependency_check: list[str] | None = None
@@ -125,12 +168,12 @@ class VariableQCSpec(BaseModel):
                 )
         return v
 
-    @field_validator("dependency_check")
+    @field_validator("dependency_check", "linear", "wd_offset")
     @classmethod
-    def check_dependency_check_nonempty(cls, v):
-        """Reject an explicitly-empty dependency_check list."""
+    def check_nonempty(cls, v, info):
+        """Reject an explicitly-empty list."""
         if v is not None and len(v) == 0:
-            raise ValueError("dependency_check must list at least one variable")
+            raise ValueError(f"{info.field_name} must list at least one entry")
         return v
 
 
@@ -247,6 +290,11 @@ def validate_qc_config_variables(
     missing = set()
 
     for name, spec in qc_config.variables.items():
+        if spec.wd_offset is not None and not _is_wind_direction(name):
+            raise ValueError(
+                f"QC config for site {qc_config.site_name!r}: wd_offset is only "
+                f"for a wind direction (Wd, not its Sd/Vr), not {name!r}"
+            )
         if name not in available:
             missing.add(name)
         for dep in spec.dependency_check or ():
@@ -265,6 +313,15 @@ def validate_qc_config_variables(
             f"QC config for site {qc_config.site_name!r} references variable(s) "
             f"not present in the data store: {sorted(missing)}"
         )
+
+
+def _is_wind_direction(name: str) -> bool:
+    """True for a wind direction itself; not its spread (Sd/Vr)."""
+    try:
+        parsed = parse_variable_name(name)
+    except VariableNameParseError:
+        return False
+    return parsed.quantity == "Wd" and parsed.statistic_id not in ("Sd", "Vr")
 
 
 def load_dependency_defaults(
@@ -441,25 +498,21 @@ def resolve_qc_config(
             if gated:
                 dependency_check = gated
 
-        exclude_dates = site_spec.exclude_dates if site_spec else None
-        flag_check = site_spec.flag_check if site_spec else None
-        mad_filter = site_spec.mad_filter if site_spec else None
-
-        if (
-            range_check is None
-            and dependency_check is None
-            and exclude_dates is None
-            and flag_check is None
-            and mad_filter is None
-        ):
+        fields = {
+            # Corrections and the remaining checks have no defaults.
+            field: getattr(site_spec, field) if site_spec else None
+            for field in (
+                "linear",
+                "wd_offset",
+                "exclude_dates",
+                "flag_check",
+                "mad_filter",
+            )
+        }
+        fields.update(range_check=range_check, dependency_check=dependency_check)
+        if all(value is None for value in fields.values()):
             continue
 
-        merged[var_name] = VariableQCSpec(
-            range_check=range_check,
-            exclude_dates=exclude_dates,
-            dependency_check=dependency_check,
-            flag_check=flag_check,
-            mad_filter=mad_filter,
-        )
+        merged[var_name] = VariableQCSpec(**fields)
 
     return SiteQCConfig(site_name=qc_config.site_name, variables=merged)

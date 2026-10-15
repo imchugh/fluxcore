@@ -81,5 +81,27 @@ Fsd_Av:
     zfc: 5.5
     edge_threshold: [20.0, 80.0]
 
-# A variable can combine any/all of the checks above — e.g. Fco2 in this
-# template already combines range_check with dependency_check.
+# --- linear ---
+# Corrects data from an instrument or logger program deployed with wrong
+# scaling coefficients (ported from PyFluxPro's Linear): value * slope +
+# offset, in canonical units, within each [start, end] window (inclusive;
+# omit start or end for open-ended). Windows apply in the order listed.
+# Corrections run before every check, so the checks see corrected values;
+# corrected records are flagged 10 and kept (a later check that fires still
+# overwrites the flag and masks the value). The variable records its windows
+# in a linear_correction attribute.
+Fld_Av:
+  linear:
+    - {start: "2023-03-01 00:00", end: "2023-08-15 12:00", slope: 1.08, offset: 0.0}
+
+# --- wd_offset ---
+# Corrects a wind direction from a vane or sonic installed with a misaligned
+# north (ported from PyFluxPro's Wd offset): adds `offset` degrees within each
+# window, wrapping to [0, 360). Wind direction (Wd) variables only. Flagged 10
+# like linear; recorded in a wd_offset attribute.
+Wd_SONIC_Av:
+  wd_offset:
+    - {start: "2024-02-01 09:30", offset: -15}
+
+# A variable can combine any/all of the corrections and checks above — e.g.
+# Fco2 in this template already combines range_check with dependency_check.
