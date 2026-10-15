@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Dataframe conditioning utilities: index validation, gap-filling, corrections."""
+"""Dataframe conditioning utilities: index validation and gap-filling."""
 
-import numpy as np
 import pandas as pd
-from numpy.typing import ArrayLike
 
 
 def check_datetime_index(df: pd.DataFrame) -> None:
@@ -84,12 +82,3 @@ def condition_dataframe(
     # push the caller into a full rebuild.
     interval = interval_out or interval_in or infer_interval(df)
     return df.resample(f"{interval}min").asfreq()
-
-
-def apply_linear_correction(
-    series: ArrayLike, slope: float = 1.0, intercept: float = 0.0
-) -> ArrayLike:
-    """Apply a linear correction (series * slope + intercept)."""
-    index = series.index if isinstance(series, pd.Series) else None
-    result = np.array(series, dtype=float) * slope + intercept
-    return pd.Series(result, index=index) if index is not None else result
