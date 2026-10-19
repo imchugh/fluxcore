@@ -22,3 +22,18 @@ H2O_MOL_MASS = 18.02
 ZERO_C_IN_K = 273.15
 # Molar gas constant (J/mol/K): exact since the 2019 SI redefinition (CODATA).
 R = 8.314462618
+# Molar mass of dry air (g/mol), as PyFluxPro uses it.
+DRY_AIR_MOL_MASS = 28.97
+# Specific gas constants (J/kg/K), derived from R so they stay consistent
+# with it (PyFluxPro's fixed 287.04/461.5 differ by under 0.03%).
+R_DRY_AIR = R / (DRY_AIR_MOL_MASS / 1000)
+R_WATER_VAPOUR = R / (H2O_MOL_MASS / 1000)
+CP_DRY_AIR = 1004.67  # specific heat of dry air at constant pressure, J/kg/K
+GRAVITY = 9.81  # m/s^2
+VON_KARMAN = 0.4
+# Soil heat-storage constants (as PyFluxPro): heat capacities (J/kg/K) of the
+# mineral and organic soil components and of water; density of water (kg/m^3).
+SOIL_MINERAL_HEAT_CAPACITY = 840.0
+SOIL_ORGANIC_HEAT_CAPACITY = 1920.0
+WATER_HEAT_CAPACITY = 4180.0
+WATER_DENSITY = 1000.0

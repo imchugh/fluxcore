@@ -26,12 +26,32 @@ def register_conversion(*quantities):
     return decorator
 
 
-@register_conversion("Fco2")
+@register_conversion("Fco2", "Sco2", "NEE", "NEP", "GPP", "ER")
 def convert_CO2_flux(data, from_units="mg/m^2/s"):
     """Convert CO2 flux from mg/m^2/s to canonical umol/m^2/s."""
     if from_units == "mg/m^2/s":
         return data * 1000 / CO2_MOL_MASS
     raise ValueError(f"Unsupported from_units {from_units!r} for CO2 flux conversion")
+
+
+@register_conversion("UxC", "UyC", "UzC")
+def convert_CO2_covariance(data, from_units="umol/m^2/s"):
+    """Convert a wind-CO2 covariance from umol/m^2/s to canonical mg/m^2/s."""
+    if from_units == "umol/m^2/s":
+        return data * CO2_MOL_MASS / 1000
+    raise ValueError(
+        f"Unsupported from_units {from_units!r} for CO2 covariance conversion"
+    )
+
+
+@register_conversion("CO2")
+def convert_CO2_mole_fraction(data, from_units="percent"):
+    """Convert a CO2 mole fraction from percent to canonical umol/mol."""
+    if from_units == "percent":
+        return data * 10**4
+    raise ValueError(
+        f"Unsupported from_units {from_units!r} for CO2 mole fraction conversion"
+    )
 
 
 @register_conversion("CO2c")
@@ -102,7 +122,7 @@ def convert_pressure(data, from_units="Pa"):
     raise ValueError(f"Unsupported from_units {from_units!r} for pressure conversion")
 
 
-@register_conversion("RH")
+@register_conversion("RH", "RHint")
 def convert_RH(data, from_units="frac"):
     """Convert relative humidity from a 0-1 fraction to canonical percent."""
     if from_units == "frac":
@@ -118,7 +138,7 @@ def convert_Sws(data, from_units="percent"):
     raise ValueError(f"Unsupported from_units {from_units!r} for Sws conversion")
 
 
-@register_conversion("Ta", "Tv")
+@register_conversion("Ta", "Tv", "Ts", "Td", "Tcanopy", "Tint", "Tpanel")
 def convert_temperature(data, from_units="K"):
     """Convert temperature from Kelvin to canonical degrees Celsius."""
     if from_units == "K":
