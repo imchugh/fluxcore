@@ -278,9 +278,10 @@ def _apply_conversions(
 ) -> pd.DataFrame:
     """Apply statistical transforms and unit conversions in a single pass.
 
-    For variance variables: take the square root (data → stdev), then derive
-    the post-transform units and convert further if site stdev-form units
-    differ from canonical stdev-form units.
+    For variance inputs (the input's raw statistic, which may differ from the
+    variable's): take the square root (data → stdev), then derive the
+    post-transform units and convert further if site stdev-form units differ
+    from canonical stdev-form units.
 
     For counter variables: output is always invalid_count (0 = no error).
     Sites storing valid_count are converted via unit_conversions; sites
@@ -298,7 +299,9 @@ def _apply_conversions(
         spec = specs_by_alias[variable]
         from_units = spec.site_units
 
-        if spec.statistic_type == StatisticType.VAR:
+        # The raw data's own statistic, not the variable's: a stitched
+        # variable can mix variance and standard-deviation inputs.
+        if spec.raw_statistic_type == StatisticType.VAR:
             df[variable] = df[variable] ** 0.5
             from_units = resolve_variance_units(spec.site_units)
 

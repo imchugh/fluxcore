@@ -177,6 +177,32 @@ instrument:
 
 `Fh` (sensible heat flux) uses the **single** form (sonic only). Although air density correction involves humidity, this dependency is not considered significant enough to warrant compound notation. Comma-separated strings (e.g. `CSAT3B, LI-7500RS`) are **not** valid — do not use them.
 
+### Site config: stitching inputs across a logger change
+
+A variable can list several `input_variables`, each with `begin:`/`end:` dates; `dataframe_builder` joins them into one series at the dates (instrument or logger changeovers). Converting raw data is per input, so these per-input fields may differ between eras:
+
+- `units` — each input converted from its own units.
+- `diag_type` (counters) — e.g. an old `invalid_count` warning count stitched to a new `valid_count` sample count; each is normalised to `invalid_count` separately.
+- `statistic_type` (optional) — the raw form when it differs from the variable's, **only** `variance` ↔ `standard_deviation`. A variance input is square-rooted; a standard-deviation input passes through. Defaults to the variable's `statistic_type`. The variable's own `statistic_type` still sets the output name, attrs, QC and derivations; the input's only drives conversion (`VariableSpec.raw_statistic_type`) and unit validation.
+
+```yaml
+Ux_SONIC_Sd:
+  statistic_type: standard_deviation
+  height: 15.0
+  input_variables:
+    covUxUx:                       # old logger stored variance
+      instrument: Campbell Scientific CSAT3B
+      units: m^2/s^2
+      statistic_type: variance
+      file: Site_EC_slow_flux
+      end: 2026-10-20 11:30
+    Ux_stdev:                      # new logger stores standard deviation
+      instrument: Campbell Scientific CSAT3B
+      units: m/s
+      file: Site_EC_TERNflux
+      begin: 2026-10-20 12:00
+```
+
 ### Site config: horizontal-location descriptions
 
 The canonical name's horizontal-location qualifier (`Ts_a`, `Sws_b`, …) is a bare letter that groups co-located sensor arrays (e.g. one soil pit) but carries no meaning of its own. A site describes its letters in its own site config, beside the variable names that use them:

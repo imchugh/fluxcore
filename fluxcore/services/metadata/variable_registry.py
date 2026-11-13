@@ -60,6 +60,16 @@ class VariableSpec:
     # Diagnostic counter direction (Diag variables only)
     diag_type: DiagnosticType | None = None
 
+    # The raw data's statistic when it differs from statistic_type (a
+    # standard-deviation input on a variance variable, or the reverse).
+    # None means the same as statistic_type; see raw_statistic_type.
+    input_statistic_type: StatisticType | None = None
+
+    @property
+    def raw_statistic_type(self) -> StatisticType | None:
+        """The statistic the raw data is stored as, which drives conversion."""
+        return self.input_statistic_type or self.statistic_type
+
 
 def build_variable_registry(
     runtime_cfg: SiteRuntimeConfig,
@@ -112,6 +122,11 @@ def build_variable_registry(
                     begin=raw_input.begin,
                     end=raw_input.end,
                     diag_type=raw_input.diag_type,
+                    input_statistic_type=(
+                        raw_input.statistic_type
+                        if raw_input.statistic_type != var_cfg.statistic_type
+                        else None
+                    ),
                 )
 
     return registry

@@ -55,9 +55,13 @@ class RawVariableMetadata:
     begin: datetime | str | None = None
     end: datetime | str | None = None
     instrument_uri: str | dict[str, str | None] | None = None
-    # Per input, not per variable: a counter stitched across a logger change
-    # can switch between valid_count and invalid_count at the changeover.
+    # Per input, not per variable: a variable stitched across a logger change
+    # can switch counter direction (valid_count vs invalid_count) or raw
+    # statistic (variance vs standard deviation) at the changeover.
+    # statistic_type is the raw form (resolved: the input's own, else the
+    # variable's); VariableDefinition.statistic_type is the variable's identity.
     diag_type: DiagnosticType | None = None
+    statistic_type: StatisticType | None = None
 
 
 @pydantic_dataclass(frozen=True)
@@ -251,18 +255,30 @@ def build_runtime_config(
             statistic_type=raw_cfg.statistic_type,
         )
 
+        # Each input's raw statistic: its own if declared, else the variable's.
+        input_statistics = {
+            raw_name: cfg.statistic_type or raw_cfg.statistic_type
+            for raw_name, cfg in raw_cfg.input_variables.items()
+        }
+
         # Validate that each input's declared units are acceptable for this
-        # quantity. COUNTER variables are skipped — their units field is a
-        # placeholder ("dimensionless"); the meaningful unit (valid_count vs
+        # quantity in the input's own raw statistic (a variance input needs
+        # squared units even on a standard-deviation variable). COUNTER
+        # variables are skipped — their units field is a placeholder
+        # ("dimensionless"); the meaningful unit (valid_count vs
         # invalid_count) is carried by diag_type and validated separately.
         if raw_cfg.variable_type != VariableType.COUNTER:
             for raw_name, cfg in raw_cfg.input_variables.items():
-                if cfg.units not in quantity_canonical_metadata.valid_input_units:
+                valid_units = canonical_metadata.resolve_metadata(
+                    quantity=quantity,
+                    variable_type=raw_cfg.variable_type,
+                    statistic_type=input_statistics[raw_name],
+                ).valid_input_units
+                if cfg.units not in valid_units:
                     raise ValueError(
                         f"Variable '{variable}' input '{raw_name}': "
                         f"units '{cfg.units}' is not valid for quantity "
-                        f"'{quantity}'. Expected one of: "
-                        f"{quantity_canonical_metadata.valid_input_units}"
+                        f"'{quantity}'. Expected one of: {valid_units}"
                     )
 
         _check_no_repeated_instrument_era(
@@ -280,6 +296,7 @@ def build_runtime_config(
                 end=cfg.end,
                 instrument_uri=_resolve_instrument_uri(cfg.instrument, instrument_uris),
                 diag_type=cfg.diag_type,
+                statistic_type=input_statistics[raw_name],
             )
             for raw_name, cfg in raw_cfg.input_variables.items()
         )

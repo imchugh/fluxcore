@@ -41,6 +41,11 @@ class InputVariableConfig(BaseModel):
 
     # Optional
     diag_type: DiagnosticType | None = None
+    # The form this input's raw data is stored in, when it differs from the
+    # variable's statistic_type: lets a variance and a standard deviation of
+    # the same quantity be stitched across a logger change. Defaults to the
+    # variable's statistic_type; only variance <-> standard_deviation may differ.
+    statistic_type: StatisticType | None = None
     begin: datetime | str | None = None
     end: datetime | str | None = None
 
@@ -164,6 +169,32 @@ class VariableConfig(BaseModel):
                     f"{self.variable_type.value} variables cannot define statistic_type"
                 )
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_input_statistic_types(self):
+        """Allow an input's raw statistic to differ only as variance <-> stdev.
+
+        Taking a square root is the only statistic conversion the pipeline
+        can do, so any other mismatch (e.g. a sum input on an average
+        variable) is a config error.
+        """
+        interchangeable = {StatisticType.VAR, StatisticType.STDEV}
+        for input_name, input_cfg in self.input_variables.items():
+            input_stat = input_cfg.statistic_type
+            if input_stat is None or input_stat == self.statistic_type:
+                continue
+            if self.variable_type != VariableType.CONTINUOUS:
+                raise ValueError(
+                    f"Input '{input_name}': {self.variable_type.value} "
+                    "variables cannot define an input statistic_type"
+                )
+            if {input_stat, self.statistic_type} != interchangeable:
+                raise ValueError(
+                    f"Input '{input_name}': statistic_type '{input_stat.value}' "
+                    f"cannot feed a '{self.statistic_type.value}' variable; "
+                    "only variance and standard_deviation are interchangeable"
+                )
         return self
 
 
