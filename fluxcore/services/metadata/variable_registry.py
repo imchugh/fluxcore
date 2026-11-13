@@ -111,7 +111,7 @@ def build_variable_registry(
                     file_group=group_name,
                     begin=raw_input.begin,
                     end=raw_input.end,
-                    diag_type=var_cfg.diag_type,
+                    diag_type=raw_input.diag_type,
                 )
 
     return registry

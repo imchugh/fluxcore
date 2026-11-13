@@ -4,9 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from fluxcore.domain.enums import DiagnosticType
+from fluxcore.services.metadata.file_group_builder import build_file_groups
 from fluxcore.services.metadata.runtime_config_builder import (
     build_runtime_config_from_file,
 )
+from fluxcore.services.metadata.variable_registry import build_variable_registry
 
 VALID_YAML = """\
 site: TestSite
@@ -64,6 +67,30 @@ class RuntimeConfigBuilderTestCase(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"not declared in file_formats.*met"):
             self._build(yaml_text)
 
+    def test_stitched_counter_keeps_each_inputs_diag_type(self):
+        """A counter stitched across a logger change keeps each input's own
+        diag_type, so the valid_count era is converted and the invalid_count
+        era passes through (it used to inherit the first input's type)."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "TestSite.yml"
+            config_path.write_text(STITCHED_COUNTER_YAML)
+            # File groups only need a base path; no data is read.
+            cfg = build_runtime_config_from_file(
+                config_path, input_data_path=Path("/some/arbitrary/data/dir")
+            )
+        raw_inputs = cfg.variables["Diag_SONIC"].raw_inputs
+        self.assertEqual(
+            [r.diag_type for r in raw_inputs],
+            [DiagnosticType.INVALID_COUNT, DiagnosticType.VALID_COUNT],
+        )
+
+        specs = build_variable_registry(
+            runtime_cfg=cfg, file_groups=build_file_groups(cfg)
+        )
+        by_raw_name = {s.raw_name: s.diag_type for s in specs.values()}
+        self.assertEqual(by_raw_name["Warn_old"], DiagnosticType.INVALID_COUNT)
+        self.assertEqual(by_raw_name["samples_new"], DiagnosticType.VALID_COUNT)
+
     def test_unused_file_formats_entry_is_rejected(self):
         yaml_text = VALID_YAML.replace("  flux: CSI\n", "  flux: CSI\n  spare: CSI\n")
         with self.assertRaisesRegex(ValueError, r"no input variable uses.*spare"):
@@ -97,6 +124,33 @@ variables:
         file: flux
         units: degC
         begin: 2021-01-01 00:30
+"""
+
+
+STITCHED_COUNTER_YAML = """\
+site: TestSite
+file_formats:
+  old: CSI
+  new: CSI
+flux_system: TERNFLUX
+flux_file: new
+variables:
+  Diag_SONIC:
+    variable_type: counter
+    height: 15.0
+    input_variables:
+      Warn_old:
+        instrument: Sensor A
+        units: dimensionless
+        diag_type: invalid_count
+        file: old
+        end: 2020-01-01 00:00
+      samples_new:
+        instrument: Sensor A
+        units: dimensionless
+        diag_type: valid_count
+        file: new
+        begin: 2020-01-01 00:30
 """
 
 

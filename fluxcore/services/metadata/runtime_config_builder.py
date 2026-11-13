@@ -55,6 +55,9 @@ class RawVariableMetadata:
     begin: datetime | str | None = None
     end: datetime | str | None = None
     instrument_uri: str | dict[str, str | None] | None = None
+    # Per input, not per variable: a counter stitched across a logger change
+    # can switch between valid_count and invalid_count at the changeover.
+    diag_type: DiagnosticType | None = None
 
 
 @pydantic_dataclass(frozen=True)
@@ -83,7 +86,6 @@ class VariableDefinition:
     # Optionals
     height_range: tuple[float, float] | None = None
     statistic_type: StatisticType | None = None
-    diag_type: DiagnosticType | None = None
     instrument_uri: str | dict[str, str | None] | None = None
 
 
@@ -277,6 +279,7 @@ def build_runtime_config(
                 begin=cfg.begin,
                 end=cfg.end,
                 instrument_uri=_resolve_instrument_uri(cfg.instrument, instrument_uris),
+                diag_type=cfg.diag_type,
             )
             for raw_name, cfg in raw_cfg.input_variables.items()
         )
@@ -294,7 +297,6 @@ def build_runtime_config(
             raw_inputs=raw_inputs,
             canonical=quantity_canonical_metadata,
             parsed_name_elems=parsed_name_elems,
-            diag_type=first_input.diag_type,
             instrument_uri=raw_inputs[0].instrument_uri,
         )
 
