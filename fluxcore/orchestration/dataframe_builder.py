@@ -109,15 +109,20 @@ def build_dataframe(
     Step 2 — concatenate all file groups horizontally.
     Step 3 — merge overlapping instrument periods into single columns.
     Step 4 — rename aliased columns to canonical output names.
-    Step 5 — truncate to the flux file group's temporal extent, so that
+    Step 5 — truncate to the flux record's temporal extent, so that
               ancillary data predating the flux system does not produce empty
-              output years. With ``start_date`` (an incremental tail), the
-              tail instead spans start_date to the last new flux record on the
-              regular time grid, and is empty if there is no new flux record:
-              exactly the rows a full build would add after start_date, so
-              appending it can't run the store ahead of the flux data or leave
-              holes in its time axis.
+              output years. The flux record is ``flux_file`` (the current
+              flux file) plus every earlier file stitched into the same
+              variables (see _flux_extent_groups), so a logger changeover
+              doesn't cut off the older era. With ``start_date`` (an
+              incremental tail), the tail instead spans start_date to the last
+              new record in ``flux_file`` itself on the regular time grid, and
+              is empty if there is no new flux record: exactly the rows a full
+              build would add after start_date, so appending it can't run the
+              store ahead of the flux data or leave holes in its time axis.
     """
+    extent_groups = _flux_extent_groups(specs_by_alias, flux_file)
+
     if quantities is not None:
         specs_by_alias = {
             alias: spec
@@ -133,6 +138,7 @@ def build_dataframe(
     empty = pd.DataFrame(index=pd.DatetimeIndex([], name="time"))
     dfs = []
     flux_index = None
+    extent_indexes = []
     for group_name, file_group in file_groups.items():
         loader = raw_data_loader.get_data_loader(
             file_group.file_format, start_date=start_date
@@ -151,6 +157,8 @@ def build_dataframe(
             # set it to an empty index, which would break Step 5 below.
             if group_name == flux_file and not group_df.empty:
                 flux_index = group_df.index
+            if group_name in extent_groups and not group_df.empty:
+                extent_indexes.append(group_df.index)
             dfs.append(group_df)
 
     # Step 2
@@ -171,8 +179,13 @@ def build_dataframe(
 
     # Step 5
     if start_date is None:
+        # Only when the current flux file contributed rows: a quantities
+        # filter that leaves out the flux file (or an empty one) skips the
+        # trim, as before, rather than trimming to an older era alone.
         if flux_index is not None:
-            df = df.loc[flux_index.min() : flux_index.max()]
+            start = min(index.min() for index in extent_indexes)
+            end = max(index.max() for index in extent_indexes)
+            df = df.loc[start:end]
     elif flux_file in file_groups:
         if flux_index is None:
             return empty
@@ -188,6 +201,32 @@ def build_dataframe(
             )
 
     return df
+
+
+def _flux_extent_groups(
+    specs_by_alias: dict[str, VariableSpec], flux_file: str | None
+) -> set[str]:
+    """File groups whose records make up the flux record.
+
+    ``flux_file`` itself, plus every group that supplies an earlier (or
+    later) era of a variable ``flux_file`` supplies — i.e. the old logger's
+    files after a changeover, stitched in through the variables' raw inputs.
+    A site that has never changed logger gets just ``{flux_file}``.
+    Ancillary groups (soil, profile) that feed only their own variables are
+    not included, so they are still trimmed to the flux record.
+    """
+    if flux_file is None:
+        return set()
+    flux_variables = {
+        spec.canonical_name
+        for spec in specs_by_alias.values()
+        if spec.file_group == flux_file
+    }
+    return {flux_file} | {
+        spec.file_group
+        for spec in specs_by_alias.values()
+        if spec.canonical_name in flux_variables
+    }
 
 
 def _build_file_group_dataframe(

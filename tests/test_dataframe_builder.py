@@ -84,9 +84,9 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
 
 
 class FluxExtentTruncationTestCase(unittest.TestCase):
-    """Step 5: output is truncated to the flux file group's extent."""
+    """Step 5: output is truncated to the flux record's extent."""
 
-    def _build(self, frames_by_group, start_date=None):
+    def _build(self, frames_by_group, start_date=None, specs_by_alias=None):
         groups = {name: SimpleNamespace(file_format="TOA5") for name in frames_by_group}
         patches = [
             mock.patch.object(dataframe_builder.raw_data_loader, "get_data_loader"),
@@ -113,7 +113,7 @@ class FluxExtentTruncationTestCase(unittest.TestCase):
             self.addCleanup(patcher.stop)
         return dataframe_builder.build_dataframe(
             file_groups=groups,
-            specs_by_alias={},
+            specs_by_alias=specs_by_alias or {},
             start_date=start_date,
             flux_file="flux",
             time_step=30,
@@ -128,6 +128,47 @@ class FluxExtentTruncationTestCase(unittest.TestCase):
         )
         self.assertEqual(out.index.min(), pd.Timestamp("2026-01-02 00:00"))
         self.assertEqual(out.index.max(), pd.Timestamp("2026-01-02 01:30"))
+
+    # A logger changeover: Fc's old era is in "old_flux", its new era in
+    # "flux" (the current flux file); "soil" feeds only its own variable.
+    CHANGEOVER_SPECS = {
+        "Fc_old_gp0": SimpleNamespace(canonical_name="Fc", file_group="old_flux"),
+        "Fc_gp1": SimpleNamespace(canonical_name="Fc", file_group="flux"),
+        "Ts_gp2": SimpleNamespace(canonical_name="Ts", file_group="soil"),
+    }
+
+    def test_full_build_spans_a_stitched_earlier_flux_file(self):
+        out = self._build(
+            {
+                "old_flux": _frame("2026-01-01 00:00", 4, Fc_old=1.0),
+                "flux": _frame("2026-01-03 00:00", 4, Fc=1.0),
+            },
+            specs_by_alias=self.CHANGEOVER_SPECS,
+        )
+        self.assertEqual(out.index.min(), pd.Timestamp("2026-01-01 00:00"))
+        self.assertEqual(out.index.max(), pd.Timestamp("2026-01-03 01:30"))
+
+    def test_ancillary_predating_both_flux_eras_is_still_trimmed(self):
+        out = self._build(
+            {
+                "soil": _frame("2025-12-30 00:00", 4, Ts=3.0),
+                "old_flux": _frame("2026-01-01 00:00", 4, Fc_old=1.0),
+                "flux": _frame("2026-01-03 00:00", 4, Fc=1.0),
+            },
+            specs_by_alias=self.CHANGEOVER_SPECS,
+        )
+        self.assertEqual(out.index.min(), pd.Timestamp("2026-01-01 00:00"))
+
+    def test_tail_ends_at_the_current_flux_file_not_an_earlier_era(self):
+        out = self._build(
+            {
+                "old_flux": _frame("2026-01-02 00:00", 6, Fc_old=1.0),
+                "flux": _frame("2026-01-02 00:00", 2, Fc=1.0),
+            },
+            start_date=pd.Timestamp("2026-01-02 00:00"),
+            specs_by_alias=self.CHANGEOVER_SPECS,
+        )
+        self.assertEqual(out.index.max(), pd.Timestamp("2026-01-02 00:30"))
 
     def test_tail_keeps_rows_before_the_first_new_flux_record(self):
         # A flux gap right after the checkpoint: the tail must still start

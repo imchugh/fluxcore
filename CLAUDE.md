@@ -185,6 +185,8 @@ A variable can list several `input_variables`, each with `begin:`/`end:` dates; 
 - `diag_type` (counters) — e.g. an old `invalid_count` warning count stitched to a new `valid_count` sample count; each is normalised to `invalid_count` separately.
 - `statistic_type` (optional) — the raw form when it differs from the variable's, **only** `variance` ↔ `standard_deviation`. A variance input is square-rooted; a standard-deviation input passes through. Defaults to the variable's `statistic_type`. The variable's own `statistic_type` still sets the output name, attrs, QC and derivations; the input's only drives conversion (`VariableSpec.raw_statistic_type`) and unit validation.
 
+`flux_file` names the **current** flux file; a logger changeover doesn't need it changed beyond pointing at the new logger's file. Older flux eras come in through the variables' raw inputs, and a full build's time extent (`dataframe_builder` step 5, which trims ancillary data predating the flux system) is the union of `flux_file` and every file group stitched into the same variables (`_flux_extent_groups`). Incremental tails still end at the last record of `flux_file` itself, the only flux file still growing, so a backfill of an older era (e.g. a comms gap patched from the logger) reaches the store through the nightly full rebuild.
+
 ```yaml
 Ux_SONIC_Sd:
   statistic_type: standard_deviation
