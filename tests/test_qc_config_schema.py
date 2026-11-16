@@ -350,6 +350,33 @@ class ResolveQCConfigTestCase(unittest.TestCase):
         self.assertEqual(merged.variables["Fco2"].range_check.lower, -50)
         self.assertEqual(merged.variables["Fco2"].range_check.upper, 30)
 
+    def test_average_ah_depends_on_its_own_ta_and_rh(self):
+        ds = _resolve_ds(["AH_2m", "Ta_2m", "RH_2m", "Ta_4m", "AH_IRGA_Av"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables["AH_2m"].dependency_check, ["Ta_2m", "RH_2m"])
+        # No Ta_IRGA/RH_IRGA companions: nothing attaches.
+        self.assertNotIn("AH_IRGA_Av", merged.variables)
+
+    def test_ah_humidity_dependency_is_existence_gated(self):
+        ds = _resolve_ds(["AH_36m", "Ta_36m"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables["AH_36m"].dependency_check, ["Ta_36m"])
+
+    def test_site_and_default_dependency_override_the_humidity_rule(self):
+        ds = _resolve_ds(["AH_2m", "Ta_2m", "RH_2m", "Diag_SONIC"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test",
+            variables={
+                "AH_2m": qc_config_schema.VariableQCSpec(
+                    dependency_check=["Diag_SONIC"]
+                )
+            },
+        )
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables["AH_2m"].dependency_check, ["Diag_SONIC"])
+
     def test_default_entry_dropped_when_own_variable_absent(self):
         ds = _resolve_ds(["Ta_Av"])
         site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})

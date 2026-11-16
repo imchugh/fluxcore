@@ -433,6 +433,30 @@ def lookup_default_range(
     )
 
 
+def _humidity_dependency(var_name: str, available: Iterable[str]) -> list[str] | None:
+    """Default dependency of an average AH on its own Ta and RH.
+
+    Profile/EC-height humidity sensors measure Ta and RH; AH is calculated
+    from them (on the logger, or by derive_missing_humidity), so a bad Ta or
+    RH makes the AH bad even when the AH stays inside its own range (e.g. a
+    sensor dropout dragging the half-hour Ta to -28 degC gives an AH of
+    ~0.3 g/m^3). Companions share the AH's name after the quantity
+    (AH_2m -> Ta_2m, RH_2m), the same pairing derive_missing_humidity's
+    derived names follow. Name-based rather than a _dependency_defaults.yml
+    entry because the names are per-site; existence-gated like those
+    entries, so AH_IRGA (no Ta_IRGA/RH_IRGA) gets nothing.
+    """
+    try:
+        parsed = parse_variable_name(var_name)
+    except VariableNameParseError:
+        return None
+    if parsed.quantity != "AH" or parsed.statistic_id not in (None, "Av"):
+        return None
+    suffix = var_name[len("AH") :]
+    deps = [f"{qty}{suffix}" for qty in ("Ta", "RH") if f"{qty}{suffix}" in available]
+    return deps or None
+
+
 def resolve_qc_config(
     qc_config: SiteQCConfig,
     dependency_defaults: dict[str, VariableQCSpec],
@@ -451,7 +475,8 @@ def resolve_qc_config(
         exact variable name, existence-gated against ds: an individual
         source name not present in ds is dropped from the list rather than
         dropping the whole entry; the whole entry is dropped only if every
-        source turns out unavailable.
+        source turns out unavailable. With no such entry, an average AH
+        depends on its own Ta and RH (_humidity_dependency).
 
     This is deliberately more tolerant than validate_qc_config_variables
     (strict, applied only to qc_config's own raw entries before this merge
@@ -497,6 +522,8 @@ def resolve_qc_config(
             gated = [dep for dep in default_spec.dependency_check if dep in available]
             if gated:
                 dependency_check = gated
+        if dependency_check is None:
+            dependency_check = _humidity_dependency(var_name, available)
 
         fields = {
             # Corrections and the remaining checks have no defaults.
