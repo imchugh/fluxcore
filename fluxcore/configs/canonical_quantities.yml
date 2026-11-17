@@ -494,6 +494,12 @@ W:
   standard_units: m/s
   valid_input_units:
   - m/s
+WTD:
+  long_name: Water table depth (positive below the surface)
+  standard_name: water_table_depth
+  standard_units: m
+  valid_input_units:
+  - m
 Wd:
   long_name: Wind direction
   standard_name: wind_from_direction
