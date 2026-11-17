@@ -241,8 +241,13 @@ def _build_file_group_dataframe(
 
     For each file: load, filter to expected variables, apply aliasing,
     apply statistical transforms and unit conversions.  Then concatenate
-    vertically across master + backup files and condition the time index.
+    vertically across the group's files and condition the time index.
     Files whose latest record predates start_date are skipped entirely.
+
+    Overlapping timestamps cascade in `FileGroup.all_files` order: master,
+    then backups newest to oldest, then patches. Each file only contributes
+    the timestamps no higher-precedence file has; the whole record is taken
+    from the winning file (records are not merged column by column).
     """
     rename_map = {
         entry.raw_name: entry.alias
@@ -289,7 +294,10 @@ def _build_file_group_dataframe(
             dtype="float64",
         )
 
-    df = pd.concat(dfs).sort_index()
+    # dfs is in precedence order, so keep="first" keeps the winning file's
+    # record; dedupe before sorting because sort_index isn't stable.
+    df = pd.concat(dfs)
+    df = df[~df.index.duplicated(keep="first")].sort_index()
 
     # Same rule as the no-files branch above, for a configured variable whose
     # column is absent from every file read this time (e.g. a sensor dropped

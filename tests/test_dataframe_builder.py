@@ -75,6 +75,43 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
 
         self.assertEqual(out["Tpanel_gp0"].notna().sum(), 2)
 
+    def test_overlaps_cascade_in_file_order(self):
+        # Files arrive in FileGroup.all_files order (master, newest backup,
+        # older backup, patch). Each takes only the timestamps no earlier
+        # file has, regardless of how the timestamps interleave.
+        frames = {
+            "master.dat": _frame("2026-01-01 02:00", 2, Ta=1.0),
+            "f.dat.1.backup": _frame("2026-01-01 01:00", 3, Ta=2.0),
+            "f.dat.backup": _frame("2026-01-01 00:00", 4, Ta=3.0),
+            "f.dat.patch": _frame("2026-01-01 00:00", 6, Ta=4.0),
+        }
+        out = self._build(frames, ["Ta"])
+
+        self.assertEqual(out["Ta_gp0"].tolist(), [3.0, 3.0, 2.0, 2.0, 1.0, 1.0])
+
+    def test_full_overlap_keeps_master_throughout(self):
+        # Large enough that an unstable sort would scramble which file's
+        # duplicate comes first (small arrays happen to sort stably).
+        frames = {
+            "master.dat": _frame("2026-01-01", 500, Ta=1.0),
+            "f.dat.backup": _frame("2026-01-01", 500, Ta=2.0),
+        }
+        out = self._build(frames, ["Ta"])
+
+        self.assertTrue((out["Ta_gp0"] == 1.0).all())
+
+    def test_patch_fills_only_gaps(self):
+        master = _frame("2026-01-01", 6, Ta=1.0).drop(
+            pd.to_datetime(["2026-01-01 01:00", "2026-01-01 01:30"])
+        )
+        frames = {
+            "master.dat": master,
+            "f.dat.patch": _frame("2026-01-01", 6, Ta=9.0),
+        }
+        out = self._build(frames, ["Ta"])
+
+        self.assertEqual(out["Ta_gp0"].tolist(), [1.0, 1.0, 9.0, 9.0, 1.0, 1.0])
+
     def test_group_with_no_rows_since_start_keeps_columns(self):
         frames = {"master.dat": _frame("2026-01-01", 2, Ta=1.0)}
         out = self._build(frames, ["Ta"], start_date=pd.Timestamp("2026-10-14"))

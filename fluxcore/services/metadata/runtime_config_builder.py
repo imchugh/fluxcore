@@ -5,7 +5,8 @@ Name syntax, quantity/units checks, and object assembly only; no external
 lookups. Two inputs are optional, adapter-supplied data: `instrument_uris`
 (instrument name -> URI; omitted, every `instrument_uri` is None) and
 `input_data_path` (where the site's raw files live; required later by
-file_group_builder.build_file_groups).
+file_group_builder.build_file_groups). A third, `input_patch_path`, is where
+the site's `.patch` gap-fill files live; None means the site has none.
 
 Two entry points:
     - build_runtime_config_from_file(file_path, input_data_path=None): raw
@@ -114,6 +115,11 @@ class SiteRuntimeConfig:
     # instrument_uri. Required by file_group_builder.build_file_groups.
     input_data_path: Path | None = None
 
+    # Adapter-populated: where this site's `.patch` gap-fill files live (see
+    # file_group_builder.FileGroup). None, or a directory that doesn't
+    # exist, means no patches.
+    input_patch_path: Path | None = None
+
     def get_logger_type(self, file_group: str) -> LoggerType:
         """Logger family that wrote file_group."""
         return self.logger_types[file_group]
@@ -205,6 +211,7 @@ def build_runtime_config(
     validated_config: SiteConfig,
     instrument_uris: dict[str, str | None] | None = None,
     input_data_path: Path | None = None,
+    input_patch_path: Path | None = None,
 ) -> SiteRuntimeConfig:
     """Build a SiteRuntimeConfig from a structurally-validated SiteConfig.
 
@@ -221,6 +228,7 @@ def build_runtime_config(
         validated_config: structurally-validated SiteConfig.
         instrument_uris: optional name -> URI map for enrichment.
         input_data_path: optional path to this site's raw input files.
+        input_patch_path: optional path to this site's `.patch` files.
 
     Returns:
         Immutable SiteRuntimeConfig.
@@ -333,12 +341,14 @@ def build_runtime_config(
         custom_metadata=custom_metadata,
         variables=site_variables,
         input_data_path=input_data_path,
+        input_patch_path=input_patch_path,
     )
 
 
 def build_runtime_config_from_file(
     file_path: Path,
     input_data_path: Path | None = None,
+    input_patch_path: Path | None = None,
 ) -> SiteRuntimeConfig:
     """Assemble a SiteRuntimeConfig from a site YAML file.
 
@@ -353,9 +363,14 @@ def build_runtime_config_from_file(
     Args:
         file_path: absolute path to the site config YAML.
         input_data_path: optional path to this site's raw input files.
+        input_patch_path: optional path to this site's `.patch` files.
 
     Returns:
         Immutable SiteRuntimeConfig.
     """
     validated_config = validate_L1_config_structure(file=file_path)
-    return build_runtime_config(validated_config, input_data_path=input_data_path)
+    return build_runtime_config(
+        validated_config,
+        input_data_path=input_data_path,
+        input_patch_path=input_patch_path,
+    )

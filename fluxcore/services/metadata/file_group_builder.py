@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build FileGroup objects (master path, format, backups) for a site's input files."""
+"""Build FileGroup objects (master, backups, patches) for a site's input files."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,9 +12,12 @@ from fluxcore.services.metadata.runtime_config_builder import SiteRuntimeConfig
 
 @dataclass
 class FileGroup:
-    """A group of files (master + backups) and their expected/found variables.
+    """A group of files (master, backups, patches) and their variables.
 
-    Header discovery is lazy.
+    `backups` and `patches` are oldest first, as numbered on disk (see
+    `file_io.get_numbered_files`). Patches are gap-fill records for the
+    master, kept outside the raw-data directory so raw files are never
+    edited. Header discovery is lazy.
     """
 
     group: str
@@ -22,6 +25,7 @@ class FileGroup:
     backups: list[Path]
     logger_type: LoggerType
     expected_variables: set[str] = field(default_factory=set)
+    patches: list[Path] = field(default_factory=list)
     _variables_by_file_cache: dict[Path, set[str]] = field(
         default_factory=dict, init=False, repr=False
     )
@@ -33,8 +37,15 @@ class FileGroup:
 
     @property
     def all_files(self) -> list[Path]:
-        """Master file followed by its backups."""
-        return [self.master, *self.backups]
+        """Every file in the group, in precedence order (highest first).
+
+        Master, then backups newest to oldest, then patches newest to
+        oldest. Where files share a timestamp, the record from the earliest
+        file in this list wins; each later file only contributes timestamps
+        none before it covers. So newer logger data beats older, and a patch
+        only ever fills gaps left by the logger's own files.
+        """
+        return [self.master, *reversed(self.backups), *reversed(self.patches)]
 
     @property
     def variables_by_file(self) -> dict[Path, set[str]]:
@@ -106,10 +117,20 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
                     file_path=master,
                     abs_path=True,
                 )
+                patches = (
+                    file_io.get_numbered_files(
+                        file_path=master,
+                        suffix="patch",
+                        directory=runtime_cfg.input_patch_path,
+                    )
+                    if runtime_cfg.input_patch_path is not None
+                    else []
+                )
                 group = FileGroup(
                     group=group_name,
                     master=master,
                     backups=backups,
+                    patches=patches,
                     logger_type=runtime_cfg.get_logger_type(group_name),
                 )
                 groups[group_name] = group

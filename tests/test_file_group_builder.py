@@ -125,3 +125,60 @@ class TestBuildFileGroups(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestBackupsAndPatches(unittest.TestCase):
+    def _touch(self, directory, *names):
+        directory.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (directory / name).touch()
+
+    def test_all_files_is_precedence_order(self):
+        group = FileGroup(
+            group="flux",
+            master=MASTER,
+            backups=[Path("f.dat.backup"), Path("f.dat.1.backup")],
+            patches=[Path("f.dat.patch"), Path("f.dat.1.patch")],
+            logger_type=LoggerType.CSI,
+        )
+        self.assertEqual(
+            [p.name for p in group.all_files],
+            [
+                MASTER.name,
+                "f.dat.1.backup",
+                "f.dat.backup",
+                "f.dat.1.patch",
+                "f.dat.patch",
+            ],
+        )
+
+    def test_build_file_groups_finds_backups_and_patches(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            config_path = tmp / "TestSite.yml"
+            config_path.write_text(VALID_YAML)
+            raw, patch = tmp / "Slow", tmp / "Slow_patch"
+            self._touch(raw, "flux.dat", "flux.dat.backup", "flux.dat.1.backup")
+            self._touch(patch, "flux.dat.patch", "flux.dat.patch.yml")
+
+            group = build_file_groups(
+                build_runtime_config_from_file(
+                    config_path, input_data_path=raw, input_patch_path=patch
+                )
+            )["flux"]
+
+        self.assertEqual(
+            [p.name for p in group.backups], ["flux.dat.backup", "flux.dat.1.backup"]
+        )
+        self.assertEqual([p.name for p in group.patches], ["flux.dat.patch"])
+
+    def test_no_patch_path_or_missing_patch_dir_means_no_patches(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            config_path = tmp / "TestSite.yml"
+            config_path.write_text(VALID_YAML)
+            for patch_path in (None, tmp / "absent"):
+                runtime_cfg = build_runtime_config_from_file(
+                    config_path, input_data_path=tmp, input_patch_path=patch_path
+                )
+                self.assertEqual(build_file_groups(runtime_cfg)["flux"].patches, [])

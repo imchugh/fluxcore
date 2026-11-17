@@ -105,3 +105,68 @@ class AppendZarrTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GetNumberedFilesTestCase(unittest.TestCase):
+    def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp_dir.cleanup)
+        self.dir = pathlib.Path(self._tmp_dir.name)
+        self.master = self.dir / "Site_soil.dat"
+
+    def _touch(self, *names, directory=None):
+        for name in names:
+            ((directory or self.dir) / name).touch()
+
+    def test_sorted_numerically_oldest_first(self):
+        self._touch(
+            "Site_soil.dat.10.backup",
+            "Site_soil.dat.2.backup",
+            "Site_soil.dat.backup",
+            "Site_soil.dat.1.backup",
+        )
+        self.assertEqual(
+            file_io.get_backup_files(self.master, abs_path=False),
+            [
+                "Site_soil.dat.backup",
+                "Site_soil.dat.1.backup",
+                "Site_soil.dat.2.backup",
+                "Site_soil.dat.10.backup",
+            ],
+        )
+
+    def test_matches_master_name_exactly(self):
+        # A file whose name merely starts with the master's stem is another
+        # file's backup, not this one's.
+        self._touch(
+            "Site_soil.dat.backup",
+            "Site_soil_1min.dat.backup",
+            "Site_soil.dat.backup_duped",
+            "Site_soil.dat.x.backup",
+            "Site_soil.dat.patch",
+        )
+        self.assertEqual(
+            file_io.get_backup_files(self.master, abs_path=False),
+            ["Site_soil.dat.backup"],
+        )
+
+    def test_patches_from_another_directory(self):
+        patch_dir = self.dir / "Slow_patch"
+        patch_dir.mkdir()
+        self._touch("Site_soil.dat.1.patch", "Site_soil.dat.patch", directory=patch_dir)
+        self._touch("Site_soil.dat.backup")
+        found = file_io.get_numbered_files(
+            self.master, suffix="patch", directory=patch_dir
+        )
+        self.assertEqual(
+            [p.name for p in found], ["Site_soil.dat.patch", "Site_soil.dat.1.patch"]
+        )
+        self.assertTrue(all(p.parent == patch_dir for p in found))
+
+    def test_missing_directory_is_empty(self):
+        self.assertEqual(
+            file_io.get_numbered_files(
+                self.master, suffix="patch", directory=self.dir / "absent"
+            ),
+            [],
+        )

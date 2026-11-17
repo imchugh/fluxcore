@@ -4,6 +4,7 @@
 import csv
 import logging
 import os
+import re
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -41,22 +42,58 @@ UniqueKeyLoader.add_constructor(
 )
 
 
+def get_numbered_files(
+    file_path: str | Path, suffix: str, directory: str | Path | None = None
+) -> list[Path]:
+    """Return `file_path`'s numbered siblings, oldest first.
+
+    Follows LoggerNet's append-only backup scheme: the first file is
+    `<name>.<suffix>`, later ones `<name>.1.<suffix>`, `<name>.2.<suffix>`,
+    ... and existing files are never renumbered, so a higher number is
+    newer. `<name>` is the full master file name (e.g. `Site_EC_flux.dat`)
+    and is matched exactly: `Site_soil.dat` does not pick up
+    `Site_soil_1min.dat.backup`.
+
+    Args:
+        file_path: master file; its name is the prefix matched.
+        suffix: sibling suffix without the dot (e.g. 'backup', 'patch').
+        directory: where to look; defaults to `file_path`'s own directory.
+
+    Returns:
+        Matching files sorted numerically (unnumbered first, then 1, 2,
+        ..., 10, ...); empty if none match or `directory` doesn't exist.
+    """
+    file_path = Path(file_path)
+    directory = file_path.parent if directory is None else Path(directory)
+    if not directory.is_dir():
+        return []
+    pattern = re.compile(
+        rf"^{re.escape(file_path.name)}(?:\.(\d+))?\.{re.escape(suffix)}$"
+    )
+    numbered = []
+    for path in directory.iterdir():
+        match = pattern.match(path.name)
+        if match and path.is_file():
+            numbered.append((int(match.group(1) or 0), path))
+    return [path for _, path in sorted(numbered)]
+
+
 def get_backup_files(
     file_path: str | Path, abs_path: bool = True
 ) -> list[Path] | list[str]:
-    """Return backup files alongside `file_path`, matching `<stem>*backup`.
+    """Return `file_path`'s `.backup` siblings, oldest first.
+
+    See `get_numbered_files` for the naming scheme and ordering.
 
     Args:
-        file_path: reference file; its parent directory and stem are used
-            to build the glob pattern.
+        file_path: master file.
         abs_path: if True (default), return full paths; if False, return
             just the filenames.
 
     Returns:
-        Sorted list of matching backup files (as Paths or filenames).
+        Backup files, oldest first (as Paths or filenames).
     """
-    file_path = Path(file_path)
-    paths = sorted(file_path.parent.glob(f"{file_path.stem}*backup"))
+    paths = get_numbered_files(file_path, suffix="backup")
     if abs_path:
         return paths
     return [path.name for path in paths]
