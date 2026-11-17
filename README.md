@@ -51,3 +51,16 @@ Planned: file-driven entry points, one per level (`run_L1(control_file)`,
 ```bash
 python -m unittest discover -s tests
 ```
+
+## Linting
+
+Ruff checks run in CI and can also run before each commit:
+
+```bash
+python -m pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+The hook checks staged Python files without modifying them. CI checks the whole
+repository with the same pinned Ruff version.
