@@ -157,8 +157,9 @@ def _check_no_repeated_instrument_era(
     """Raise if an instrument returns after a changeover (e.g. A -> B -> A).
 
     Instrument history is keyed by instrument name, so a repeated era would
-    silently overwrite the earlier one. Inputs that all share one instrument
-    carry no history and are fine.
+    silently overwrite the earlier one. Consecutive inputs sharing an
+    instrument are one era (A -> A -> B is fine: e.g. two old-logger columns
+    from one sensor, then its replacement).
     """
     if isinstance(instruments[0], dict):
         sequences = {
@@ -168,7 +169,10 @@ def _check_no_repeated_instrument_era(
         sequences = {"instrument": instruments}
 
     for role, sequence in sequences.items():
-        if 1 < len(set(sequence)) < len(sequence):
+        eras = [
+            inst for i, inst in enumerate(sequence) if i == 0 or inst != sequence[i - 1]
+        ]
+        if len(set(eras)) < len(eras):
             raise ValueError(
                 f"Variable '{variable}': {role} returns to an earlier instrument "
                 f"({' -> '.join(sequence)}); instrument history cannot represent "
@@ -256,10 +260,10 @@ def build_runtime_config(
         )
 
         # Each input's raw statistic: its own if declared, else the variable's.
-        input_statistics = {
-            raw_name: cfg.statistic_type or raw_cfg.statistic_type
-            for raw_name, cfg in raw_cfg.input_variables.items()
-        }
+        input_statistics = [
+            cfg.statistic_type or raw_cfg.statistic_type
+            for cfg in raw_cfg.input_variables
+        ]
 
         # Validate that each input's declared units are acceptable for this
         # quantity in the input's own raw statistic (a variance input needs
@@ -268,27 +272,29 @@ def build_runtime_config(
         # ("dimensionless"); the meaningful unit (valid_count vs
         # invalid_count) is carried by diag_type and validated separately.
         if raw_cfg.variable_type != VariableType.COUNTER:
-            for raw_name, cfg in raw_cfg.input_variables.items():
+            for cfg, input_statistic in zip(
+                raw_cfg.input_variables, input_statistics, strict=True
+            ):
                 valid_units = canonical_metadata.resolve_metadata(
                     quantity=quantity,
                     variable_type=raw_cfg.variable_type,
-                    statistic_type=input_statistics[raw_name],
+                    statistic_type=input_statistic,
                 ).valid_input_units
                 if cfg.units not in valid_units:
                     raise ValueError(
-                        f"Variable '{variable}' input '{raw_name}': "
+                        f"Variable '{variable}' input '{cfg.name}': "
                         f"units '{cfg.units}' is not valid for quantity "
                         f"'{quantity}'. Expected one of: {valid_units}"
                     )
 
         _check_no_repeated_instrument_era(
-            variable, [cfg.instrument for cfg in raw_cfg.input_variables.values()]
+            variable, [cfg.instrument for cfg in raw_cfg.input_variables]
         )
 
         # Assemble per-input metadata
         raw_inputs = tuple(
             RawVariableMetadata(
-                raw_name=raw_name,
+                raw_name=cfg.name,
                 raw_units=cfg.units,
                 instrument=cfg.instrument,
                 file=cfg.file,
@@ -296,12 +302,14 @@ def build_runtime_config(
                 end=cfg.end,
                 instrument_uri=_resolve_instrument_uri(cfg.instrument, instrument_uris),
                 diag_type=cfg.diag_type,
-                statistic_type=input_statistics[raw_name],
+                statistic_type=input_statistic,
             )
-            for raw_name, cfg in raw_cfg.input_variables.items()
+            for cfg, input_statistic in zip(
+                raw_cfg.input_variables, input_statistics, strict=True
+            )
         )
 
-        first_input = next(iter(raw_cfg.input_variables.values()))
+        first_input = raw_cfg.input_variables[0]
 
         site_variables[variable] = VariableDefinition(
             variable_name=variable,

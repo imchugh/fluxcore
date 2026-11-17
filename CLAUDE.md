@@ -160,9 +160,26 @@ site L2 file  +  configs/qc/_dependency_defaults.yml  +  configs/qc/_range_defau
 - **Variance → Stdev**: `_Vr` suffix replaced with `_Sd` in output
 - **QC flags**: `{variable}_QCFlag`
 
+### Site config: `input_variables`
+
+A variable's `input_variables` is a **list** of its sources, in time order. Each entry is one column (`name`) read from one `file` over an optional `begin`/`end` period:
+
+```yaml
+Ta_15m:
+  statistic_type: average
+  height: 14.7
+  input_variables:
+    - name: Ta_HMP_15m_Avg
+      instrument: Vaisala HMP155
+      units: degC
+      file: Site_EC_slow_met
+```
+
+A list rather than a mapping keyed by column name, because a source is identified by column *and* file *and* period, not by column alone: a logger change that keeps a column name feeds one variable the same `name` from two files. The one restriction is that a `name` + `file` pair may appear only once per variable (it would collide on its registry alias `{name}_gp{n}`). Changed from a name-keyed mapping 2026-11-17; every config was migrated with no change to what it builds.
+
 ### Site config: `instrument` field notation
 
-Within `input_variables`, the `instrument` field has two valid forms:
+Within each input, the `instrument` field has two valid forms:
 
 **Single instrument** (scalar string) — used for all variables measured by one sensor:
 ```yaml
@@ -180,7 +197,7 @@ instrument:
 
 ### Site config: stitching inputs across a logger change
 
-A variable can list several `input_variables`, each with `begin:`/`end:` dates; `dataframe_builder` joins them into one series at the dates (instrument or logger changeovers). Converting raw data is per input, so these per-input fields may differ between eras:
+A variable can list several inputs, each with `begin:`/`end:` dates; `dataframe_builder` joins them into one series at the dates (instrument or logger changeovers). Converting raw data is per input, so these per-input fields may differ between eras:
 
 - `units` — each input converted from its own units.
 - `diag_type` (counters) — e.g. an old `invalid_count` warning count stitched to a new `valid_count` sample count; each is normalised to `invalid_count` separately.
@@ -193,13 +210,13 @@ Ux_SONIC_Sd:
   statistic_type: standard_deviation
   height: 15.0
   input_variables:
-    covUxUx:                       # old logger stored variance
+    - name: covUxUx                # old logger stored variance
       instrument: Campbell Scientific CSAT3B
       units: m^2/s^2
       statistic_type: variance
       file: Site_EC_slow_flux
       end: 2026-10-20 11:30
-    Ux_stdev:                      # new logger stores standard deviation
+    - name: Ux_stdev               # new logger stores standard deviation
       instrument: Campbell Scientific CSAT3B
       units: m/s
       file: Site_EC_TERNflux

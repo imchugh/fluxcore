@@ -28,13 +28,19 @@ from fluxcore.infrastructure.file_io import read_yml
 
 
 class InputVariableConfig(BaseModel):
-    """Schema and validation rules for one raw input variable."""
+    """Schema and validation rules for one raw input variable.
+
+    One source of a variable: a column (name) in a file over a period. A
+    variable's inputs are a list, so the same column can feed it from two
+    files (a logger change that kept the column name).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     # Define attributes
 
     # Mandatory
+    name: str
     instrument: str | dict[str, str]
     file: str
     units: str
@@ -124,7 +130,7 @@ class VariableConfig(BaseModel):
 
     # Mandatory
     height: float
-    input_variables: dict[str, InputVariableConfig]
+    input_variables: list[InputVariableConfig] = Field(min_length=1)
 
     # Optional in yml, explicit in config
     statistic_type: StatisticType | None = None
@@ -180,7 +186,8 @@ class VariableConfig(BaseModel):
         variable) is a config error.
         """
         interchangeable = {StatisticType.VAR, StatisticType.STDEV}
-        for input_name, input_cfg in self.input_variables.items():
+        for input_cfg in self.input_variables:
+            input_name = input_cfg.name
             input_stat = input_cfg.statistic_type
             if input_stat is None or input_stat == self.statistic_type:
                 continue
@@ -195,6 +202,25 @@ class VariableConfig(BaseModel):
                     f"cannot feed a '{self.statistic_type.value}' variable; "
                     "only variance and standard_deviation are interchangeable"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_inputs(self):
+        """Reject two inputs reading the same column from the same file.
+
+        The same column may feed a variable from different files (a logger
+        change that kept the column name), but twice from one file would
+        collide on its alias ({name}_gp{n}) in the variable registry.
+        """
+        seen = set()
+        for input_cfg in self.input_variables:
+            source = (input_cfg.name, input_cfg.file)
+            if source in seen:
+                raise ValueError(
+                    f"Input '{input_cfg.name}' from file '{input_cfg.file}' "
+                    "is listed twice"
+                )
+            seen.add(source)
         return self
 
 
@@ -224,11 +250,11 @@ class SiteConfig(BaseModel):
         """Enforce that counter variables declare a diag_type."""
         for var_name, var_cfg in self.variables.items():
             if var_cfg.variable_type == VariableType.COUNTER:
-                for input_name, input_cfg in var_cfg.input_variables.items():
+                for input_cfg in var_cfg.input_variables:
                     if input_cfg.diag_type is None:
                         raise ValueError(
                             f"Counter variable '{var_name}' input "
-                            f"'{input_name}' must specify diag_type"
+                            f"'{input_cfg.name}' must specify diag_type"
                         )
         return self
 
@@ -291,7 +317,7 @@ class SiteConfig(BaseModel):
         file_list = set()
 
         for var_cfg in self.variables.values():
-            for input_cfg in var_cfg.input_variables.values():
+            for input_cfg in var_cfg.input_variables:
                 file_list.add(input_cfg.file)
 
         if self.flux_file not in file_list:
@@ -305,7 +331,7 @@ class SiteConfig(BaseModel):
         used = {
             input_cfg.file
             for var_cfg in self.variables.values()
-            for input_cfg in var_cfg.input_variables.values()
+            for input_cfg in var_cfg.input_variables
         }
         declared = set(self.logger_types)
         if used - declared:
@@ -347,7 +373,7 @@ class SiteConfig(BaseModel):
         for var_name, var_cfg in self.variables.items():
             if var_name not in self.flux_quantities:
                 continue
-            for input_cfg in var_cfg.input_variables.values():
+            for input_cfg in var_cfg.input_variables:
                 inst = input_cfg.instrument
                 if isinstance(inst, dict):
                     if "sonic_anemometer" in inst and "irga" in inst:

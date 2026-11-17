@@ -25,7 +25,7 @@ variables:
     height: 2.0
     statistic_type: average
     input_variables:
-      Ta_1_1_1:
+      - name: Ta_1_1_1
         instrument: Some Unregistered Sensor
         file: flux
         units: degC
@@ -155,6 +155,44 @@ class RuntimeConfigBuilderTestCase(unittest.TestCase):
         ):
             self._build(yaml_text)
 
+    def test_same_column_from_two_files_is_stitched(self):
+        """A logger change that keeps a column name: two inputs share a name
+        but read different files, and each gets its own registry alias."""
+        cfg = self._build_with_data_path(SAME_COLUMN_YAML)
+        raw_inputs = cfg.variables["WTD"].raw_inputs
+        self.assertEqual([r.raw_name for r in raw_inputs], ["Level", "Level"])
+        self.assertEqual([r.file for r in raw_inputs], ["old", "new"])
+
+        specs = build_variable_registry(
+            runtime_cfg=cfg, file_groups=build_file_groups(cfg)
+        )
+        self.assertEqual(
+            sorted((s.raw_name, s.file_group) for s in specs.values()),
+            [("Level", "new"), ("Level", "old")],
+        )
+
+    def test_same_column_from_one_file_twice_is_rejected(self):
+        yaml_text = (
+            SAME_COLUMN_YAML.replace("file: new", "file: old")
+            .replace("  new: CSI\n", "")
+            .replace("flux_file: new", "flux_file: old")
+        )
+        with self.assertRaisesRegex(
+            ValueError, "'Level' from file 'old' is listed twice"
+        ):
+            self._build(yaml_text)
+
+    def test_consecutive_inputs_from_one_instrument_are_one_era(self):
+        """A -> A -> B is one changeover, not a return to an earlier era."""
+        yaml_text = CHANGEOVER_YAML.format(third="Sensor B").replace(
+            "instrument: Sensor B", "instrument: Sensor A", 1
+        )
+        cfg = self._build(yaml_text)
+        self.assertEqual(
+            [r.instrument for r in cfg.variables["Ta_Av"].raw_inputs],
+            ["Sensor A", "Sensor A", "Sensor B"],
+        )
+
     def test_unused_file_formats_entry_is_rejected(self):
         yaml_text = VALID_YAML.replace("  flux: CSI\n", "  flux: CSI\n  spare: CSI\n")
         with self.assertRaisesRegex(ValueError, r"no input variable uses.*spare"):
@@ -172,18 +210,18 @@ variables:
     height: 2.0
     statistic_type: average
     input_variables:
-      Ta_a:
+      - name: Ta_a
         instrument: Sensor A
         file: flux
         units: degC
         end: 2020-01-01 00:00
-      Ta_b:
+      - name: Ta_b
         instrument: Sensor B
         file: flux
         units: degC
         begin: 2020-01-01 00:30
         end: 2021-01-01 00:00
-      Ta_c:
+      - name: Ta_c
         instrument: {third}
         file: flux
         units: degC
@@ -203,13 +241,13 @@ variables:
     variable_type: counter
     height: 15.0
     input_variables:
-      Warn_old:
+      - name: Warn_old
         instrument: Sensor A
         units: dimensionless
         diag_type: invalid_count
         file: old
         end: 2020-01-01 00:00
-      samples_new:
+      - name: samples_new
         instrument: Sensor A
         units: dimensionless
         diag_type: valid_count
@@ -230,19 +268,43 @@ variables:
     statistic_type: standard_deviation
     height: 15.0
     input_variables:
-      covUxUx:
+      - name: covUxUx
         instrument: Sensor A
         units: m^2/s^2
         statistic_type: variance
         file: old
         end: 2020-01-01 00:00
-      Ux_stdev:
+      - name: Ux_stdev
         instrument: Sensor A
         units: m/s
         file: new
         begin: 2020-01-01 00:30
 """
 
+
+SAME_COLUMN_YAML = """\
+site: TestSite
+file_formats:
+  old: CSI
+  new: CSI
+flux_system: TERNFLUX
+flux_file: new
+variables:
+  WTD:
+    height: -13.0
+    statistic_type: average
+    input_variables:
+      - name: Level
+        instrument: Sensor A
+        units: m
+        file: old
+        end: 2020-01-01 00:00
+      - name: Level
+        instrument: Sensor A
+        units: m
+        file: new
+        begin: 2020-01-01 00:30
+"""
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
