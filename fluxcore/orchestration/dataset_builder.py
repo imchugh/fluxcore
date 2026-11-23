@@ -170,19 +170,18 @@ def _history_from_instruments(
     histories only for aliases where the instrument actually changed. Aliases
     that were constant across all periods are omitted.
 
+    var_specs are in time order (config order). Consecutive inputs from one
+    instrument (e.g. a units change on the same sensor) are one period, from
+    the first's begin to the last's end; an instrument can't return after a
+    changeover (rejected by runtime_config_builder), so names are unique.
+
     Dates are always explicit for multi-period variables (required for the
     merge step), so no defaults are needed.
     """
     if isinstance(var_specs[0].instrument, dict):
         return _history_from_compound_instruments(var_specs)
 
-    instruments = {spec.instrument for spec in var_specs}
-    if len(instruments) == 1:
-        return None
-    return {
-        spec.instrument: {"start_date": spec.begin, "end_date": spec.end}
-        for spec in var_specs
-    }
+    return _instrument_periods([(spec.instrument, spec) for spec in var_specs])
 
 
 def _history_from_compound_instruments(
@@ -192,19 +191,33 @@ def _history_from_compound_instruments(
 
     Only aliases where the instrument changed across periods are included.
     """
-    aliases = list(var_specs[0].instrument.keys())
     result = {}
-    for alias in aliases:
-        alias_instruments = {spec.instrument[alias] for spec in var_specs}
-        if len(alias_instruments) > 1:
-            result[alias] = {
-                spec.instrument[alias]: {
-                    "start_date": spec.begin,
-                    "end_date": spec.end,
-                }
-                for spec in var_specs
-            }
+    for alias in var_specs[0].instrument:
+        periods = _instrument_periods(
+            [(spec.instrument[alias], spec) for spec in var_specs]
+        )
+        if periods is not None:
+            result[alias] = periods
     return result if result else None
+
+
+def _instrument_periods(
+    instrument_specs: list[tuple[str, VariableSpec]],
+) -> dict[str, dict] | None:
+    """Map each instrument to its {start_date, end_date} period.
+
+    Consecutive inputs from one instrument merge into one period. None if
+    the instrument never changed.
+    """
+    periods: dict[str, dict] = {}
+    previous = None
+    for instrument, spec in instrument_specs:
+        if instrument == previous:
+            periods[instrument]["end_date"] = spec.end
+        else:
+            periods[instrument] = {"start_date": spec.begin, "end_date": spec.end}
+        previous = instrument
+    return periods if len(periods) > 1 else None
 
 
 def _output_statistic(var_spec: VariableSpec) -> StatisticType | None:

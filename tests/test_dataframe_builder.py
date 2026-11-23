@@ -12,9 +12,7 @@ from fluxcore.orchestration import dataframe_builder
 
 def _registry(*raw_names, group="g"):
     return {
-        f"{raw}_gp0": SimpleNamespace(
-            raw_name=raw, alias=f"{raw}_gp0", file_group=group
-        )
+        f"{raw}#0": SimpleNamespace(raw_name=raw, alias=f"{raw}#0", file_group=group)
         for raw in raw_names
     }
 
@@ -62,9 +60,9 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
             frames, ["Ta", "Tpanel"], start_date=pd.Timestamp("2026-10-14 10:00")
         )
 
-        self.assertEqual(sorted(out.columns), ["Ta_gp0", "Tpanel_gp0"])
+        self.assertEqual(sorted(out.columns), ["Ta#0", "Tpanel#0"])
         self.assertEqual(len(out), 3)
-        self.assertTrue(out["Tpanel_gp0"].isna().all())
+        self.assertTrue(out["Tpanel#0"].isna().all())
 
     def test_full_read_keeps_historical_values(self):
         frames = {
@@ -73,7 +71,7 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
         }
         out = self._build(frames, ["Ta", "Tpanel"])
 
-        self.assertEqual(out["Tpanel_gp0"].notna().sum(), 2)
+        self.assertEqual(out["Tpanel#0"].notna().sum(), 2)
 
     def test_overlaps_cascade_in_file_order(self):
         # Files arrive in FileGroup.all_files order (master, newest backup,
@@ -87,7 +85,7 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
         }
         out = self._build(frames, ["Ta"])
 
-        self.assertEqual(out["Ta_gp0"].tolist(), [3.0, 3.0, 2.0, 2.0, 1.0, 1.0])
+        self.assertEqual(out["Ta#0"].tolist(), [3.0, 3.0, 2.0, 2.0, 1.0, 1.0])
 
     def test_full_overlap_keeps_master_throughout(self):
         # Large enough that an unstable sort would scramble which file's
@@ -98,7 +96,7 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
         }
         out = self._build(frames, ["Ta"])
 
-        self.assertTrue((out["Ta_gp0"] == 1.0).all())
+        self.assertTrue((out["Ta#0"] == 1.0).all())
 
     def test_patch_fills_only_gaps(self):
         master = _frame("2026-01-01", 6, Ta=1.0).drop(
@@ -110,13 +108,13 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
         }
         out = self._build(frames, ["Ta"])
 
-        self.assertEqual(out["Ta_gp0"].tolist(), [1.0, 1.0, 9.0, 9.0, 1.0, 1.0])
+        self.assertEqual(out["Ta#0"].tolist(), [1.0, 1.0, 9.0, 9.0, 1.0, 1.0])
 
     def test_group_with_no_rows_since_start_keeps_columns(self):
         frames = {"master.dat": _frame("2026-01-01", 2, Ta=1.0)}
         out = self._build(frames, ["Ta"], start_date=pd.Timestamp("2026-10-14"))
 
-        self.assertEqual(list(out.columns), ["Ta_gp0"])
+        self.assertEqual(list(out.columns), ["Ta#0"])
         self.assertEqual(len(out), 0)
 
 
@@ -169,9 +167,9 @@ class FluxExtentTruncationTestCase(unittest.TestCase):
     # A logger changeover: Fc's old era is in "old_flux", its new era in
     # "flux" (the current flux file); "soil" feeds only its own variable.
     CHANGEOVER_SPECS = {
-        "Fc_old_gp0": SimpleNamespace(canonical_name="Fc", file_group="old_flux"),
-        "Fc_gp1": SimpleNamespace(canonical_name="Fc", file_group="flux"),
-        "Ts_gp2": SimpleNamespace(canonical_name="Ts", file_group="soil"),
+        "Fc#0": SimpleNamespace(canonical_name="Fc", file_group="old_flux"),
+        "Fc#1": SimpleNamespace(canonical_name="Fc", file_group="flux"),
+        "Ts#0": SimpleNamespace(canonical_name="Ts", file_group="soil"),
     }
 
     def test_full_build_spans_a_stitched_earlier_flux_file(self):

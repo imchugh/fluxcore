@@ -32,7 +32,8 @@ class InputVariableConfig(BaseModel):
 
     One source of a variable: a column (name) in a file over a period. A
     variable's inputs are a list, so the same column can feed it from two
-    files (a logger change that kept the column name).
+    files (a logger change that kept the column name), or from one file
+    over consecutive periods with different units or instrument.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -205,23 +206,44 @@ class VariableConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_unique_inputs(self):
-        """Reject two inputs reading the same column from the same file.
+    def validate_same_source_periods_disjoint(self):
+        """Reject inputs reading one column from one file over overlapping periods.
 
-        The same column may feed a variable from different files (a logger
-        change that kept the column name), but twice from one file would
-        collide on its alias ({name}_gp{n}) in the variable registry.
+        The same column may feed a variable more than once, from different
+        files (a logger change that kept the column name) or from one file
+        over consecutive periods (the column's units or instrument changed),
+        but two inputs can't both supply the same timestamps. A missing
+        begin/end is open-ended; begin and end are both inclusive.
         """
-        seen = set()
+        by_source: dict[tuple[str, str], list[InputVariableConfig]] = {}
         for input_cfg in self.input_variables:
-            source = (input_cfg.name, input_cfg.file)
-            if source in seen:
-                raise ValueError(
-                    f"Input '{input_cfg.name}' from file '{input_cfg.file}' "
-                    "is listed twice"
-                )
-            seen.add(source)
+            by_source.setdefault((input_cfg.name, input_cfg.file), []).append(input_cfg)
+        for (name, file), inputs in by_source.items():
+            for i, first in enumerate(inputs):
+                for second in inputs[i + 1 :]:
+                    if _periods_overlap(first, second):
+                        raise ValueError(
+                            f"Input '{name}' from file '{file}' is listed for "
+                            f"overlapping periods ({_period(first)} and "
+                            f"{_period(second)})"
+                        )
         return self
+
+
+def _periods_overlap(a: InputVariableConfig, b: InputVariableConfig) -> bool:
+    """Whether two inputs' inclusive begin/end periods share any time."""
+    a_starts_by_b_end = a.begin is None or b.end is None or a.begin <= b.end
+    b_starts_by_a_end = b.begin is None or a.end is None or b.begin <= a.end
+    return a_starts_by_b_end and b_starts_by_a_end
+
+
+def _period(input_cfg: InputVariableConfig) -> str:
+    """An input's period for error messages, e.g. 'start to 2020-01-01 00:00'."""
+
+    def fmt(value, open_end):
+        return open_end if value is None else value.strftime("%Y-%m-%d %H:%M")
+
+    return f"{fmt(input_cfg.begin, 'start')} to {fmt(input_cfg.end, 'end')}"
 
 
 # Standalone (file-in) sections: used by run_L1, never set by a network adapter

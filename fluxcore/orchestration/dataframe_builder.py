@@ -239,8 +239,9 @@ def _build_file_group_dataframe(
 ) -> pd.DataFrame:
     """Load and process all files in a file group.
 
-    For each file: load, filter to expected variables, apply aliasing,
-    apply statistical transforms and unit conversions.  Then concatenate
+    For each file: load, filter to expected variables, copy each raw column
+    to its inputs' aliases, apply statistical transforms and unit
+    conversions.  Then concatenate
     vertically across the group's files and condition the time index.
     Files whose latest record predates start_date are skipped entirely.
 
@@ -249,11 +250,14 @@ def _build_file_group_dataframe(
     the timestamps no higher-precedence file has; the whole record is taken
     from the winning file (records are not merged column by column).
     """
-    rename_map = {
-        entry.raw_name: entry.alias
-        for entry in specs_by_alias.values()
-        if entry.file_group == file_group.group
-    }
+    # Each input gets its own copy of its raw column: one column can feed
+    # several inputs (eras of a column whose units or instrument changed,
+    # or two variables), so columns are copied per alias, not renamed.
+    aliases_by_raw_name: dict[str, list[str]] = {}
+    for entry in specs_by_alias.values():
+        if entry.file_group == file_group.group:
+            aliases_by_raw_name.setdefault(entry.raw_name, []).append(entry.alias)
+    group_aliases = [a for aliases in aliases_by_raw_name.values() for a in aliases]
 
     dfs = []
     for file in file_group.variables_by_file:
@@ -266,8 +270,13 @@ def _build_file_group_dataframe(
 
         df = _filter_variables(df=df, variables=file_group.expected_variables)
 
-        df = df.rename(
-            columns={col: rename_map[col] for col in df.columns if col in rename_map}
+        df = pd.DataFrame(
+            {
+                alias: df[col]
+                for col in df.columns
+                for alias in aliases_by_raw_name.get(col, [])
+            },
+            index=df.index,
         )
 
         df = _apply_conversions(
@@ -289,7 +298,7 @@ def _build_file_group_dataframe(
         # tail cycle never gets its store array appended to at all, and
         # falls permanently behind the variables that did have new rows.
         return pd.DataFrame(
-            columns=list(rename_map.values()),
+            columns=group_aliases,
             index=pd.DatetimeIndex([], name="time"),
             dtype="float64",
         )
@@ -306,7 +315,7 @@ def _build_file_group_dataframe(
     # set, independent of which files a given read happened to touch;
     # otherwise an incremental tail's variable set differs from the store's
     # (built from all files) and the append is refused.
-    missing = [alias for alias in rename_map.values() if alias not in df.columns]
+    missing = [alias for alias in group_aliases if alias not in df.columns]
     if missing:
         df = df.reindex(columns=[*df.columns, *missing])
 

@@ -163,7 +163,7 @@ site L2 file  +  configs/qc/_dependency_defaults.yml  +  configs/qc/_range_defau
 ## Variable Naming Conventions
 
 - **Canonical form**: `{quantity}_{statistic_suffix}_{qualifier}` — e.g. `Fco2_Av`, `Ta_Sd_2m`
-- **Processing aliases**: `{raw_name}_{group_id}` — e.g. `Fc_gp0`
+- **Processing aliases**: `{canonical_name}#{position}` (the input's index in `input_variables`; `variable_registry.input_alias`) — e.g. `Fco2_Av#0`. Internal to `dataframe_builder`, never written out. `#` because canonical names can end in `_<digit>` (`Precip_1`), so `_<n>` could collide
 - **Variance → Stdev**: `_Vr` suffix replaced with `_Sd` in output
 - **QC flags**: `{variable}_QCFlag`
 
@@ -182,7 +182,7 @@ Ta_15m:
       file: Site_EC_slow_met
 ```
 
-A list rather than a mapping keyed by column name, because a source is identified by column *and* file *and* period, not by column alone: a logger change that keeps a column name feeds one variable the same `name` from two files. The one restriction is that a `name` + `file` pair may appear only once per variable (it would collide on its registry alias `{name}_gp{n}`). Changed from a name-keyed mapping 2026-11-17; every config was migrated with no change to what it builds.
+A list rather than a mapping keyed by column name, because a source is identified by column *and* file *and* period, not by column alone: a logger change that keeps a column name feeds one variable the same `name` from two files, and a units or instrument change on an unchanged column feeds it the same `name` from the same file over consecutive periods (see the next-but-one section). The one restriction is that inputs sharing a `name` + `file` must not overlap in time (`begin`/`end` inclusive, missing = open-ended; `validate_same_source_periods_disjoint`). Changed from a name-keyed mapping 2026-11-17; every config was migrated with no change to what it builds. Same-file eras allowed 2026-11-24 (registry keyed by `{canonical_name}#{position}` instead of `{raw_name}_gp{n}`; raw columns copied per input, not renamed).
 
 ### Site config: `instrument` field notation
 
@@ -208,6 +208,7 @@ A variable can list several inputs, each with `begin:`/`end:` dates; `dataframe_
 
 - `units` — each input converted from its own units.
 - `diag_type` (counters) — e.g. an old `invalid_count` warning count stitched to a new `valid_count` sample count; each is normalised to `invalid_count` separately.
+- `instrument` — instrument history records each instrument's period; consecutive inputs from one instrument are one period, and an instrument returning after a changeover (A → B → A) is rejected.
 - `statistic_type` (optional) — the raw form when it differs from the variable's, **only** `variance` ↔ `standard_deviation`. A variance input is square-rooted; a standard-deviation input passes through. Defaults to the variable's `statistic_type`. The variable's own `statistic_type` still sets the output name, attrs, QC and derivations; the input's only drives conversion (`VariableSpec.raw_statistic_type`) and unit validation.
 
 `flux_file` names the **current** flux file; a logger changeover doesn't need it changed beyond pointing at the new logger's file. Older flux eras come in through the variables' raw inputs, and a full build's time extent (`dataframe_builder` step 5, which trims ancillary data predating the flux system) is the union of `flux_file` and every file group stitched into the same variables (`_flux_extent_groups`). Incremental tails still end at the last record of `flux_file` itself, the only flux file still growing, so a backfill of an older era (e.g. a comms gap patched from the logger) reaches the store through the nightly full rebuild.
@@ -228,6 +229,25 @@ Ux_SONIC_Sd:
       units: m/s
       file: Site_EC_TERNflux
       begin: 2026-10-20 12:00
+```
+
+The same applies within one column: when only a column's metadata changes (the logger program switched from percent to a fraction, or a sensor was swapped without renaming the column), list the column again with the same `name` and `file` and non-overlapping periods:
+
+```yaml
+Sws_0.05ma1:
+  statistic_type: average
+  height: -0.05
+  input_variables:
+    - name: VWC_1_Avg
+      instrument: Campbell Scientific CS616
+      units: percent
+      file: Site_soil
+      end: 2026-03-01 09:30
+    - name: VWC_1_Avg              # same column, now written as a fraction
+      instrument: Campbell Scientific CS616
+      units: m^3/m^3
+      file: Site_soil
+      begin: 2026-03-01 10:00
 ```
 
 ### Site config: horizontal-location descriptions

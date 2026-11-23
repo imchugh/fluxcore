@@ -5,6 +5,7 @@ Public API
 ----------
 VariableSpec          — flat specification for a single raw-to-canonical mapping
 build_variable_registry(runtime_cfg, file_groups) -> dict[str, VariableSpec]
+input_alias(canonical_name, position) -> str
 group_by_canonical_name(registry) -> dict[str, list[VariableSpec]]
 canonical_output_name(var_spec) -> str
 """
@@ -75,61 +76,75 @@ def build_variable_registry(
     runtime_cfg: SiteRuntimeConfig,
     file_groups: dict[str, FileGroup],
 ) -> dict[str, "VariableSpec"]:
-    """Build alias-keyed registry of VariableSpec objects."""
+    """Build alias-keyed registry of VariableSpec objects.
+
+    One entry per input, keyed by input_alias(canonical name, position in
+    the variable's input list), in config order: per variable, its inputs in
+    time order. The alias names the input's column in the wide frame
+    dataframe_builder assembles before stitching inputs into their variable,
+    so one raw column can feed several inputs (eras of one column whose
+    units or instrument changed, or two variables).
+    """
     registry = {}
 
-    for i, (group_name, _) in enumerate(file_groups.items()):
-        group_id = f"gp{i}"
+    for canonical_name, var_cfg in runtime_cfg.variables.items():
+        for position, raw_input in enumerate(var_cfg.raw_inputs):
+            if raw_input.file not in file_groups:
+                continue
+            group_name = raw_input.file
 
-        for canonical_name, var_cfg in runtime_cfg.variables.items():
-            for raw_input in var_cfg.raw_inputs:
-                if raw_input.file != group_name:
-                    continue
-
-                alias = f"{raw_input.raw_name}_{group_id}"
-
-                if var_cfg.statistic_type == StatisticType.VAR:
-                    canonical_units = resolve_variance_units(
-                        var_cfg.canonical.standard_units
-                    )
-                else:
-                    canonical_units = var_cfg.canonical.standard_units
-
-                if var_cfg.variable_type in (
-                    VariableType.QUALITY_FLAG,
-                    VariableType.COUNTER,
-                ):
-                    site_units = "dimensionless"
-                else:
-                    site_units = raw_input.raw_units or var_cfg.canonical.standard_units
-
-                registry[alias] = VariableSpec(
-                    raw_name=raw_input.raw_name,
-                    canonical_name=canonical_name,
-                    alias=alias,
-                    quantity=var_cfg.quantity,
-                    long_name=var_cfg.canonical.long_name,
-                    standard_name=var_cfg.canonical.standard_name,
-                    canonical_units=canonical_units,
-                    site_units=site_units,
-                    statistic_type=var_cfg.statistic_type,
-                    variable_type=var_cfg.variable_type,
-                    height=var_cfg.height,
-                    height_range=var_cfg.height_range,
-                    instrument=raw_input.instrument,
-                    instrument_uri=raw_input.instrument_uri,
-                    file_group=group_name,
-                    begin=raw_input.begin,
-                    end=raw_input.end,
-                    diag_type=raw_input.diag_type,
-                    input_statistic_type=(
-                        raw_input.statistic_type
-                        if raw_input.statistic_type != var_cfg.statistic_type
-                        else None
-                    ),
+            alias = input_alias(canonical_name, position)
+            if var_cfg.statistic_type == StatisticType.VAR:
+                canonical_units = resolve_variance_units(
+                    var_cfg.canonical.standard_units
                 )
+            else:
+                canonical_units = var_cfg.canonical.standard_units
+
+            if var_cfg.variable_type in (
+                VariableType.QUALITY_FLAG,
+                VariableType.COUNTER,
+            ):
+                site_units = "dimensionless"
+            else:
+                site_units = raw_input.raw_units or var_cfg.canonical.standard_units
+
+            registry[alias] = VariableSpec(
+                raw_name=raw_input.raw_name,
+                canonical_name=canonical_name,
+                alias=alias,
+                quantity=var_cfg.quantity,
+                long_name=var_cfg.canonical.long_name,
+                standard_name=var_cfg.canonical.standard_name,
+                canonical_units=canonical_units,
+                site_units=site_units,
+                statistic_type=var_cfg.statistic_type,
+                variable_type=var_cfg.variable_type,
+                height=var_cfg.height,
+                height_range=var_cfg.height_range,
+                instrument=raw_input.instrument,
+                instrument_uri=raw_input.instrument_uri,
+                file_group=group_name,
+                begin=raw_input.begin,
+                end=raw_input.end,
+                diag_type=raw_input.diag_type,
+                input_statistic_type=(
+                    raw_input.statistic_type
+                    if raw_input.statistic_type != var_cfg.statistic_type
+                    else None
+                ),
+            )
 
     return registry
+
+
+def input_alias(canonical_name: str, position: int) -> str:
+    """Registry key for a variable's input at ``position`` in its input list.
+
+    '#' cannot occur in a canonical name, so an alias never collides with a
+    canonical name (some end in _<digit>, e.g. Precip_1) or another alias.
+    """
+    return f"{canonical_name}#{position}"
 
 
 def group_by_canonical_name(
