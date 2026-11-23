@@ -55,15 +55,20 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         self.qc_dir = self.root / "qc"
         self.qc_dir.mkdir(parents=True)
 
-        (self.qc_dir / "TestSite.yml").write_text(
-            "Ta_Av:\n  range_check: {lower: -10, upper: 50}\n"
-        )
+        self._write_site_qc("Ta_Av:\n  range_check: {lower: -10, upper: 50}\n")
 
         # Shared defaults resolve from QC_DEFAULTS_DIR; point it at the same
         # temp dir as the site's own TestSite.yml.
         patcher = mock.patch.object(qc_config_schema, "QC_DEFAULTS_DIR", self.qc_dir)
         patcher.start()
         self.addCleanup(patcher.stop)
+
+    def _write_site_qc(self, variables_yaml):
+        """Write TestSite.yml: site + the given (flat) variables block, nested."""
+        nested = "".join(f"  {line}\n" for line in variables_yaml.splitlines())
+        (self.qc_dir / "TestSite.yml").write_text(
+            f"site: TestSite\nvariables:\n{nested}"
+        )
 
     def _qc_config(self):
         return qc_config_schema.load_qc_config("TestSite", config_dir=self.qc_dir)
@@ -161,9 +166,7 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         # checkpoint-based update would see nothing new and leave the now-stale
         # flags in place. The config-hash check must catch this instead and
         # force a full rebuild that re-flags the existing records.
-        (self.qc_dir / "TestSite.yml").write_text(
-            "Ta_Av:\n  range_check: {lower: -10, upper: 5}\n"
-        )
+        self._write_site_qc("Ta_Av:\n  range_check: {lower: -10, upper: 5}\n")
 
         build_L2_zarr.update(
             self._qc_config(), output_dir=self.l2_dir, l1_dir=self.l1_dir
@@ -235,7 +238,7 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         self.assertEqual(fco2_flags[0], 0)
 
     def test_flag_check_build_then_update_keeps_consistent_variable_set(self):
-        (self.qc_dir / "TestSite.yml").write_text(
+        self._write_site_qc(
             "Fco2:\n  flag_check: {source: [Fco2_QC], reject: [8, 9]}\n"
         )
 
@@ -283,7 +286,7 @@ class BuildL2ZarrTestCase(unittest.TestCase):
         self.assertEqual(int(out["Fco2_QCFlag"].squeeze().values[-1]), 0)
 
     def test_mad_filter_configured_update_completes(self):
-        (self.qc_dir / "TestSite.yml").write_text(
+        self._write_site_qc(
             "Ta_Av:\n  mad_filter:\n    reference_var: Ta_Av\n    window_days: 1\n"
         )
         n = 48 * 5  # 5 days at 30-min steps

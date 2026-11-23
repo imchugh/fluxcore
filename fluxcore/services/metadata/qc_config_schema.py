@@ -177,14 +177,48 @@ class VariableQCSpec(BaseModel):
         return v
 
 
-class QCConfigSchema(RootModel[dict[str, VariableQCSpec]]):
-    """Flat per-site QC config: {variable_name: VariableQCSpec}."""
+class QCVariablesSchema(RootModel[dict[str, VariableQCSpec]]):
+    """Flat {variable_name: VariableQCSpec} mapping (_dependency_defaults.yml)."""
+
+
+class L2PathsConfig(BaseModel):
+    """Directories for a standalone L2 run (see run_L2).
+
+    Keys match run_L2's arguments, and an argument wins over its key.
+    Relative paths resolve against the control file's own directory.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    l1_dir: str | None = None
+    output_dir: str | None = None
+
+
+class QCConfigSchema(BaseModel):
+    """A site's L2 QC config file: site name, its variables' overrides, paths.
+
+    The same shape as the L1 site config (`site` + `variables`). The file is
+    also the L2 control file for a standalone run (run_L2), which may add the
+    optional `paths` section; a network adapter never sets it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    site: str
+    variables: dict[str, VariableQCSpec] = {}
+    paths: L2PathsConfig | None = None
+
+    @field_validator("variables", mode="before")
+    @classmethod
+    def empty_variables(cls, v):
+        """Read a bare `variables:` (no overrides) as an empty mapping."""
+        return {} if v is None else v
 
 
 def validate_qc_config_structure(file: Path | str) -> QCConfigSchema:
-    """Validate YAML structure and return the schema object."""
+    """Validate a site QC config file's YAML structure and return the schema."""
     data = read_yml(file_path=file, enforce_unique_keys=True) or {}
-    return QCConfigSchema(data)
+    return QCConfigSchema(**data)
 
 
 @dataclass(frozen=True)
@@ -254,7 +288,12 @@ def load_qc_config(site_name: str, config_dir: Path | str) -> SiteQCConfig:
         return SiteQCConfig(site_name=site_name, variables={})
 
     schema = validate_qc_config_structure(file_path)
-    return SiteQCConfig(site_name=site_name, variables=dict(schema.root))
+    if schema.site != site_name:
+        raise ValueError(
+            f"QC config {file_path} declares site '{schema.site}', "
+            f"expected '{site_name}'"
+        )
+    return SiteQCConfig(site_name=site_name, variables=dict(schema.variables))
 
 
 def load_range_defaults(config_dir: Path | None = None) -> dict:
@@ -332,8 +371,8 @@ def load_dependency_defaults(
     Network-wide default dependency_check (and, where needed, range_check)
     patterns keyed by exact L1 output variable name.
 
-    Same shape and validation as a site's own QC config
-    (validate_qc_config_structure) -- unlike _range_defaults.yml's looser
+    Same validation as a site's own QC config's `variables` section
+    (QCVariablesSchema) -- unlike _range_defaults.yml's looser
     plain-YAML load, a typo here is caught by Pydantic like a bad site file
     would be. Only some sites actually have the variables these patterns
     target (e.g. raw-covariance/Diag_SONIC/Diag_IRGA sites vs EddyPro-only
@@ -346,7 +385,8 @@ def load_dependency_defaults(
     if not file_path.exists():
         return {}
 
-    return dict(validate_qc_config_structure(file_path).root)
+    data = read_yml(file_path=file_path, enforce_unique_keys=True) or {}
+    return dict(QCVariablesSchema(data).root)
 
 
 def resolve_default_range(

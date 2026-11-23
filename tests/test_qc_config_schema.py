@@ -12,15 +12,23 @@ from pydantic import ValidationError
 from fluxcore.services.metadata import qc_config_schema
 
 VALID_YAML = """\
-Ta_Av:
-  range_check: {lower: -10, upper: 50}
-Fco2:
-  range_check: {lower: -50, upper: 50}
-  dependency_check: [Ux, Uy, Uz]
-  mad_filter:
-    reference_var: Fsd_Av
-    window_days: 13
+site: TestSite
+variables:
+  Ta_Av:
+    range_check: {lower: -10, upper: 50}
+  Fco2:
+    range_check: {lower: -50, upper: 50}
+    dependency_check: [Ux, Uy, Uz]
+    mad_filter:
+      reference_var: Fsd_Av
+      window_days: 13
 """
+
+
+def _site_yaml(variables_yaml, site="TestSite"):
+    """A site QC file: `site` + the given (flat) variables block, nested."""
+    nested = "".join(f"  {line}\n" for line in variables_yaml.splitlines())
+    return f"site: {site}\nvariables:\n{nested}"
 
 
 class QCConfigStructureTestCase(unittest.TestCase):
@@ -42,20 +50,48 @@ class QCConfigStructureTestCase(unittest.TestCase):
         self.assertEqual(cfg.variables["Ta_Av"].range_check.lower, -10)
         self.assertEqual(cfg.variables["Fco2"].mad_filter.reference_var, "Fsd_Av")
 
+    def test_site_mismatch_raises(self):
+        self._write("TestSite.yml", VALID_YAML.replace("site: TestSite", "site: Other"))
+        with self.assertRaises(ValueError):
+            qc_config_schema.load_qc_config("TestSite", config_dir=self.config_dir)
+
+    def test_bare_variables_is_empty_config(self):
+        self._write("TestSite.yml", "site: TestSite\nvariables:\n")
+        cfg = qc_config_schema.load_qc_config("TestSite", config_dir=self.config_dir)
+        self.assertEqual(cfg.variables, {})
+
+    def test_flat_variables_rejected(self):
+        # The pre-2026-11 shape: variables at the top level, no site key.
+        path = self._write(
+            "Flat.yml", "Ta_Av:\n  range_check: {lower: -10, upper: 50}\n"
+        )
+        with self.assertRaises(ValidationError):
+            qc_config_schema.validate_qc_config_structure(path)
+
+    def test_paths_section_accepted_and_strict(self):
+        path = self._write(
+            "P.yml", "site: TestSite\npaths: {l1_dir: out, output_dir: out}\n"
+        )
+        schema = qc_config_schema.validate_qc_config_structure(path)
+        self.assertEqual(schema.paths.l1_dir, "out")
+        path = self._write("P2.yml", "site: TestSite\npaths: {l1: out}\n")
+        with self.assertRaises(ValidationError):
+            qc_config_schema.validate_qc_config_structure(path)
+
     def test_missing_file_returns_empty_config(self):
         cfg = qc_config_schema.load_qc_config("NoSuchSite", config_dir=self.config_dir)
         self.assertEqual(cfg.variables, {})
 
     def test_bad_range_order_raises(self):
         path = self._write(
-            "Bad.yml", "Ta_Av:\n  range_check: {lower: 50, upper: -10}\n"
+            "Bad.yml", _site_yaml("Ta_Av:\n  range_check: {lower: 50, upper: -10}")
         )
         with self.assertRaises(ValidationError):
             qc_config_schema.validate_qc_config_structure(path)
 
     def test_unknown_key_rejected(self):
         path = self._write(
-            "Bad2.yml", "Ta_Av:\n  rangecheck: {lower: -10, upper: 50}\n"
+            "Bad2.yml", _site_yaml("Ta_Av:\n  rangecheck: {lower: -10, upper: 50}")
         )
         with self.assertRaises(ValidationError):
             qc_config_schema.validate_qc_config_structure(path)
@@ -206,16 +242,16 @@ class FlagCheckSchemaTestCase(unittest.TestCase):
 
     def test_loads(self):
         self.path.write_text(
-            "Fco2:\n  flag_check: {source: [Fco2_QC], reject: [8, 9]}\n"
+            _site_yaml("Fco2:\n  flag_check: {source: [Fco2_QC], reject: [8, 9]}")
         )
         cfg = qc_config_schema.validate_qc_config_structure(self.path)
-        spec = cfg.root["Fco2"].flag_check
+        spec = cfg.variables["Fco2"].flag_check
         self.assertEqual(spec.source, ["Fco2_QC"])
         self.assertEqual(spec.reject, [8.0, 9.0])
 
     def test_empty_lists_rejected(self):
         for body in ("source: [], reject: [9]", "source: [Fco2_QC], reject: []"):
-            self.path.write_text(f"Fco2:\n  flag_check: {{{body}}}\n")
+            self.path.write_text(_site_yaml(f"Fco2:\n  flag_check: {{{body}}}"))
             with self.assertRaises(ValidationError):
                 qc_config_schema.validate_qc_config_structure(self.path)
 

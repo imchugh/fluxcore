@@ -224,9 +224,68 @@ class VariableConfig(BaseModel):
         return self
 
 
+# Standalone (file-in) sections: used by run_L1, never set by a network adapter
+
+
+class SiteMetadataSchema(BaseModel):
+    """Schema for one site's metadata: a standalone YAML file or a control file section.
+
+    Required fields are the minimum a site needs to actually be processed:
+    location (for CRS/NetCDF export) and time_step/freq_hz (for n_samples,
+    dataframe assembly). Everything else is descriptive and commonly sparse
+    in real records (e.g. a real site's record may have no
+    date_decommissioned/time_zone/UTC_offset).
+    """
+
+    site_name: str
+    latitude: float
+    longitude: float
+    time_step: int
+    freq_hz: int
+
+    id: str | None = None
+    fluxnet_id: str | None = None
+    date_commissioned: datetime | None = None
+    date_decommissioned: datetime | None = None
+    elevation: float | None = None
+    soil: str | None = None
+    tower_height: float | None = None
+    vegetation: str | None = None
+    canopy_height: float | None = None
+    time_zone: str | None = None
+    UTC_offset: float | None = None
+
+    @field_validator("time_step", "freq_hz", mode="before")
+    @classmethod
+    def coerce_float_string(cls, v):
+        """Accept float-string values ('30.0') as real-world records do."""
+        if isinstance(v, str):
+            return int(float(v))
+        return v
+
+
+class L1PathsConfig(BaseModel):
+    """Directories for a standalone L1 run (see run_L1).
+
+    Keys match run_L1's arguments, and an argument wins over its key.
+    Relative paths resolve against the control file's own directory.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_data_path: str | None = None
+    input_patch_path: str | None = None
+    output_dir: str | None = None
+
+
 # Complete site configuration
 class SiteConfig(BaseModel):
-    """Schema and cross-field validation rules for a complete site config."""
+    """Schema and cross-field validation rules for a complete site config.
+
+    The same file is the L1 control file for a standalone run (run_L1),
+    which may add the optional `paths`, `site_metadata` and `global_attrs`
+    sections. A network adapter supplies those itself and never sets them.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -242,8 +301,32 @@ class SiteConfig(BaseModel):
 
     custom_metadata: CustomMetadataConfig | None = None
 
+    # Standalone (file-in) sections; see run_L1
+    paths: L1PathsConfig | None = None
+    site_metadata: SiteMetadataSchema | None = None
+    global_attrs: dict[str, str | int | float] | None = None
+
     # class-level constants for validation
     diag_prefixes: ClassVar[list[str]] = ["Diag_"]
+
+    @model_validator(mode="before")
+    @classmethod
+    def default_metadata_site_name(cls, data):
+        """Default site_metadata's site_name to `site`, and reject a mismatch."""
+        if not isinstance(data, dict):
+            return data
+        metadata = data.get("site_metadata")
+        if not isinstance(metadata, dict):
+            return data
+        site = data.get("site")
+        name = metadata.get("site_name")
+        if name is None:
+            data = {**data, "site_metadata": {**metadata, "site_name": site}}
+        elif name != site:
+            raise ValueError(
+                f"site_metadata.site_name '{name}' does not match site '{site}'"
+            )
+        return data
 
     @model_validator(mode="after")
     def enforce_diag_rules(self):

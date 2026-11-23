@@ -23,6 +23,7 @@ from fluxcore.orchestration import (
 )
 from fluxcore.orchestration.dataframe_builder import build_dataframe_from_context
 from fluxcore.orchestration.dataset_builder import build_dataset_from_context
+from fluxcore.orchestration.run_from_file import run_L1, run_L2
 from fluxcore.services.data import profile_storage
 from fluxcore.services.data.calculations import get_calculation
 from fluxcore.services.data.raw_data_loader import (
@@ -77,6 +78,9 @@ __all__ = [
     "build_L2_zarr",
     "build_dataframe_from_context",
     "build_dataset_from_context",
+    # Standalone file-in entry points: one control file per site per level
+    "run_L1",
+    "run_L2",
     # Contract objects
     "CanonicalQuantityMetadata",
     "FileGroup",
