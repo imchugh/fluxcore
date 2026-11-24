@@ -23,7 +23,14 @@ def _radiation_attrs(quantity):
         "height": 30.0,
         "height_range": None,
         "instrument": "Kipp&Zonen CNR4",
-        "instrument_history": [],
+        "instrument_history": [
+            {
+                "role": None,
+                "periods": [
+                    {"instrument": "Kipp&Zonen CNR4", "start": None, "end": None}
+                ],
+            }
+        ],
     }
 
 

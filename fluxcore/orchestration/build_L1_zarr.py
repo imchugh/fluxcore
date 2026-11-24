@@ -6,9 +6,9 @@ from all raw data (to seed a store, or reconcile it periodically);
 `update()` is the cheap incremental path: it reads the store's last
 timestamp as a checkpoint, then loads and appends only newer records.
 
-`instrument_history` is stored in full structured form (JSON-safe, see
-dataset_finishing.encode_instrument_history), not flattened and clipped to a
-year as in NetCDF; the NetCDF exporter decodes it and does the clipping.
+`instrument_history` is stored in its full attr form (services.metadata.
+instrument_history), not flattened and clipped to a year as in NetCDF; the
+NetCDF exporter does the clipping.
 
 Takes a SiteContext and an explicit output directory, never a site name to
 resolve.
@@ -30,7 +30,6 @@ from fluxcore.orchestration.dataset_finishing import (
     assign_crs_variable,
     assign_global_attrs,
     cf_normalise_units,
-    encode_instrument_history,
     filter_variable_attrs,
     flatten_instrument_uri,
 )
@@ -166,8 +165,7 @@ def _finish_for_store(ds, append_to: pathlib.Path | None = None):
     coverage attrs combine the store's recorded start and record count with
     the tail's; otherwise appending would make time_coverage_start jump
     forward to the tail's start. instrument_history needs no such combining:
-    it's config-derived and stored in full structured form (see
-    `encode_instrument_history`).
+    it's config-derived and always covers the full history.
     """
     range_start, nrecs_base = (
         incremental_zarr.store_coverage(append_to) if append_to else (None, 0)
@@ -182,7 +180,6 @@ def _finish_for_store(ds, append_to: pathlib.Path | None = None):
     )
     ds = filter_variable_attrs(ds=ds)
     ds = flatten_instrument_uri(ds=ds)
-    ds = encode_instrument_history(ds=ds)
     ds = cf_normalise_units(ds=ds)
     ds = file_io.serialize_dataset_attrs(ds=ds)
 

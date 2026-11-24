@@ -27,6 +27,7 @@ add_net_radiation(result)        -> DatasetBuildIntermediate
 add_day_night_indicator(ds)      -> xr.Dataset
 """
 
+import copy
 import logging
 from dataclasses import dataclass
 
@@ -270,10 +271,7 @@ def _group_by_instrument_height(
         qty = attrs.get("quantity")
         if qty not in _HUMIDITY_QUANTITIES:
             continue
-        instrument = attrs["instrument"]
-        if isinstance(instrument, dict):
-            instrument = frozenset(instrument.items())
-        key = (instrument, attrs["height"])
+        key = (attrs["instrument"], attrs["height"])
         groups.setdefault(key, {})[qty] = var_name
     return groups
 
@@ -291,7 +289,8 @@ def _build_attrs(source_attrs: dict, quantity: str) -> dict:
         "height": source_attrs["height"],
         "height_range": source_attrs["height_range"],
         "instrument": source_attrs["instrument"],
-        "instrument_history": source_attrs["instrument_history"],
+        # Copied, so the derived variable's history isn't the same list object.
+        "instrument_history": copy.deepcopy(source_attrs["instrument_history"]),
         "long_name": canonical.long_name,
         "quantity": quantity,
         "standard_name": canonical.standard_name,

@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,8 +11,11 @@ import pandas as pd
 from fluxcore.domain.enums import DiagnosticType, StatisticType
 from fluxcore.orchestration import dataframe_builder
 from fluxcore.orchestration.dataframe_builder import _apply_conversions
-from fluxcore.orchestration.dataset_builder import _history_from_instruments
 from fluxcore.services.metadata.file_group_builder import build_file_groups
+from fluxcore.services.metadata.instrument_history import (
+    InstrumentHistory,
+    InstrumentPeriod,
+)
 from fluxcore.services.metadata.runtime_config_builder import (
     build_runtime_config_from_file,
 )
@@ -250,13 +254,13 @@ class RuntimeConfigBuilderTestCase(unittest.TestCase):
         specs = build_variable_registry(
             runtime_cfg=cfg, file_groups=build_file_groups(cfg)
         )
-        history = _history_from_instruments(group_by_canonical_name(specs)["Ta_Av"])
+        history = InstrumentHistory.from_specs(group_by_canonical_name(specs)["Ta_Av"])
         self.assertEqual(
-            {k: (v["start_date"], v["end_date"]) for k, v in history.items()},
-            {
-                "Sensor A": (None, pd.Timestamp("2021-01-01 00:00")),
-                "Sensor B": (pd.Timestamp("2021-01-01 00:30"), None),
-            },
+            history.roles[0].periods,
+            (
+                InstrumentPeriod("Sensor A", None, datetime(2021, 1, 1, 0, 0)),
+                InstrumentPeriod("Sensor B", datetime(2021, 1, 1, 0, 30), None),
+            ),
         )
 
     def test_unused_file_formats_entry_is_rejected(self):
