@@ -2,7 +2,8 @@
 """Derive quantities that aren't directly measured.
 
 derive_missing_humidity: for each (instrument, height) group with Ta and
-exactly one of {RH, AH}, derives the missing variable from the other plus Ta and ps.
+exactly one of {RH, AH}, derives the missing variable from the other plus Ta
+(no pressure needed: it cancels out of the conversion).
 
 derive_co2_mole_fraction: for each CO2c column (Av and Sd only), derives the
 corresponding CO2 dry mole fraction if not already present. Ta_Av and ps_Av are used as
@@ -60,15 +61,10 @@ def derive_missing_humidity(
     """Derive and add the missing humidity variable (RH or AH) for each group.
 
     A group is an instrument+height combination that has Ta and exactly one
-    of {RH, AH}. Returns the result unchanged if no pressure variable is
-    found or there is nothing to derive.
+    of {RH, AH}. Returns the result unchanged if there is nothing to derive.
     """
     df = result.df.copy()
     var_attrs = dict(result.var_attrs)
-
-    ps_col = _find_quantity_av(df, var_attrs, "ps")
-    if ps_col is None:
-        return result
 
     groups = _group_by_instrument_height(var_attrs)
 
@@ -84,17 +80,13 @@ def derive_missing_humidity(
 
         if rh_col is not None:
             new_col = _derived_name(rh_col, "RH", "AH")
-            df[new_col] = get_calculation("AH")(
-                Ta=df[ta_col], RH=df[rh_col], ps=df[ps_col]
-            )
+            df[new_col] = get_calculation("AH")(Ta=df[ta_col], RH=df[rh_col])
             var_attrs[new_col] = _build_attrs(
                 source_attrs=var_attrs[rh_col], quantity="AH"
             )
         else:
             new_col = _derived_name(ah_col, "AH", "RH")
-            df[new_col] = get_calculation("RH")(
-                AH=df[ah_col], Ta=df[ta_col], ps=df[ps_col]
-            )
+            df[new_col] = get_calculation("RH")(AH=df[ah_col], Ta=df[ta_col])
             var_attrs[new_col] = _build_attrs(
                 source_attrs=var_attrs[ah_col], quantity="RH"
             )
@@ -283,12 +275,18 @@ def _derived_name(source_name: str, source_qty: str, new_qty: str) -> str:
 
 
 def _build_attrs(source_attrs: dict, quantity: str) -> dict:
-    """Build attrs for a derived variable, inheriting spatial/instrument context."""
+    """Build attrs for a derived variable, inheriting spatial/instrument context.
+
+    A derived quantity is calculated, not measured, but it still originates
+    from its source variable's instrument (e.g. an HMP's Ta and RH give AH),
+    so it carries that instrument, its URI and its history.
+    """
     canonical = build_canonical_quantity_registry().get_base_metadata(quantity)
     return {
         "height": source_attrs["height"],
         "height_range": source_attrs["height_range"],
         "instrument": source_attrs["instrument"],
+        "instrument_uri": copy.deepcopy(source_attrs.get("instrument_uri")),
         # Copied, so the derived variable's history isn't the same list object.
         "instrument_history": copy.deepcopy(source_attrs["instrument_history"]),
         "long_name": canonical.long_name,

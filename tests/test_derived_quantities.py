@@ -11,7 +11,9 @@ from fluxcore.orchestration.derived_quantities import (
     DatasetBuildIntermediate,
     add_day_night_indicator,
     add_net_radiation,
+    derive_missing_humidity,
 )
+from fluxcore.services.data.calculations import calculate_AH_from_RH
 
 LAT, LON, ELEV = -34.0027, 140.5877, 60
 
@@ -32,6 +34,71 @@ def _radiation_attrs(quantity):
             }
         ],
     }
+
+
+def _hmp_attrs(quantity, statistic_type="average"):
+    return {
+        **_radiation_attrs(quantity),
+        "statistic_type": statistic_type,
+        "height": 2.0,
+        "instrument": "Vaisala HMP155",
+        "instrument_uri": "http://example.org/hmp155",
+        "instrument_history": [
+            {
+                "role": None,
+                "periods": [
+                    {"instrument": "Vaisala HMP155", "start": None, "end": None}
+                ],
+            }
+        ],
+    }
+
+
+class DeriveMissingHumidityTestCase(unittest.TestCase):
+    def _result(self, columns, quantities):
+        idx = pd.date_range("2025-01-01", periods=2, freq="30min")
+        return DatasetBuildIntermediate(
+            df=pd.DataFrame(columns, index=idx),
+            var_attrs={name: _hmp_attrs(q) for name, q in quantities.items()},
+        )
+
+    def test_ah_is_derived_without_any_pressure_variable(self):
+        result = derive_missing_humidity(
+            self._result(
+                {"Ta_2m": [20.0, 10.0], "RH_2m": [60.0, 80.0]},
+                {"Ta_2m": "Ta", "RH_2m": "RH"},
+            )
+        )
+        np.testing.assert_allclose(
+            result.df["AH_2m"],
+            calculate_AH_from_RH(Ta=np.array([20.0, 10.0]), RH=np.array([60.0, 80.0])),
+        )
+        attrs = result.var_attrs["AH_2m"]
+        self.assertEqual(attrs["quantity"], "AH")
+        # Calculated, but it still comes from the HMP's Ta and RH.
+        self.assertEqual(attrs["instrument"], "Vaisala HMP155")
+        self.assertEqual(attrs["instrument_uri"], "http://example.org/hmp155")
+        self.assertEqual(
+            attrs["instrument_history"], result.var_attrs["RH_2m"]["instrument_history"]
+        )
+
+    def test_missing_pressure_does_not_blank_the_derived_ah(self):
+        result = derive_missing_humidity(
+            self._result(
+                {"Ta_2m": [20.0, 10.0], "RH_2m": [60.0, 80.0], "ps": [np.nan, 100.0]},
+                {"Ta_2m": "Ta", "RH_2m": "RH", "ps": "ps"},
+            )
+        )
+        self.assertFalse(result.df["AH_2m"].isna().any())
+
+    def test_rh_is_derived_from_ah(self):
+        ah = calculate_AH_from_RH(Ta=np.array([20.0, 10.0]), RH=np.array([60.0, 80.0]))
+        result = derive_missing_humidity(
+            self._result(
+                {"Ta_2m": [20.0, 10.0], "AH_2m": ah}, {"Ta_2m": "Ta", "AH_2m": "AH"}
+            )
+        )
+        np.testing.assert_allclose(result.df["RH_2m"], [60.0, 80.0])
 
 
 class AddNetRadiationTestCase(unittest.TestCase):
