@@ -1,249 +1,120 @@
-# Default L2 range_check bounds, per canonical quantity.
+# Default L2 range_check bounds, per canonical quantity: [min, max].
 #
-# Each leaf value is a [min, max] pair (in that order) -- always exactly
-# two numbers, so no valid_min/valid_max keys are needed; the position
-# carries the meaning.
+# The single source of value ranges (L2 QC, and in the TERN pipeline the
+# RTMC export and site monitors). A site's own range_check overrides these
+# field by field.
 #
-# Two sources, distinguished per-entry by comment where it matters:
-#   1. /opt/TERN_EP/site_configs/templates/L2_ozflux.txt (PyFluxPro's
-#      OzFlux-network default control file) -- vetted operational sanity
-#      bounds. Covers AH, CO2, Fg, Fld, Flu, Fn, Fsd, Fsu, Precip, RH,
-#      Sws, Ta, Tpanel, Ts, Tv, Ux/Uy/Uz (+Sd/Vr), the raw covariance terms
-#      (UxA..UzT), Vbat, Wd, Ws, ps.
-#   2. canonical_quantities.yml's old valid_min/valid_max fields, migrated
-#      here in full and since REMOVED from that file, which is now quantity
-#      identity/units only -- this file is the single source of value ranges
-#      (L2 QC, the legacy TOA5/RTMC export and the site monitors all read it).
-#      Covers every other entry below. These were never statistic-specific
-#      (canonical_quantities.yml had no such treatment), so they're filed
-#      as a single flat [min, max] per quantity regardless of statistic.
+# Keying, by the variable's quantity:
+#   - [min, max] directly under the quantity;
+#   - nested by statistic suffix (Av / Sd / Vr), from the variable's
+#     statistic_type attr, where bounds differ by statistic. Sd and Vr are
+#     both given (Sd = sqrt(Vr)), lower bound 0;
+#   - Diag: nested by instrument qualifier (IRGA / SONIC) -- unrelated
+#     instrument codes that only share a name;
+#   - ps: `standard_pressure_pm: N` = standard-atmosphere pressure at the
+#     site's elevation +/- N kPa; no elevation, no default.
 #
-# Keying convention, matching services.metadata.variable_name_parser's
-# ParsedVariableName.quantity and the L1 store's own ds[var].attrs
-# ["statistic_type"] (the authoritative source for statistic -- required
-# for every continuous variable by site_config_schema.py, not something to
-# re-derive by parsing the variable name, which fails on several real
-# canonical names -- e.g. Ta_Sd_2m):
-#   - Quantity with no statistic variants -> [min, max] directly under the
-#     quantity (e.g. Fld, Ta, UxA).
-#   - Quantity whose bounds vary by statistic -> nest one level, keyed by
-#     the StatisticType suffix (Av / Sd / Vr / ...).
-#   - Site-dependent bound (ps only): a dict with `standard_pressure_pm: N` resolves
-#     to standard-atmosphere pressure at ds.attrs["elevation"] +/- N kPa
-#     (services.metadata.qc_config_schema.standard_pressure_kpa); no elevation,
-#     no default.
-#   - Quantity keyed by INSTRUMENT QUALIFIER instead of statistic (Diag
-#     only -- see note below): nest one level under the qualifier
-#     (IRGA / SONIC), read off the variable name via parse_variable_name (there is
-#     no separate short-form qualifier attr on the L1 store; ds[var].attrs
-#     ["instrument"] is the full model string, e.g. "LI-COR LI-7500RS").
-#
-# No quantity needs BOTH qualifier and statistic keying. PyFluxPro's source
-# file distinguishes AH_<inst>_<height>m (unqualified) from AH_IRGA_Av/Sd/Vr
-# (IRGA-qualified) by instrument, but that's a precision distinction
-# between two measurements of the *same* physical quantity -- not
-# meaningful for a coarse default sanity bound, so the two Av entries
-# (0,30) and (0,35) are merged to the wider bound below rather than kept
-# apart by qualifier. CO2/Tv/Ux/Uy/Uz/Wd/Ws were only ever qualified by
-# one instrument in the source file with no competing unqualified value, so
-# their qualifier was never load-bearing either -- keyed by statistic (or
-# flat) directly, same as AH.
-#
-# Diag is the one real exception: Diag_IRGA and Diag_SONIC are not two
-# measurements of one physical quantity -- they're two unrelated,
-# instrument-specific diagnostic codes that happen to share the name
-# "Diag", with no statistic dimension at all. There's no principled single
-# number to merge them into, so qualifier is genuinely load-bearing there.
-#
-# Sd/Vr completeness: a site config uses either _Sd or _Vr for a given
-# variable, never both, but which one varies by site -- L2_ozflux.txt only
-# ever specified one of the pair for Tv/Ux/Uy/Uz (Vr only). Rather than
-# leave the other statistic with no default, the missing side is filled in
-# using the fixed relationship Sd = sqrt(Vr) (equivalently Vr = Sd**2), so
-# every quantity below has both regardless of which one PyFluxPro's source
-# file happened to specify. A variance/stdev's true lower bound is always 0
-# -- there is no physical reading for which a negative value is meaningful
-# (unlike, say, a radiometer's small negative nocturnal offset, which is a
-# real sensor characteristic, not a defect -- see Fsd/Fsu below). Any source
-# lower bound below 0 is corrected to 0 rather than ported verbatim; see the
-# Ux/Uy/Uz Vr note below.
-#
-# Loaded by services.metadata.qc_config_schema.load_range_defaults() and
-# merged in by qc_config_schema.resolve_qc_config (via lookup_default_range)
-# for every checkable L1 variable whose site config sets no range_check --
-# an explicit per-site range_check always takes precedence over a default
-# here, field by field (a site entry with only a dependency_check still gets
-# the default range_check). Lookup
-# is quantity -> flat [min,max], or qualifier, or StatisticType suffix (in
-# that order) -- see the keying convention above. Note: the L1 store's
-# ds[var].attrs["statistic_type"] round-trips through zarr/netCDF as the
-# StatisticType enum's plain string value ("average", "standard_deviation",
-# "variance", ...), not its Av/Sd/Vr suffix -- apply_qc converts via
-# StatisticType(attrs_value).suffix before indexing into this file.
-#
-# CORRECTED FROM SOURCE:
-#   - Ux_SONIC_Vr, Uy_SONIC_Vr, Uz_SONIC_Vr: PyFluxPro's file gives these a
-#     negative lower bound (e.g. -10 to 10), almost certainly a copy-paste
-#     of the corresponding covariance/Av range rather than an intentional
-#     variance bound. Corrected to a 0 lower bound here (a variance cannot
-#     be negative) rather than ported verbatim. The derived Sd entries use
-#     the same 0 lower bound and max = sqrt(Vr max).
-#   - H2O: canonical_quantities.yml had valid_min: 80.0, valid_max: 0.0 --
-#     reversed (min > max), clearly a data-entry error rather than an
-#     intentional bound. Corrected to [0, 80] here.
-#   - CO2 / CO2c swap: found via real-PyFluxPro-output benchmarking
-#     (Calperum, 2026-09). PyFluxPro's own "CO2_IRGA_Av" output is CO2 mass
-#     concentration (mg/m^3, values ~700-920), not mole fraction, despite
-#     the name -- confirmed by direct comparison against this pipeline's
-#     CO2c_IRGA_Av (near-exact match). The original CO2.IRGA bounds here
-#     (500,2000 / 0,50 / 0,2500, ported from PyFluxPro's L2_ozflux.txt
-#     template under the CO2_IRGA_Av name) were therefore mass-concentration
-#     bounds mislabeled as mole fraction -- moved to CO2c below, which also
-#     needed splitting by statistic (it was a single flat [400,1600] from
-#     the canonical_quantities.yml migration, wrongly applying an Av-scale
-#     bound to Sd/Vr too -- this masked 12459/12462 of Calperum's real
-#     CO2c_IRGA_Sd records via range_check before the fix). CO2 (true mole
-#     fraction) now has its own evidence-based bounds instead.
-#
-# FLAGGED FOR REVIEW before this is wired into the pipeline:
-#   - Fn: RESOLVED 2026-09-29. Fn is now always calculated at L1 from
-#     Fsd - Fsu + Fld - Flu (orchestration/derived_quantities.add_net_radiation)
-#     and never imported -- an audit found a site's own raw Fn/Fn_2/Fn_RAD was
-#     either exactly this same sum (redundant) or a disagreeing secondary
-#     "NR Lite"-family instrument (dropped by decision). This bound now
-#     applies to the calculated quantity like any other L1 variable; no
-#     further action needed here.
-#   - Fg: no site currently has an Fg_* variable in
-#     /opt/TERN_EP/site_configs/operational/, so this entry is currently
-#     unused, kept for completeness/future sites.
-#   - AGC: deliberately absent. PyFluxPro's AGC_IRGA (0, 70) is not carried
-#     because no site produces an AGC variable -- the raw "AGC" logger columns
-#     in use are really signal strength (canonical Sig_IRGA); see project
-#     memory li7500-agc-vs-signal-strength.
-#   - Diag_IRGA / Diag_SONIC: NOT ported from PyFluxPro. PyFluxPro's L1
-#     template (controlfiles/templates/L1/L1_ozflux_csv.txt) declares these
-#     statistic_type=average, sourced from logger fields (7500_Warn,
-#     CSAT_Warn) -- consistent with a per-scan (10 Hz) decoded
-#     diagnostic-bit population count, time-averaged over the period, which
-#     is why PyFluxPro's bounds are small (0-10 / 0-20). This pipeline's
-#     equivalent variable is a raw count of scans with any flag raised
-#     (0-18000 at 10 Hz/30 min) -- a different quantity entirely, and there
-#     is no per-scan decoded value available to average instead, so
-#     PyFluxPro's bounds don't transfer. Instead, the upper bound below was
-#     first carried over from services/data/data_monitor.py's THRESHOLD_SPECS
-#     (max: 1000, a dashboard monitoring threshold), then set to 500 by user
-#     decision as the masking tolerance (these bounds also gate the implicit
-#     SONIC/IRGA dependency checks in _dependency_defaults.yml). Manual
-#     inspection of Whroo_2026_L1.nc confirmed the failure mode is bimodal --
-#     good periods have a handful of flagged scans at most, bad periods jump
-#     straight to several thousand -- so the exact cutoff barely matters as
-#     long as it sits in that gap. NOT normalized for 10 vs 20 Hz sampling
-#     (20 Hz sites have twice the scans, so 500 is twice as strict there in
-#     percentage terms) -- freq_hz isn't in the L1 store's ds.attrs.
-#   - FsdDiff, FsdDir: migrated from canonical_quantities.yml as-is
-#     (-20, 1412), not harmonized with Fsd's own PyFluxPro-sourced bound
-#     (-10, 1500) even though these are components of the same downwelling
-#     shortwave signal -- worth reconsidering together if Fsd's bound is
-#     ever revisited.
+# Sources: unmarked bounds are PyFluxPro's OzFlux template
+# (site_configs/templates/L2_ozflux.txt); "PFP sites" marks the value most
+# sites' own PyFluxPro configs used; "migrated" marks the old
+# canonical_quantities.yml valid_min/valid_max, never vetted against data.
+# Departures from source:
+#   - Ux/Uy/Uz Vr: PyFluxPro's negative lower bound set to 0.
+#   - CO2/CO2c: PyFluxPro's "CO2_IRGA_Av" is mass concentration, so its
+#     bounds are CO2c's; CO2 (mole fraction) has its own.
+#   - AGC: absent; the raw "AGC" columns are signal strength (Sig).
+#   - Diag: a count of flagged scans (0-18000 per 30 min at 10 Hz), not
+#     PyFluxPro's averaged bit count. Failures are bimodal, so the cutoff
+#     isn't sensitive; it isn't scaled for 20 Hz sites.
 
 AH:
-  Av: [0, 30]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,35) merged bound
-  Sd: [0, 2]                    # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,10)
-  Vr: [0, 4]                    # = Sd max squared
+  Av: [0, 30]                   # PFP sites
+  Sd: [0, 2]                    # PFP sites
+  Vr: [0, 4]
 
-CO2:                              # CO2 mole fraction (umol/mol) -- see CORRECTED note above
-  Av: [350, 1500]                 # migrated from canonical_quantities.yml
-  Sd: [0, 20]                     # evidence-based: real Calperum CO2_IRGA_Sd, median 0.74, 98% <= 20
-  Vr: [0, 400]                    # derived: sqrt(Vr max) = sqrt(400) = 20 = Sd max
+CO2:                              # mole fraction (umol/mol)
+  Av: [350, 1500]                 # migrated
+  Sd: [0, 20]                     # Calperum CO2_IRGA_Sd: 98% <= 20
+  Vr: [0, 400]
 
-CO2c:                             # CO2 mass concentration (mg/m^3) -- see CORRECTED note above
+CO2c:                             # mass concentration (mg/m^3)
   Av: [500, 2000]
-  Sd: [0, 25]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,50)
-  Vr: [0, 625]                  # = Sd max squared
+  Sd: [0, 25]                   # PFP sites
+  Vr: [0, 625]
 
 Diag:
-  IRGA: [0, 500]                 # invalid-sample-count masking bound (user choice); NOT normalized
-  SONIC: [0, 500]                # for 10 vs 20 Hz sampling. data_monitor.THRESHOLD_SPECS (1000) is
-                                 # a separate monitoring threshold
+  IRGA: [0, 500]
+  SONIC: [0, 500]
 
-ER: [0, 30]                       # migrated from canonical_quantities.yml
+ER: [0, 30]                       # migrated
 
-FAPAR: [0, 1]                     # migrated from canonical_quantities.yml
-Fa: [-300, 1000]                  # migrated from canonical_quantities.yml
-Fco2: [-50, 50]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (-50,30)
-Fe: [-100, 600]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (-200,1000)
-Fg: [-100, 150]                   # Fg_<depth>cm[a|b|c]
-Fh: [-100, 600]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (-200,1000)
-Fld: [200, 700]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (250,700)
-Flu: [200, 700]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (300,700)
-Fn: [-100, 1000]                  # see FLAGGED note above
+FAPAR: [0, 1]                     # migrated
+Fa: [-300, 1000]                  # migrated
+Fco2: [-50, 50]                   # PFP sites
+Fe: [-100, 600]                   # PFP sites
+Fg: [-100, 150]
+Fh: [-100, 600]                   # PFP sites
+Fld: [200, 700]                   # PFP sites
+Flu: [200, 700]                   # PFP sites
+Fm: [0, 5]                        # migrated (as tau)
+Fn: [-100, 1000]
+Fqd: [-40, 3000]                  # PAR, umol/m^2/s
+Fqu: [-40, 1000]
 Fsd: [-10, 1500]
-FsdDiff: [-20, 1412]              # migrated from canonical_quantities.yml -- see FLAGGED note above
-FsdDir: [-20, 1412]               # migrated from canonical_quantities.yml -- see FLAGGED note above
+FsdDiff: [-20, 1412]              # migrated
+FsdDir: [-20, 1412]               # migrated
 Fsu: [-10, 500]
 
-GPP: [-60, 0]                     # migrated from canonical_quantities.yml
+GPP: [-60, 0]                     # migrated
 
-H2O: [0, 80]                      # migrated from canonical_quantities.yml -- see CORRECTED note above
+H2O: [0, 80]                      # migrated (was reversed there)
 
-NEE: [-50, 30]                    # migrated from canonical_quantities.yml
-NEP: [-50, 30]                    # migrated from canonical_quantities.yml
+NEE: [-50, 30]                    # migrated
+NEP: [-50, 30]                    # migrated
 
 Precip: [0, 50]
 
-RH: [0, 110]                      # RH_<inst>_<height>m
-RHint: [0, 100]                   # migrated from canonical_quantities.yml
-Rhoa: [0.4, 1.4]                  # migrated from canonical_quantities.yml
-Rhod: [0.6, 1.6]                  # migrated from canonical_quantities.yml
+RH: [0, 110]
+RHint: [0, 100]                   # migrated
+Rhoa: [0.4, 1.4]                  # migrated
+Rhod: [0.6, 1.6]                  # migrated
 
-Sig: [80, 102.5]                  # signal strength (Sig/SigCO2/SigH2O) moves in 6.25 steps (..., 68.75, 75, 81.25, ...).
-SigCO2: [80, 102.5]               # 2026-09-28 audit: the ~75 level is noisy at every site (CO2c_Sd 2-8x healthy;
-SigH2O: [80, 102.5]               # Fco2 out of [-40,20] 14% for LI-7500, 2-40% for EC-family), so all three drop it
-SVP: [0.25, 12.5]                 # kPa. Saturation VP over Ta [-10, 50] (Tetens): 0.29 to 12.35. No default before 2026-09-28,
-VP: [0, 12.5]                     # so Wellington's logger garbage (6,025 records) passed L2. VP can't exceed saturation VP.
-Swp: [-10000, 0]                  # migrated from canonical_quantities.yml
-Sws: [0.001, 1.0]                 # Sws_<depth>cm[a|b|c] -- upper bound is the PHYSICAL ceiling (1 = free water); it was
-                                   # 0.5 ('typical mineral soil'), which flags real organic/peat soils (0.7-0.94) and
-                                   # clay (0.5-0.6). 17 identical [0.001, 1.0] site overrides were folded in here
-                                   # (2026-09-28 audit). Catches logger fill values (9999999, or averages containing them).
-                                   # Lower bound raised from
-                                   # PyFluxPro's 0: a reading of exactly 0.0 is
-                                   # typically a stuck/disconnected sensor, not
-                                   # real soil moisture (residual bound water
-                                   # means real readings essentially never hit
-                                   # exactly 0). Generalized from Calperum's own
-                                   # autogen-derived value (site_configs/templates/
-                                   # L2_autogen.txt), since the reasoning applies
-                                   # to any soil-moisture probe, not just that site.
+Sig: [80, 102.5]                  # signal strength moves in 6.25 steps; the ~75 level is noisy at every
+SigCO2: [80, 102.5]               # site, so all three exclude it
+SigH2O: [80, 102.5]
+SVP: [0.25, 12.5]                 # kPa: saturation VP over Ta [-10, 50]
+VP: [0, 12.5]                     # can't exceed saturation VP
+Swp: [-10000, 0]                  # migrated
+Sws: [0.001, 1.0]                 # 1 = free water (peat reaches 0.9); exactly 0 is a stuck or disconnected probe
 
-Ta: [-10, 50]                     # Ta_<inst>_<height>m
-Tbody: [-40, 60]                  # migrated from canonical_quantities.yml
-Tcanopy: [-40, 60]                # migrated from canonical_quantities.yml
-Td: [-65, 40]                     # migrated from canonical_quantities.yml
-Tint: [-40, 60]                   # migrated from canonical_quantities.yml
+Ta: [-10, 50]
+Tbody: [-40, 60]                  # migrated
+Tcanopy: [-40, 60]                # migrated
+Td: [-65, 40]                     # migrated
+Tint: [-40, 60]                   # migrated
 Tpanel: [-20, 60]
-Ts: [0, 60]                       # Ts_<depth>cm[a|b|c]
-Tstar: [-50, 50]                  # migrated from canonical_quantities.yml
+Ts: [0, 60]
+Tstar: [-50, 50]                  # migrated
 
 Tv:
   Av: [-10, 50]
-  Sd: [0, 3]                     # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,2.236)
-  Vr: [0, 9]                     # = Sd max squared
+  Sd: [0, 3]                     # PFP sites
+  Vr: [0, 9]
 
 Ux:
   Av: [-20, 20]
-  Sd: [0, 3]                     # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,3.162)
-  Vr: [0, 9]                     # = Sd max squared
+  Sd: [0, 3]                     # PFP sites
+  Vr: [0, 9]
 
 Uy:
   Av: [-20, 20]
-  Sd: [0, 3]                     # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,3.162)
-  Vr: [0, 9]                     # = Sd max squared
+  Sd: [0, 3]                     # PFP sites
+  Vr: [0, 9]
 
 Uz:
   Av: [-1, 1]
-  Sd: [0, 1.5]                   # PFP template value, identical at >=20 sites (2026-09-28 audit); was (0,1.414)
-  Vr: [0, 2.25]                  # = Sd max squared
+  Sd: [0, 1.5]                   # PFP sites
+  Vr: [0, 2.25]
 
 UxA: [-1, 1]
 UxC: [-4, 4]
@@ -264,21 +135,16 @@ Vbat: [0, 15]
 
 Wd:
   Av: [0, 360]
-  Sd: [0, 360]                   # same at all 15 overrides, none ever fires (2026-09-28 audit)
+  Sd: [0, 360]
 
 Ws:
   Av: [0, 20]
-  Sd: [0, 20]                     # lower bound is the real backstop -- Diag_SONIC dependency_check
-                                   # (_dependency_defaults.yml) now catches the diagnostic-driven spikes
-                                   # this bound barely touched (2026-09-29 audit: 10/15340 at Fletcherview)
+  Sd: [0, 20]
 
-pitch: [0, 90]                    # migrated from canonical_quantities.yml
-ps:                               # station pressure (kPa): standard-atmosphere pressure at the site's elevation
-  standard_pressure_pm: 10        # +/- 10 kPa. Elevation is the L1 store's own ds.attrs["elevation"]; no elevation -> no
-                                  # default. Replaces 15 hand-computed per-site overrides (2026-09-28 audit) and the old flat
-                                  # [95, 105], which assumed near-sea-level and flagged 34-100% at 11 sites above ~500 m.
+pitch: [0, 90]                    # migrated
+ps:                               # station pressure (kPa)
+  standard_pressure_pm: 10
 
-roll: [0, 90]                     # migrated from canonical_quantities.yml
+roll: [0, 90]                     # migrated
 
-tau: [0, 5]                       # migrated from canonical_quantities.yml
-ustar: [0, 5]                     # migrated from canonical_quantities.yml
+ustar: [0, 5]                     # migrated
