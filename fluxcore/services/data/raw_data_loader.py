@@ -23,7 +23,10 @@ _LAYOUTS = {
         # "NAN": Campbell's float sentinel. "-2147483648" (INT32_MIN): Campbell's
         # NaN convention for LONG (integer) fields -- appears raw in TOA5 files
         # (e.g. Diag_SONIC/Diag_IRGA at some sites), not something our code writes.
-        "na_values": ["NAN", "-2147483648"],
+        # "INF"/"-INF": Campbell's overflow / divide-by-zero results (seen in
+        # EasyFlux TAU at SilverPlains, heat flux plates at MyallValeA/B) --
+        # never a valid measurement.
+        "na_values": ["NAN", "-2147483648", "INF", "-INF"],
         "quoting": csv.QUOTE_NONNUMERIC,
     },
     FileFormat.EDDYPRO: {
