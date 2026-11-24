@@ -117,7 +117,7 @@ class ApplyQCTestCase(unittest.TestCase):
                 "Ta_Av": VariableQCSpec(
                     range_check=RangeCheckSpec(lower=-10, upper=50),
                     exclude_dates=[
-                        ("2020-01-01T01:30:00", "2020-01-01T01:30:00"),
+                        {"start": "2020-01-01T01:30:00", "end": "2020-01-01T01:30:00"},
                     ],
                 ),
             },
@@ -193,7 +193,9 @@ class FlagCheckTestCase(unittest.TestCase):
 
     def test_later_exclude_dates_overrides_flag_check(self):
         cfg = self._config(
-            exclude_dates=[("2020-01-01T03:30:00", "2020-01-01T03:30:00")]
+            exclude_dates=[
+                {"start": "2020-01-01T03:30:00", "end": "2020-01-01T03:30:00"}
+            ]
         )
         out = qc_pipeline.apply_qc(self._ds(), cfg)
         flags = out["Fco2_QCFlag"].squeeze(("latitude", "longitude")).values
@@ -276,6 +278,33 @@ class CorrectionTestCase(unittest.TestCase):
         self.assertEqual(
             attrs["linear_correction"], "2020-01-01 01:00,2020-01-01 02:30,2.0,0.0"
         )
+
+    def test_absolute_runs_before_linear_and_is_flagged_10(self):
+        ds = _build_dataset()
+        ds["Ta_Av"][:] = -np.arange(10, dtype=float).reshape(10, 1, 1)
+        qc_config = SiteQCConfig(
+            site_name="TestSite",
+            variables={
+                "Ta_Av": VariableQCSpec.model_validate(
+                    {
+                        "absolute": [
+                            {"start": "2020-01-01 02:00", "comment": "signed from here"}
+                        ],
+                        "linear": [{"start": "2020-01-01 04:00", "slope": 2.0}],
+                    }
+                )
+            },
+        )
+        out = qc_pipeline.apply_qc(ds, qc_config)
+        values = out["Ta_Av"].squeeze().to_numpy()
+        flags = out["Ta_Av_QCFlag"].squeeze().to_numpy()
+        # Records 0-3 untouched; 4-7 absolute; 8-9 absolute then doubled.
+        np.testing.assert_array_equal(values, [0, -1, -2, -3, 4, 5, 6, 7, 16, 18])
+        self.assertEqual(flags.tolist(), [0, 0, 0, 0] + [10] * 6)
+        attrs = out["Ta_Av"].attrs
+        self.assertEqual(attrs["absolute_correction"], "2020-01-01 02:00,")
+        # Comments are config metadata only, never written to the output.
+        self.assertNotIn("signed from here", str(attrs))
 
     def test_corrected_variable_is_good_for_dependents(self):
         ds = _build_dataset()

@@ -29,13 +29,13 @@ Ta_Av:
     upper: 50
 
 # --- exclude_dates ---
-# Flags every record falling within any listed [start, end] range, inclusive
-# on both ends. Give as many ranges as needed; each is an ISO-8601 timestamp
-# pair. Use this for known bad periods (sensor swap, storm damage, etc.).
+# Flags every record falling within any listed window, inclusive on both ends
+# (omit start or end for open-ended). Use this for known bad periods (sensor
+# swap, storm damage, etc.).
 Fh:
   exclude_dates:
-    - ["2023-01-05T00:00:00", "2023-01-07T12:00:00"]
-    - ["2023-06-20T00:00:00", "2023-06-20T00:00:00"]  # a single record
+    - {start: "2023-01-05 00:00", end: "2023-01-07 12:00", comment: storm damage to the sonic}
+    - {start: "2023-06-20 00:00", end: "2023-06-20 00:00"}  # a single record
 
 # --- dependency_check ---
 # Flags a variable wherever any listed precursor variable is itself flagged
@@ -80,6 +80,24 @@ Fsd_Av:
     fsd_threshold: 12.0
     zfc: 5.5
     edge_threshold: [20.0, 80.0]
+
+# --- comment ---
+# Any variable entry, and any dated entry (absolute, linear, wd_offset,
+# exclude_dates), can carry a `comment`: the reason or evidence for it. It's
+# config metadata only -- never used in processing or written to the output --
+# and, unlike a YAML "#" comment, it survives the file being loaded and saved
+# (e.g. by an editor UI). See the absolute example below.
+
+# --- absolute ---
+# Replaces values by their absolute value within each window, for a quantity
+# the network reports as a magnitude that a logger or processing package
+# started reporting signed. Runs before linear and wd_offset; flagged 10 like
+# them; recorded in an absolute_correction attribute.
+Fm:
+  comment: Momentum flux from EddyPro's Tau.
+  absolute:
+    - start: "2023-04-12 16:30"
+      comment: EddyPro reports Tau signed from here; |Tau| = rho * u*^2 throughout.
 
 # --- linear ---
 # Corrects data from an instrument or logger program deployed with wrong

@@ -101,12 +101,18 @@ class MADFilterSpec(BaseModel):
 
 
 class _DateWindow(BaseModel):
-    """A date range, inclusive; a missing start or end is open-ended."""
+    """A date range, inclusive; a missing start or end is open-ended.
+
+    `comment` is the reason for the entry (the evidence for a correction or
+    exclusion): standalone metadata for people and the UI, never used in
+    processing or written to the output, and left out of the config hash.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     start: datetime | None = None
     end: datetime | None = None
+    comment: str | None = None
 
     @model_validator(mode="after")
     def check_order(self):
@@ -128,6 +134,20 @@ class LinearCorrectionSpec(_DateWindow):
     offset: float = 0.0
 
 
+class AbsoluteCorrectionSpec(_DateWindow):
+    """Replace values by their absolute value within a date range.
+
+    For a quantity the network reports as a magnitude that a logger or
+    processing package started reporting signed (e.g. EddyPro's Tau, which
+    became signed at CumberlandPlain in 2023 while |Tau| = rho * u*^2
+    throughout). Applied before linear and wd_offset, and before the checks.
+    """
+
+
+class ExcludeDatesSpec(_DateWindow):
+    """A date range whose records are flagged bad (exclude_dates)."""
+
+
 class WdOffsetSpec(_DateWindow):
     """Add an offset to wind direction within a date range, modulo 360.
 
@@ -146,29 +166,19 @@ class VariableQCSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    comment: str | None = None  # see _DateWindow.comment
+    absolute: list[AbsoluteCorrectionSpec] | None = None
     linear: list[LinearCorrectionSpec] | None = None
     wd_offset: list[WdOffsetSpec] | None = None
     range_check: RangeCheckSpec | None = None
-    exclude_dates: list[tuple[datetime, datetime]] | None = None
+    exclude_dates: list[ExcludeDatesSpec] | None = None
     dependency_check: list[str] | None = None
     flag_check: FlagCheckSpec | None = None
     mad_filter: MADFilterSpec | None = None
 
-    @field_validator("exclude_dates")
-    @classmethod
-    def check_exclude_dates_order(cls, v):
-        """Enforce start < end for every exclude_dates range."""
-        if v is None:
-            return v
-        for start, end in v:
-            if start > end:
-                raise ValueError(
-                    f"exclude_dates range start ({start}) must not be after end "
-                    f"({end}); use start == end for a single-record exclusion"
-                )
-        return v
-
-    @field_validator("dependency_check", "linear", "wd_offset")
+    @field_validator(
+        "dependency_check", "absolute", "linear", "wd_offset", "exclude_dates"
+    )
     @classmethod
     def check_nonempty(cls, v, info):
         """Reject an explicitly-empty list."""
@@ -569,6 +579,8 @@ def resolve_qc_config(
             # Corrections and the remaining checks have no defaults.
             field: getattr(site_spec, field) if site_spec else None
             for field in (
+                "comment",
+                "absolute",
                 "linear",
                 "wd_offset",
                 "exclude_dates",
@@ -577,7 +589,8 @@ def resolve_qc_config(
             )
         }
         fields.update(range_check=range_check, dependency_check=dependency_check)
-        if all(value is None for value in fields.values()):
+        # A comment alone configures nothing.
+        if all(value is None for key, value in fields.items() if key != "comment"):
             continue
 
         merged[var_name] = VariableQCSpec(**fields)

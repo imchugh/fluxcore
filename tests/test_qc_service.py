@@ -30,7 +30,7 @@ class RangeCheckTestCase(unittest.TestCase):
 class ExcludeDatesCheckTestCase(unittest.TestCase):
     def test_flags_inclusive_range(self):
         idx = _index(5, freq="D", start="2020-01-01")
-        ranges = [(pd.Timestamp("2020-01-02"), pd.Timestamp("2020-01-03"))]
+        ranges = [_window("2020-01-02", "2020-01-03")]
         bad = qc_service.exclude_dates_check(idx, ranges)
         expected = pd.Series([False, True, True, False, False], index=idx)
         pd.testing.assert_series_equal(bad, expected)
@@ -38,8 +38,8 @@ class ExcludeDatesCheckTestCase(unittest.TestCase):
     def test_multiple_ranges_combine(self):
         idx = _index(5, freq="D", start="2020-01-01")
         ranges = [
-            (pd.Timestamp("2020-01-01"), pd.Timestamp("2020-01-01")),
-            (pd.Timestamp("2020-01-05"), pd.Timestamp("2020-01-05")),
+            _window("2020-01-01", "2020-01-01"),
+            _window("2020-01-05", "2020-01-05"),
         ]
         bad = qc_service.exclude_dates_check(idx, ranges)
         expected = pd.Series([True, False, False, False, True], index=idx)
@@ -164,6 +164,18 @@ def _window(start=None, end=None, **values):
         end=None if end is None else pd.Timestamp(end),
         **values,
     )
+
+
+class AbsoluteCorrectionTestCase(unittest.TestCase):
+    def test_only_values_inside_the_window_become_absolute(self):
+        idx = pd.date_range("2020-01-01 00:30", periods=4, freq="30min")
+        series = pd.Series([-1.0, -2.0, np.nan, -4.0], index=idx)
+        out, changed = qc_service.absolute_correction(
+            series, [_window("2020-01-01 01:00", None)]
+        )
+        np.testing.assert_array_equal(out.to_numpy(), [-1.0, 2.0, np.nan, 4.0])
+        self.assertEqual(changed.tolist(), [False, True, True, True])
+        self.assertEqual(series.iloc[1], -2.0)  # input not modified
 
 
 class LinearCorrectionTestCase(unittest.TestCase):

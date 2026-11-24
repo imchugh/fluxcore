@@ -562,6 +562,49 @@ class CorrectionSchemaTestCase(unittest.TestCase):
         self.assertEqual(spec.linear[0].offset, 0.0)
         self.assertIsNone(spec.wd_offset[0].end)
 
+    def test_comments_on_entries_and_variable(self):
+        spec = self._spec(
+            comment="EddyPro Tau",
+            absolute=[{"start": "2023-04-12 16:30", "comment": "signed from here"}],
+            exclude_dates=[
+                {"start": "2023-01-05", "end": "2023-01-07", "comment": "storm"}
+            ],
+        )
+        self.assertEqual(spec.comment, "EddyPro Tau")
+        self.assertEqual(spec.absolute[0].comment, "signed from here")
+        self.assertIsNone(spec.absolute[0].end)
+        self.assertEqual(spec.exclude_dates[0].comment, "storm")
+
+    def test_exclude_dates_pairs_no_longer_accepted(self):
+        with self.assertRaises(ValidationError):
+            self._spec(exclude_dates=[["2023-01-05", "2023-01-07"]])
+
+    def test_exclude_dates_start_after_end_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._spec(exclude_dates=[{"start": "2023-01-07", "end": "2023-01-05"}])
+
+    def test_comment_alone_configures_nothing(self):
+        ds = _resolve_ds(["SomeRandomVar"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test", variables={"SomeRandomVar": self._spec(comment="note")}
+        )
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables, {})
+
+    def test_resolve_keeps_comments(self):
+        ds = _resolve_ds(["Fco2"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test",
+            variables={
+                "Fco2": self._spec(
+                    comment="why", absolute=[{"start": "2023-01-01", "comment": "x"}]
+                )
+            },
+        )
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables["Fco2"].comment, "why")
+        self.assertEqual(merged.variables["Fco2"].absolute[0].comment, "x")
+
     def test_start_after_end_rejected(self):
         with self.assertRaises(ValidationError):
             self._spec(

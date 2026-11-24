@@ -17,7 +17,7 @@ from fluxcore.services.metadata.qc_config_schema import SiteQCConfig
 
 # PyFluxPro's own codes (from pfp_ck.py/pfp_io.py), so {var}_QCFlag is directly
 # comparable with real PyFluxPro output for benchmarking. 0 = OK. Combination
-# is PyFluxPro's scheme too: the corrections (linear, wd_offset) run first and
+# is PyFluxPro's scheme too: the corrections (absolute, linear, wd_offset) run first and
 # mark what they changed 10, then each check overwrites the code wherever it
 # fires, in PyFluxPro's execution order (range_check -> flag_check ->
 # exclude_dates -> mad_filter, then dependency_check), so the *last* one wins. A
@@ -125,12 +125,15 @@ def apply_qc(
 
 
 def _apply_corrections(ds: xr.Dataset, qc_config: SiteQCConfig) -> dict[str, pd.Series]:
-    """Apply every configured linear/wd_offset correction to ds, in place.
+    """Apply every configured absolute/linear/wd_offset correction to ds, in place.
 
     Runs before any check, as PyFluxPro does, so every check (including
     another variable's dependency_check or mad_filter reference) sees
-    corrected values. Each corrected variable records its windows in a
-    linear_correction / wd_offset attribute.
+    corrected values. absolute runs first (it fixes how a value was
+    reported), then linear (calibration), then wd_offset. Each corrected
+    variable records its windows in an absolute_correction /
+    linear_correction / wd_offset attribute; entries' comments are config
+    metadata only and aren't written out.
 
     Returns:
         {variable: mask of the records a correction changed}.
@@ -140,6 +143,10 @@ def _apply_corrections(ds: xr.Dataset, qc_config: SiteQCConfig) -> dict[str, pd.
         series = _extract_series(ds, var_name)
         changed = pd.Series(False, index=series.index)
         attrs = {}
+        if spec.absolute is not None:
+            series, mask = qc_service.absolute_correction(series, spec.absolute)
+            changed |= mask
+            attrs["absolute_correction"] = _describe(spec.absolute)
         if spec.linear is not None:
             series, mask = qc_service.linear_correction(series, spec.linear)
             changed |= mask
