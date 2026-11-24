@@ -23,12 +23,21 @@ Attr form, roles in config order, periods in time order:
 `role` is null for a single-instrument variable, or the compound key
 (`sonic_anemometer`, `irga`) for a flux variable; null dates are open-ended.
 
+Instrument URIs live beside the history, in the variable's `instrument_uri`
+attr: one `{instrument name: uri | null}` map over every instrument in the
+history (`instrument_uri_map()`). A URI is resolved from the instrument
+name, so the name is the only key it needs; the history says which name
+applies when. NetCDF export looks each window's instruments up in it
+(`InstrumentHistory.netcdf_uri()`).
+
 Public API
 ----------
 InstrumentPeriod, RoleHistory, InstrumentHistory
 InstrumentHistory.from_specs(var_specs) / .from_attr(attr) / .to_attr()
 InstrumentHistory.current() -> str
 InstrumentHistory.netcdf_attrs(window_start, window_end) -> (str, str | None)
+InstrumentHistory.netcdf_uri(uris, window_start, window_end) -> str | None
+instrument_uri_map(var_specs) -> dict[str, str | None]
 """
 
 from collections.abc import Sequence
@@ -177,15 +186,9 @@ class InstrumentHistory:
             role whose instrument ever changed and has a period in the
             window.
         """
-        instruments = []
         segments = []
         for r in self.roles:
-            clipped = [
-                (p.instrument, dates)
-                for p in r.periods
-                if (dates := p.clip(window_start, window_end)) is not None
-            ]
-            instruments.append(clipped[-1][0] if clipped else r.periods[-1].instrument)
+            clipped = _clipped(r, window_start, window_end)
             formatted = "|".join(
                 f"({inst},{start.isoformat()},{end.isoformat()})"
                 for inst, (start, end) in clipped
@@ -196,7 +199,73 @@ class InstrumentHistory:
             elif r.changed and clipped:
                 segments.append(f"{r.role}>{formatted}")
 
-        return ",".join(instruments), ";".join(segments) or None
+        instrument = ",".join(self._window_instruments(window_start, window_end))
+        return instrument, ";".join(segments) or None
+
+    def netcdf_uri(
+        self,
+        uris: dict[str, str | None] | str | None,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> str | None:
+        """NetCDF `instrument_uri` for a window (None means omit the attr).
+
+        The URIs of the window's instruments (see netcdf_attrs), comma-joined
+        in role order. An unresolved URI keeps its position as an empty item,
+        so the string lines up with `instrument` item by item; None if no
+        instrument resolves at all. A plain string `uris` (a store written
+        before the map form) is returned as it is.
+        """
+        if uris is None or isinstance(uris, str):
+            return uris
+        items = [
+            uris.get(name) or ""
+            for name in self._window_instruments(window_start, window_end)
+        ]
+        return ",".join(items) if any(items) else None
+
+    def _window_instruments(
+        self, window_start: datetime, window_end: datetime
+    ) -> list[str]:
+        """Per role, the last instrument in use within the window (or overall)."""
+        instruments = []
+        for r in self.roles:
+            clipped = _clipped(r, window_start, window_end)
+            instruments.append(clipped[-1][0] if clipped else r.periods[-1].instrument)
+        return instruments
+
+
+def instrument_uri_map(var_specs: Sequence) -> dict[str, str | None]:
+    """`{instrument name: uri | None}` over every instrument in var_specs.
+
+    Specs carry a URI string for a single instrument, or a role-keyed dict
+    for a compound one; either way each instrument name maps to one URI
+    (URIs are resolved from names), so roles aren't needed in the map.
+    """
+    uris: dict[str, str | None] = {}
+    for spec in var_specs:
+        if isinstance(spec.instrument, dict):
+            role_uris = spec.instrument_uri or {}
+            pairs = [
+                (name, role_uris.get(role)) for role, name in spec.instrument.items()
+            ]
+        else:
+            pairs = [(spec.instrument, spec.instrument_uri)]
+        for name, uri in pairs:
+            if uris.get(name) is None:
+                uris[name] = uri
+    return uris
+
+
+def _clipped(
+    role: RoleHistory, window_start: datetime, window_end: datetime
+) -> list[tuple[str, tuple[datetime, datetime]]]:
+    """A role's (instrument, clipped dates) for its periods inside the window."""
+    return [
+        (p.instrument, dates)
+        for p in role.periods
+        if (dates := p.clip(window_start, window_end)) is not None
+    ]
 
 
 def _merge_consecutive(

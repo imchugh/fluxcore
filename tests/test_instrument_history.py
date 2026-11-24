@@ -13,6 +13,7 @@ import xarray as xr
 from fluxcore.services.metadata.instrument_history import (
     InstrumentHistory,
     InstrumentPeriod,
+    instrument_uri_map,
 )
 
 CHANGE = datetime(2025, 6, 1, 0, 0)
@@ -20,9 +21,13 @@ AFTER_CHANGE = datetime(2025, 6, 1, 0, 30)
 YEAR_2025 = (datetime(2025, 1, 1, 0, 30), datetime(2026, 1, 1, 0, 0))
 
 
-def _spec(instrument, begin=None, end=None):
+def _spec(instrument, begin=None, end=None, uri=None):
     return SimpleNamespace(
-        instrument=instrument, begin=begin, end=end, canonical_name="Var"
+        instrument=instrument,
+        instrument_uri=uri,
+        begin=begin,
+        end=end,
+        canonical_name="Var",
     )
 
 
@@ -147,6 +152,78 @@ class NetcdfAttrsTestCase(unittest.TestCase):
         self.assertEqual(
             history, "irga>(LI-7500,2024-01-01T00:30:00,2025-01-01T00:00:00)"
         )
+
+
+class InstrumentUriTestCase(unittest.TestCase):
+    YEAR_2024 = (datetime(2024, 1, 1, 0, 30), datetime(2025, 1, 1))
+
+    def _logger_change(self):
+        specs = [
+            _spec("CR3000", end=CHANGE, uri="uri:cr3000"),
+            _spec("CR1000X", begin=AFTER_CHANGE, uri="uri:cr1000x"),
+        ]
+        return InstrumentHistory.from_specs(specs), instrument_uri_map(specs)
+
+    def _irga_change(self, sonic_uri="uri:csat"):
+        specs = [
+            _spec(
+                {"sonic_anemometer": "CSAT3B", "irga": "LI-7500"},
+                end=CHANGE,
+                uri={"sonic_anemometer": sonic_uri, "irga": "uri:7500"},
+            ),
+            _spec(
+                {"sonic_anemometer": "CSAT3B", "irga": "LI-7500RS"},
+                begin=AFTER_CHANGE,
+                uri={"sonic_anemometer": sonic_uri, "irga": "uri:7500rs"},
+            ),
+        ]
+        return InstrumentHistory.from_specs(specs), instrument_uri_map(specs)
+
+    def test_map_covers_every_instrument_in_the_history(self):
+        self.assertEqual(
+            self._logger_change()[1], {"CR3000": "uri:cr3000", "CR1000X": "uri:cr1000x"}
+        )
+        self.assertEqual(
+            self._irga_change()[1],
+            {"CSAT3B": "uri:csat", "LI-7500": "uri:7500", "LI-7500RS": "uri:7500rs"},
+        )
+
+    def test_each_year_gets_the_uri_of_its_own_instrument(self):
+        history, uris = self._logger_change()
+        self.assertEqual(history.netcdf_uri(uris, *self.YEAR_2024), "uri:cr3000")
+        self.assertEqual(history.netcdf_uri(uris, *YEAR_2025), "uri:cr1000x")
+
+    def test_compound_uris_line_up_with_the_instruments(self):
+        history, uris = self._irga_change()
+        self.assertEqual(history.netcdf_uri(uris, *self.YEAR_2024), "uri:csat,uri:7500")
+        self.assertEqual(history.netcdf_uri(uris, *YEAR_2025), "uri:csat,uri:7500rs")
+
+    def test_an_unresolved_uri_keeps_its_position(self):
+        history, uris = self._irga_change(sonic_uri=None)
+        self.assertEqual(history.netcdf_attrs(*YEAR_2025)[0], "CSAT3B,LI-7500RS")
+        self.assertEqual(history.netcdf_uri(uris, *YEAR_2025), ",uri:7500rs")
+
+    def test_no_resolved_uri_omits_the_attr(self):
+        history = InstrumentHistory.from_specs([_spec("A")])
+        self.assertIsNone(history.netcdf_uri({"A": None}, *YEAR_2025))
+        self.assertIsNone(history.netcdf_uri(None, *YEAR_2025))
+
+    def test_an_older_store_string_passes_through(self):
+        history, _ = self._logger_change()
+        self.assertEqual(
+            history.netcdf_uri("uri:cr1000x", *self.YEAR_2024), "uri:cr1000x"
+        )
+
+    def test_map_survives_a_zarr_round_trip(self):
+        _, uris = self._irga_change(sonic_uri=None)
+        idx = pd.date_range("2025-01-01", periods=2, freq="30min", name="time")
+        ds = xr.Dataset({"Fco2": ("time", np.zeros(2))}, coords={"time": idx})
+        ds.Fco2.attrs["instrument_uri"] = uris
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "store.zarr"
+            ds.to_zarr(path)
+            back = xr.open_zarr(path).Fco2.attrs["instrument_uri"]
+        self.assertEqual(back, uris)
 
 
 if __name__ == "__main__":

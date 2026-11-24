@@ -3,9 +3,10 @@
 
 Shared by the Zarr builders (build_L1_zarr, build_L2_zarr) and the NetCDF
 exporters (build_L1_nc, build_L2_nc): spatial dims and CRS variable, global
-and coverage attrs, missing-value flags, CF-style attr filtering and
-serialization, and the Zarr-safe encoding of instrument_history (with the
-inverse decode the exporters run on a store's data).
+and coverage attrs, missing-value flags, and CF-style attr filtering and
+units normalisation. Instrument attrs (instrument_history, instrument_uri)
+are stored as built; NetCDF export turns them into per-year strings
+(build_L1_nc.serialize_inst_history).
 """
 
 import datetime
@@ -172,24 +173,6 @@ def filter_variable_attrs(ds):
         ds[var].attrs = {
             k: v for k, v in ds[var].attrs.items() if k in VARIABLE_NC_ATTRS
         }
-
-    return ds
-
-
-def flatten_instrument_uri(ds):
-    """Flatten a compound-instrument instrument_uri dict to a comma-joined string.
-
-    Unresolved (None) entries are dropped; a dict with no resolved URIs at
-    all serializes to None, consistent with a scalar unresolved
-    instrument_uri, so the later None-attr filter drops the attribute
-    rather than writing a literal "None" string.
-    """
-    for var in non_dim_variables(ds):
-        attrs = ds[var].attrs
-
-        if isinstance(attrs.get("instrument_uri"), dict):
-            uris = [uri for uri in attrs["instrument_uri"].values() if uri is not None]
-            attrs["instrument_uri"] = ",".join(uris) if uris else None
 
     return ds
 

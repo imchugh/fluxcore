@@ -31,7 +31,6 @@ from fluxcore.orchestration.dataset_finishing import (
     assign_global_attrs,
     cf_normalise_units,
     filter_variable_attrs,
-    flatten_instrument_uri,
 )
 from fluxcore.services.metadata.site_metadata_builder import SiteContext
 
@@ -179,7 +178,6 @@ def _finish_for_store(ds, append_to: pathlib.Path | None = None):
         nrecs_base=nrecs_base,
     )
     ds = filter_variable_attrs(ds=ds)
-    ds = flatten_instrument_uri(ds=ds)
     ds = cf_normalise_units(ds=ds)
     ds = file_io.serialize_dataset_attrs(ds=ds)
 

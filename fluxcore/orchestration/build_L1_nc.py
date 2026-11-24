@@ -127,9 +127,9 @@ def slice_year_from_store(ds, year):
     """Slice a Zarr-sourced (already-processed) dataset to one year.
 
     Skips the steps already baked into the store (QC flags, attr filtering,
-    uri/units serialization) and only re-derives what's genuinely
-    year-scoped: title/record-count/time-coverage attrs and
-    instrument-history clipping.
+    units normalisation) and only re-derives what's genuinely year-scoped:
+    title/record-count/time-coverage attrs and the instrument attrs
+    (history clipping, that year's instrument and URI).
 
     Args:
         ds: xarray dataset loaded from a site's Zarr store.
@@ -152,9 +152,11 @@ def serialize_inst_history(ds, year):
     """Write each variable's NetCDF instrument attrs for one calendar year.
 
     Replaces the full instrument_history attr with its year-clipped NetCDF
-    string (or drops it), and sets `instrument` to what was in use that
-    year; see InstrumentHistory.netcdf_attrs. The year is clamped to the
-    dataset's actual time extent, which resolves open-ended periods.
+    string (or drops it), sets `instrument` to what was in use that year,
+    and replaces the store's name -> URI map in `instrument_uri` with that
+    year's URIs, lined up with `instrument`; see InstrumentHistory's
+    netcdf_attrs and netcdf_uri. The year is clamped to the dataset's actual
+    time extent, which resolves open-ended periods.
     """
     year_start, year_end = _year_window(year, ds.attrs["time_step"])
     year_start = max(year_start, pd.Timestamp(ds.time.values[0]).to_pydatetime())
@@ -167,6 +169,11 @@ def serialize_inst_history(ds, year):
         history = InstrumentHistory.from_attr(attrs["instrument_history"])
         instrument, history_str = history.netcdf_attrs(year_start, year_end)
         attrs["instrument"] = instrument
+        uri = history.netcdf_uri(attrs.get("instrument_uri"), year_start, year_end)
+        if uri is None:
+            attrs.pop("instrument_uri", None)
+        else:
+            attrs["instrument_uri"] = uri
         if history_str is None:
             del attrs["instrument_history"]
         else:

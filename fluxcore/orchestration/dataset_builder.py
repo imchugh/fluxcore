@@ -16,7 +16,10 @@ from fluxcore.domain.enums import StatisticType
 from fluxcore.orchestration import derived_quantities
 from fluxcore.orchestration.dataframe_builder import build_dataframe_and_specs
 from fluxcore.orchestration.derived_quantities import DatasetBuildIntermediate
-from fluxcore.services.metadata.instrument_history import InstrumentHistory
+from fluxcore.services.metadata.instrument_history import (
+    InstrumentHistory,
+    instrument_uri_map,
+)
 from fluxcore.services.metadata.site_metadata_builder import SiteContext
 from fluxcore.services.metadata.variable_registry import (
     VariableSpec,
@@ -148,7 +151,7 @@ def _build_var_attrs(specs_by_alias: dict[str, VariableSpec]) -> dict[str, dict]
             "height": main_spec.height,
             "height_range": main_spec.height_range,
             "instrument": history.current(),
-            "instrument_uri": main_spec.instrument_uri,
+            "instrument_uri": instrument_uri_map(var_specs),
             "instrument_history": history.to_attr(),
             "long_name": main_spec.long_name,
             "quantity": main_spec.quantity,
