@@ -97,3 +97,11 @@ CO2_IRGA_Av: {dependency_check: [Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IR
 CO2_IRGA_Sd: {dependency_check: [Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IRGA, SigH2O_IRGA, Sig_IRGA]}
 CO2c_IRGA_Av: {dependency_check: [Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IRGA, SigH2O_IRGA, Sig_IRGA]}
 H2O_IRGA_Av: {dependency_check: [Diag_IRGA, H2O_IRGA_Sd, CO2c_IRGA_Sd, SigCO2_IRGA, SigH2O_IRGA, Sig_IRGA]}
+
+# --- Net radiation ---
+# Fn is calculated at L1 from Fsd - Fsu + Fld - Flu, so it's only valid where
+# all four components are. Without this, broken longwave readings that nearly
+# cancel (e.g. a failed CNR4 body thermistor giving Fld and Flu of thousands
+# of W/m^2) leave an Fn that passes its own range (2026-11-25: ~15,500
+# half-hours across 26 sites).
+Fn: {dependency_check: [Fsd, Fsu, Fld, Flu]}

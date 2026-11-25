@@ -116,6 +116,24 @@ class AddNetRadiationTestCase(unittest.TestCase):
         self.assertEqual(out.var_attrs["Fn"]["instrument"], "Kipp&Zonen CNR4")
         self.assertEqual(out.var_attrs["Fn"]["long_name"], "Net radiation")
 
+    def test_uses_the_exactly_named_components_not_a_second_sensor(self):
+        # A second shortwave sensor listed first must not become Fn's Fsd.
+        df = pd.DataFrame(
+            {
+                "Fsd_2": [900.0],
+                "Fsd": [500.0],
+                "Fsu": [80.0],
+                "Fld": [350.0],
+                "Flu": [420.0],
+            }
+        )
+        var_attrs = {
+            q: _radiation_attrs(q.split("_")[0])
+            for q in ("Fsd_2", "Fsd", "Fsu", "Fld", "Flu")
+        }
+        out = add_net_radiation(DatasetBuildIntermediate(df=df, var_attrs=var_attrs))
+        self.assertAlmostEqual(out.df["Fn"].iloc[0], 350.0)
+
     def test_missing_component_returns_result_unchanged(self):
         df = pd.DataFrame({"Fsd": [500.0], "Fsu": [80.0], "Fld": [350.0]})
         var_attrs = {q: _radiation_attrs(q) for q in ("Fsd", "Fsu", "Fld")}

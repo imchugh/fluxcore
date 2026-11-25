@@ -138,7 +138,9 @@ def add_net_radiation(result: DatasetBuildIntermediate) -> DatasetBuildIntermedi
     calculate_net_radiation for why), and the unconditional write is
     deliberate — this function is the sole source of Fn, not a gap-filler.
 
-    Returns result unchanged if any of the four components is absent, as a
+    The components are the variables named exactly Fsd, Fsu, Fld and Flu (a
+    site's main radiometer), never a second sensor of the same quantity such
+    as Fsd_2. Returns result unchanged if any of the four is absent, as a
     safety net rather than raising.
     """
     df = result.df.copy()
@@ -146,10 +148,9 @@ def add_net_radiation(result: DatasetBuildIntermediate) -> DatasetBuildIntermedi
 
     cols = {}
     for quantity in ("Fsd", "Fsu", "Fld", "Flu"):
-        col = _find_quantity_av(df, var_attrs, quantity)
-        if col is None:
+        if quantity not in df.columns or quantity not in var_attrs:
             return result
-        cols[quantity] = col
+        cols[quantity] = quantity
 
     df["Fn"] = get_calculation("Fn")(
         Fsd=df[cols["Fsd"]],
