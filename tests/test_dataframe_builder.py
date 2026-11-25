@@ -167,9 +167,15 @@ class FluxExtentTruncationTestCase(unittest.TestCase):
     # A logger changeover: Fc's old era is in "old_flux", its new era in
     # "flux" (the current flux file); "soil" feeds only its own variable.
     CHANGEOVER_SPECS = {
-        "Fc#0": SimpleNamespace(canonical_name="Fc", file_group="old_flux"),
-        "Fc#1": SimpleNamespace(canonical_name="Fc", file_group="flux"),
-        "Ts#0": SimpleNamespace(canonical_name="Ts", file_group="soil"),
+        "Fc#0": SimpleNamespace(
+            canonical_name="Fc", file_group="old_flux", calculate_from=None
+        ),
+        "Fc#1": SimpleNamespace(
+            canonical_name="Fc", file_group="flux", calculate_from=None
+        ),
+        "Ts#0": SimpleNamespace(
+            canonical_name="Ts", file_group="soil", calculate_from=None
+        ),
     }
 
     def test_full_build_spans_a_stitched_earlier_flux_file(self):

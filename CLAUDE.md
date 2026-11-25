@@ -123,7 +123,7 @@ or to break an import cycle.
 | `fluxcore/services/data/raw_data_loader.py` | Loads TOA5 and EddyPro files (`load_raw_data`, `load_raw_data_since`, `load_raw_header`, `get_data_loader`), keyed by `FileFormat`. A site config's `file_formats:` values are *logger* types (`LoggerType`: CSI, LICOR), not formats — `enums.DEFAULT_FILE_FORMAT` maps logger → format and is the only place that assumption lives (CSI loggers also write TOB1/TOB3, which fluxcore does not parse; TERN converts TOB3 to TOA5 upstream). |
 | `fluxcore/orchestration/dataframe_builder.py` | ETL: loads raw data → converts units → merges instrument periods → renames to canonical names. Entry point: `build_dataframe_from_context(ctx, quantities=None, start_date=None)`. Low-level: `build_dataframe(file_groups, specs_by_alias, quantities=None, ...)` for callers that already hold those objects. |
 | `fluxcore/orchestration/dataset_builder.py` | High-level API: `build_dataset_from_context(ctx, ...)`. Orchestrates dataframe build → derived quantities (`derive_missing_humidity`, `derive_co2_mole_fraction`, `Fn`, `day_night`) → xarray Dataset with variable and global metadata. The raw-data → dataframe step is `dataframe_builder.build_dataframe_and_specs` (shared with `build_dataframe_from_context`); `DatasetBuildIntermediate` lives in `derived_quantities`. |
-| `fluxcore/orchestration/derived_quantities.py` | Derives missing RH↔AH and CO2 mole fraction; maintains metadata lineage. Also always (re)computes `Fn` (net radiation) from `Fsd`/`Fsu`/`Fld`/`Flu` — unlike the RH/CO2 gap-fills; sites don't import a raw `Fn`, which is either redundant with this sum or from a disagreeing secondary "NR Lite"-family radiometer. |
+| `fluxcore/orchestration/derived_quantities.py` | Derives missing RH↔AH and CO2 mole fraction; maintains metadata lineage (instrument, URI and history copied from the source, every history period marked `calculated_from` its sources). Also always (re)computes `Fn` (net radiation) from `Fsd`/`Fsu`/`Fld`/`Flu` — unlike the RH/CO2 gap-fills; sites don't import a raw `Fn`, which is either redundant with this sum or from a disagreeing secondary "NR Lite"-family radiometer. |
 | `fluxcore/orchestration/build_L1_zarr.py` | `build(ctx, output_dir, year=None, global_attrs=None)` / `update(ctx, output_dir, global_attrs=None)` — takes a `SiteContext` and an explicit directory, never a site name to resolve (TERN's site-name wrappers are its `orchestration/build_runner.py`). Writes a per-site whole-history Zarr store (one store per site, no year-splitting) — the canonical L1 intermediate `build_L1_nc.py`'s operational path reads from. `update()` is the cheap incremental path (TERN runs it every 30 min): delegates to `orchestration.incremental_zarr.incremental_update` for the checkpoint/tail-append/fallback envelope, supplying a `produce_tail` callback (raw-data reload from the checkpoint) and a `full_rebuild` callback (`build()`). `build()` is a full rebuild from all raw data — used to seed a new store and for periodic reconciliation (TERN: nightly); it also stamps the store with a hash of the site's assembled `SiteRuntimeConfig`, which `update()` checks every cycle to force a rebuild on config drift (see `incremental_zarr`). `instrument_history` is stored in its full attr form (see `instrument_history.py`), not flattened/year-clipped like NetCDF's; `build_L1_nc.serialize_inst_history` does the year-clipping at export. |
 | `fluxcore/orchestration/incremental_zarr.py` | Shared checkpoint/tail-append/fallback envelope used by both `build_L1_zarr.update()` and `build_L2_zarr.update()` — `incremental_update(store_path, config_hash, produce_tail, full_rebuild, logger, label)`: store missing or `config_hash` mismatch → `full_rebuild()`; else read the checkpoint, call `produce_tail(checkpoint)`, append if non-empty; any exception → `full_rebuild()`. All level-specific logic (raw-data reload, QC + MAD lookback window, tail-attrs refresh) lives in each caller's `produce_tail`/`full_rebuild` closures, not here. `hash_config(*configs)` hashes the assembled config object(s) that drive processing (dataclasses — stdlib or pydantic —, pydantic models, dicts/enums/paths/datetimes), not raw YAML text, so cosmetic edits don't force a rebuild — but field names are part of the hash, so renaming a config field forces one full rebuild per store. Hash only what would make an append *wrong* (site config, QC config); anything that only leaves the store briefly stale (site metadata, physical constants, code changes) is left to the nightly full rebuild. |
 | `fluxcore/orchestration/dataset_finishing.py` | Finishing steps shared by the Zarr builders and NetCDF exporters: spatial dims + CRS variable, global attrs (`assign_global_attrs`: core `nc_global_attrs.yml` overlaid by a caller's `global_attrs`), coverage attrs (`assign_coverage_attrs`, incl. the combined range for an appended tail), missing-value `_QCFlag`s, CF attr filtering/serialization. |
@@ -251,6 +251,33 @@ Sws_0.05ma1:
       file: Site_soil
       begin: 2026-03-01 10:00
 ```
+
+### Site config: calculated inputs (`calculate_from`)
+
+An input can be a **calculated period** instead of a raw column, for an era whose logger never output the variable (e.g. an old program that measured an HMP's RH but logged only the AH it calculated from it). It names the canonical variables it's calculated from, and no `name`/`file`/`units`:
+
+```yaml
+RH_23m:
+  statistic_type: average
+  height: 23.0
+  input_variables:
+    - calculate_from: [AH_23m, Ta_23m]   # old era: RH reverse-engineered
+      instrument: Vaisala HMP45C         # the source sensor (still required)
+      end: 2025-09-08 17:30
+    - name: RH_sensor_mean               # new era: measured
+      instrument: Vaisala HMP155
+      units: percent
+      file: Site_EC_TERNflux
+      begin: 2025-10-13 14:00
+```
+
+- The calculation is the one registered for the variable's quantity (`services/data/calculations.py`); the sources' quantities must match its parameters one to one (`runtime_config_builder._check_calculation`). Averages only (the variable and its sources), and no chaining (a source can't itself have a calculated input). A calculated period may not overlap any other input of the variable (`site_config_schema`).
+- `dataframe_builder` fills it after stitching and renaming (`_apply_calculated_inputs`), so the sources are already canonical and in canonical units. With a `quantities` filter, the sources are built for the calculation and dropped afterwards.
+- `instrument` is still per input, so instrument history covers the calculated era like any other (per the derived-quantity rule: calculated values carry their source sensor), and the period is marked calculated there (below).
+
+**Calculated periods are recorded in `instrument_history`** (2026-11-25; no separate attribute, by design, to avoid another attr to carry and flatten): a period whose values were calculated has `calculated_from: [sources]` (absent on measured periods), so the history says where every value came from. Set from a configured `calculate_from` input (`InstrumentHistory.from_specs`; a measured/calculated change starts a new period even on one instrument), and by fluxcore's own whole-record derivations in `derived_quantities` (`.calculated(sources)` on the source's copied history: CO2 mole fraction from CO2 density, Ta and ps; the missing one of AH/RH; Fn from its four components). `day_night` is deliberately unmarked (an astronomical indicator, not a value standing in for a measurement). NetCDF: a calculated period reads `(Vaisala HMP45C calculated from AH_23m Ta_23m,start,end)`, and a year with any calculated period always gets an `instrument_history` attr, even with one instrument. PyFluxPro has no flag code for this (calculated values take their sources' flags; provenance is free-text `description_L1`), so it isn't a QC flag either.
+
+The flux-system consistency check (`Fco2`/`Fh`/`Fe` instruments, `enforce_compound_instrument_consistency`) is **per period**: a site stitched across a flux-system change (CSAT3 + LI-7500A → CSAT3B + LI-7500RS) has one pairing per era, and only inputs whose periods overlap must agree.
 
 ### Site config: horizontal-location descriptions
 

@@ -16,6 +16,7 @@ Two entry points:
       SiteConfig in.
 """
 
+import inspect
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -31,6 +32,7 @@ from fluxcore.domain.enums import (
     StatisticType,
     VariableType,
 )
+from fluxcore.services.data.calculations import get_calculation
 from fluxcore.services.metadata.canonical_quantity_registry import (
     CanonicalQuantityMetadata,
     build_canonical_quantity_registry,
@@ -47,11 +49,16 @@ from fluxcore.services.metadata.variable_name_parser import (
 
 @pydantic_dataclass(frozen=True)
 class RawVariableMetadata:
-    """Metadata for one raw instrument-file input that feeds a canonical variable."""
+    """Metadata for one input that feeds a canonical variable.
 
-    raw_name: str
-    raw_units: str
-    file: str
+    Normally a raw column (raw_name, raw_units) in a file group. A
+    calculated input (calculate_from) instead names the canonical variables
+    its period is calculated from, and has no raw column or file.
+    """
+
+    raw_name: str | None
+    raw_units: str | None
+    file: str | None
     instrument: str | dict[str, str]
     begin: datetime | str | None = None
     end: datetime | str | None = None
@@ -63,6 +70,7 @@ class RawVariableMetadata:
     # variable's); VariableDefinition.statistic_type is the variable's identity.
     diag_type: DiagnosticType | None = None
     statistic_type: StatisticType | None = None
+    calculate_from: tuple[str, ...] | None = None
 
 
 @pydantic_dataclass(frozen=True)
@@ -186,6 +194,47 @@ def _check_no_repeated_instrument_era(
             )
 
 
+def _check_calculation(
+    variable: str,
+    quantity: str,
+    sources: list[str],
+    validated_config: SiteConfig,
+) -> None:
+    """Raise unless `sources` supply exactly the registered calculation's inputs.
+
+    A calculated input uses the calculation registered for the variable's
+    quantity (services.data.calculations); its parameters are canonical
+    quantities, so the sources' quantities must match them one to one.
+    """
+    calculation = get_calculation(quantity)
+    if calculation is None:
+        raise ValueError(
+            f"Variable '{variable}': no calculation is registered for quantity "
+            f"'{quantity}', so it cannot have a calculated input"
+        )
+    # A calculation of averages from averages: the physical relationships
+    # don't carry over to standard deviations, sums or counters.
+    if validated_config.variables[variable].statistic_type != StatisticType.AVG:
+        raise ValueError(
+            f"Variable '{variable}': only an average variable can have a "
+            "calculated input"
+        )
+    for source in sources:
+        if validated_config.variables[source].statistic_type != StatisticType.AVG:
+            raise ValueError(
+                f"Variable '{variable}': calculate_from source '{source}' is "
+                "not an average variable"
+            )
+    required = set(inspect.signature(calculation).parameters)
+    supplied = [parse_variable_name(source).quantity for source in sources]
+    if sorted(supplied) != sorted(required):
+        raise ValueError(
+            f"Variable '{variable}': calculating '{quantity}' needs one variable "
+            f"each of {sorted(required)}; calculate_from {sources} supplies "
+            f"{sorted(supplied)}"
+        )
+
+
 def _resolve_instrument_uri(
     instrument: str | dict[str, str],
     instrument_uris: dict[str, str | None],
@@ -283,6 +332,8 @@ def build_runtime_config(
             for cfg, input_statistic in zip(
                 raw_cfg.input_variables, input_statistics, strict=True
             ):
+                if cfg.calculated:
+                    continue
                 valid_units = canonical_metadata.resolve_metadata(
                     quantity=quantity,
                     variable_type=raw_cfg.variable_type,
@@ -294,6 +345,12 @@ def build_runtime_config(
                         f"units '{cfg.units}' is not valid for quantity "
                         f"'{quantity}'. Expected one of: {valid_units}"
                     )
+
+        for cfg in raw_cfg.input_variables:
+            if cfg.calculated:
+                _check_calculation(
+                    variable, quantity, cfg.calculate_from, validated_config
+                )
 
         _check_no_repeated_instrument_era(
             variable, [cfg.instrument for cfg in raw_cfg.input_variables]
@@ -310,7 +367,8 @@ def build_runtime_config(
                 end=cfg.end,
                 instrument_uri=_resolve_instrument_uri(cfg.instrument, instrument_uris),
                 diag_type=cfg.diag_type,
-                statistic_type=input_statistic,
+                statistic_type=None if cfg.calculated else input_statistic,
+                calculate_from=(tuple(cfg.calculate_from) if cfg.calculated else None),
             )
             for cfg, input_statistic in zip(
                 raw_cfg.input_variables, input_statistics, strict=True

@@ -18,6 +18,7 @@ import pandas as pd
 from fluxcore.domain.enums import DiagnosticType, StatisticType, VariableType
 from fluxcore.infrastructure.data_conditioning import condition_dataframe
 from fluxcore.services.data import raw_data_loader, unit_conversions
+from fluxcore.services.data.calculations import get_calculation
 from fluxcore.services.metadata.canonical_quantity_registry import (
     resolve_variance_units,
 )
@@ -108,7 +109,9 @@ def build_dataframe(
               condition, and concatenate vertically.
     Step 2 — concatenate all file groups horizontally.
     Step 3 — merge overlapping instrument periods into single columns.
-    Step 4 — rename aliased columns to canonical output names.
+    Step 4 — rename aliased columns to canonical output names, then fill
+              each calculated input's period (calculate_from) from its
+              source variables.
     Step 5 — truncate to the flux record's temporal extent, so that
               ancillary data predating the flux system does not produce empty
               output years. The flux record is ``flux_file`` (the current
@@ -123,12 +126,30 @@ def build_dataframe(
     """
     extent_groups = _flux_extent_groups(specs_by_alias, flux_file)
 
+    helper_columns: set[str] = set()
     if quantities is not None:
-        specs_by_alias = {
+        kept = {
             alias: spec
             for alias, spec in specs_by_alias.items()
             if spec.quantity in quantities
         }
+        # A kept variable's calculated period needs its source variables
+        # too; they're built for the calculation and dropped afterwards.
+        sources = {
+            source
+            for spec in kept.values()
+            if spec.calculate_from
+            for source in spec.calculate_from
+        }
+        extra = {
+            alias: spec
+            for alias, spec in specs_by_alias.items()
+            if spec.canonical_name in sources and alias not in kept
+        }
+        helper_columns = {canonical_output_name(s) for s in extra.values()} - {
+            canonical_output_name(s) for s in kept.values()
+        }
+        specs_by_alias = {**kept, **extra}
         active_groups = {spec.file_group for spec in specs_by_alias.values()}
         file_groups = {
             name: fg for name, fg in file_groups.items() if name in active_groups
@@ -176,6 +197,8 @@ def build_dataframe(
 
     # Step 4
     df = _rename_to_canonical(df=df, specs_by_alias=specs_by_alias)
+    df = _apply_calculated_inputs(df=df, specs_by_alias=specs_by_alias)
+    df = df.drop(columns=list(helper_columns), errors="ignore")
 
     # Step 5
     if start_date is None:
@@ -225,7 +248,7 @@ def _flux_extent_groups(
     return {flux_file} | {
         spec.file_group
         for spec in specs_by_alias.values()
-        if spec.canonical_name in flux_variables
+        if spec.canonical_name in flux_variables and spec.file_group is not None
     }
 
 
@@ -470,3 +493,50 @@ def _rename_to_canonical(
     }
 
     return df.rename(columns=rename_map)
+
+
+def _apply_calculated_inputs(
+    df: pd.DataFrame,
+    specs_by_alias: dict[str, VariableSpec],
+) -> pd.DataFrame:
+    """Fill each calculated input's period from its source variables.
+
+    Runs on the assembled canonical frame, so the sources are already
+    stitched and in canonical units, which is what the registered
+    calculation for the variable's quantity takes. The period is the
+    input's begin/end (inclusive, open-ended when None); the variable's
+    other inputs never overlap it (site_config_schema rejects that). A
+    variable with no measured input in this read gets its column here.
+    """
+    calculated = [s for s in specs_by_alias.values() if s.calculate_from]
+    if not calculated or df.empty:
+        return df
+
+    output_names = {
+        spec.canonical_name: canonical_output_name(spec)
+        for spec in specs_by_alias.values()
+    }
+    quantities = {
+        spec.canonical_name: spec.quantity for spec in specs_by_alias.values()
+    }
+
+    for spec in calculated:
+        target = output_names[spec.canonical_name]
+        if target not in df.columns:
+            df[target] = float("nan")
+        window = df.loc[spec.begin : spec.end]
+        if window.empty:
+            continue
+        source_columns = [output_names.get(source) for source in spec.calculate_from]
+        if any(col is None or col not in df.columns for col in source_columns):
+            continue  # a source absent from this read: the period stays empty
+        calculation = get_calculation(spec.quantity)
+        values = calculation(
+            **{
+                quantities[source]: window[col]
+                for source, col in zip(spec.calculate_from, source_columns, strict=True)
+            }
+        )
+        df.loc[window.index, target] = values
+
+    return df

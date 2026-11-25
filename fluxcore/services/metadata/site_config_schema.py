@@ -34,6 +34,15 @@ class InputVariableConfig(BaseModel):
     variable's inputs are a list, so the same column can feed it from two
     files (a logger change that kept the column name), or from one file
     over consecutive periods with different units or instrument.
+
+    A calculated input (`calculate_from`) is instead a period in which the
+    variable is calculated from other configured variables, for an era whose
+    logger never output it (e.g. an old program that logged only the AH it
+    calculated from its HMP's RH). It names no column, file or units, but
+    still names the instrument the values originate from (the source
+    variables' sensor). The calculation is the registered one for the
+    variable's quantity; the output marks the period calculated in the
+    variable's instrument_history (`calculated_from`).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -41,10 +50,15 @@ class InputVariableConfig(BaseModel):
     # Define attributes
 
     # Mandatory
-    name: str
     instrument: str | dict[str, str]
-    file: str
-    units: str
+
+    # Mandatory for a measured input; absent for a calculated one
+    name: str | None = None
+    file: str | None = None
+    units: str | None = None
+
+    # Calculated input: the canonical variables this period is calculated from
+    calculate_from: list[str] | None = None
 
     # Optional
     diag_type: DiagnosticType | None = None
@@ -68,6 +82,47 @@ class InputVariableConfig(BaseModel):
                 return None
             return datetime.fromisoformat(v)
         raise TypeError(f"Invalid type for datetime field: {type(v)}")
+
+    @property
+    def calculated(self) -> bool:
+        """Whether this input is a calculated period rather than a raw column."""
+        return self.calculate_from is not None
+
+    @property
+    def label(self) -> str:
+        """The input's name for messages: its column, or its calculation."""
+        if self.calculated:
+            return f"calculated from {', '.join(self.calculate_from)}"
+        return self.name
+
+    @model_validator(mode="after")
+    def validate_measured_or_calculated(self):
+        """Require a raw column (name/file/units) or calculate_from, not both."""
+        raw_fields = {"name": self.name, "file": self.file, "units": self.units}
+        if self.calculated:
+            if not self.calculate_from:
+                raise ValueError("calculate_from must name at least one variable")
+            if len(set(self.calculate_from)) != len(self.calculate_from):
+                raise ValueError(
+                    f"calculate_from lists a variable twice: {self.calculate_from}"
+                )
+            given = [k for k, v in raw_fields.items() if v is not None]
+            for key in ("diag_type", "statistic_type"):
+                if getattr(self, key) is not None:
+                    given.append(key)
+            if given:
+                raise ValueError(
+                    "A calculated input (calculate_from) has no raw column, so "
+                    f"it cannot define {', '.join(given)}"
+                )
+        else:
+            missing = [k for k, v in raw_fields.items() if v is None]
+            if missing:
+                raise ValueError(
+                    f"Input must define {', '.join(missing)} "
+                    "(or calculate_from, for a calculated period)"
+                )
+        return self
 
 
 class HorizontalLocationConfig(BaseModel):
@@ -188,7 +243,7 @@ class VariableConfig(BaseModel):
         """
         interchangeable = {StatisticType.VAR, StatisticType.STDEV}
         for input_cfg in self.input_variables:
-            input_name = input_cfg.name
+            input_name = input_cfg.label
             input_stat = input_cfg.statistic_type
             if input_stat is None or input_stat == self.statistic_type:
                 continue
@@ -217,6 +272,8 @@ class VariableConfig(BaseModel):
         """
         by_source: dict[tuple[str, str], list[InputVariableConfig]] = {}
         for input_cfg in self.input_variables:
+            if input_cfg.calculated:
+                continue
             by_source.setdefault((input_cfg.name, input_cfg.file), []).append(input_cfg)
         for (name, file), inputs in by_source.items():
             for i, first in enumerate(inputs):
@@ -227,6 +284,26 @@ class VariableConfig(BaseModel):
                             f"overlapping periods ({_period(first)} and "
                             f"{_period(second)})"
                         )
+        return self
+
+    @model_validator(mode="after")
+    def validate_calculated_periods_disjoint(self):
+        """Reject a calculated input overlapping any other input of the variable.
+
+        A calculated period fills an era with no raw column, so it must not
+        compete with a measured input (or another calculation) for the same
+        timestamps.
+        """
+        for i, first in enumerate(self.input_variables):
+            for second in self.input_variables[i + 1 :]:
+                if not (first.calculated or second.calculated):
+                    continue
+                if _periods_overlap(first, second):
+                    raise ValueError(
+                        f"Input '{first.label}' ({_period(first)}) overlaps "
+                        f"input '{second.label}' ({_period(second)}); a "
+                        "calculated period must not overlap another input"
+                    )
         return self
 
 
@@ -359,7 +436,7 @@ class SiteConfig(BaseModel):
                     if input_cfg.diag_type is None:
                         raise ValueError(
                             f"Counter variable '{var_name}' input "
-                            f"'{input_cfg.name}' must specify diag_type"
+                            f"'{input_cfg.label}' must specify diag_type"
                         )
         return self
 
@@ -423,7 +500,8 @@ class SiteConfig(BaseModel):
 
         for var_cfg in self.variables.values():
             for input_cfg in var_cfg.input_variables:
-                file_list.add(input_cfg.file)
+                if not input_cfg.calculated:
+                    file_list.add(input_cfg.file)
 
         if self.flux_file not in file_list:
             raise ValueError("Flux file must be mapped to at least one variable!")
@@ -437,6 +515,7 @@ class SiteConfig(BaseModel):
             input_cfg.file
             for var_cfg in self.variables.values()
             for input_cfg in var_cfg.input_variables
+            if not input_cfg.calculated
         }
         declared = set(self.logger_types)
         if used - declared:
@@ -449,6 +528,43 @@ class SiteConfig(BaseModel):
                 "file_formats declares files no input variable uses: "
                 f"{sorted(declared - used)}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def enforce_calculated_sources(self):
+        """A calculated input's sources must be other, measured, variables.
+
+        Each source must be a configured variable other than the one being
+        calculated, and must not itself have a calculated input: sources are
+        read from the assembled measured data, so calculations don't chain.
+        Whether the sources' quantities fit the calculation is checked by
+        runtime_config_builder, which knows the quantities.
+        """
+        calculated_vars = {
+            name
+            for name, var_cfg in self.variables.items()
+            if any(i.calculated for i in var_cfg.input_variables)
+        }
+        for var_name, var_cfg in self.variables.items():
+            for input_cfg in var_cfg.input_variables:
+                if not input_cfg.calculated:
+                    continue
+                for source in input_cfg.calculate_from:
+                    if source == var_name:
+                        raise ValueError(
+                            f"Variable '{var_name}' cannot be calculated from itself"
+                        )
+                    if source not in self.variables:
+                        raise ValueError(
+                            f"Variable '{var_name}': calculate_from source "
+                            f"'{source}' is not a configured variable"
+                        )
+                    if source in calculated_vars:
+                        raise ValueError(
+                            f"Variable '{var_name}': calculate_from source "
+                            f"'{source}' is itself (partly) calculated; "
+                            "calculations can't chain"
+                        )
         return self
 
     # Canonical EC flux quantities: the sole source for the site's flux-system
@@ -471,9 +587,13 @@ class SiteConfig(BaseModel):
         `CLAUDE.md` — and is not cross-checked against the pair). Integrated-
         sensor sites (one physical instrument serves both roles) declare all
         three as the same plain string.
+
+        Agreement is per period: a site stitched across a flux-system change
+        (e.g. CSAT3 + LI-7500A, then CSAT3B + LI-7500RS) has one pairing per
+        era, and only inputs whose begin/end periods overlap must agree.
         """
-        dict_pairs = set()
-        string_instruments = set()
+        dict_pairs: list[tuple[tuple[str, str], InputVariableConfig]] = []
+        string_instruments: list[tuple[str, InputVariableConfig]] = []
 
         for var_name, var_cfg in self.variables.items():
             if var_name not in self.flux_quantities:
@@ -482,22 +602,38 @@ class SiteConfig(BaseModel):
                 inst = input_cfg.instrument
                 if isinstance(inst, dict):
                     if "sonic_anemometer" in inst and "irga" in inst:
-                        dict_pairs.add((inst["sonic_anemometer"], inst["irga"]))
+                        dict_pairs.append(
+                            ((inst["sonic_anemometer"], inst["irga"]), input_cfg)
+                        )
                 else:
-                    string_instruments.add(inst)
+                    string_instruments.append((inst, input_cfg))
 
-        if len(dict_pairs) > 1:
-            raise ValueError(
-                "Fco2/Fh/Fe declare inconsistent sonic_anemometer/irga "
-                f"pairings: {dict_pairs}"
+        # The flux system can change at a logger changeover, so the
+        # instruments only have to agree where the inputs' periods overlap.
+        if dict_pairs:
+            _check_agree_where_overlapping(
+                dict_pairs, "inconsistent sonic_anemometer/irga pairings"
             )
-        if not dict_pairs and len(string_instruments) > 1:
-            raise ValueError(
-                "Fco2/Fh/Fe declare inconsistent single-instrument names: "
-                f"{string_instruments}"
+        else:
+            _check_agree_where_overlapping(
+                string_instruments, "inconsistent single-instrument names"
             )
 
         return self
+
+
+def _check_agree_where_overlapping(
+    entries: list[tuple[object, InputVariableConfig]], problem: str
+) -> None:
+    """Raise if two inputs with overlapping periods name different instruments."""
+    for i, (first, first_cfg) in enumerate(entries):
+        for second, second_cfg in entries[i + 1 :]:
+            if first != second and _periods_overlap(first_cfg, second_cfg):
+                raise ValueError(
+                    f"Fco2/Fh/Fe declare {problem} for the same period: "
+                    f"{first} ({_period(first_cfg)}) vs {second} "
+                    f"({_period(second_cfg)})"
+                )
 
 
 def validate_all(config_data: dict) -> tuple[bool, list]:

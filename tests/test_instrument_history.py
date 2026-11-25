@@ -21,13 +21,14 @@ AFTER_CHANGE = datetime(2025, 6, 1, 0, 30)
 YEAR_2025 = (datetime(2025, 1, 1, 0, 30), datetime(2026, 1, 1, 0, 0))
 
 
-def _spec(instrument, begin=None, end=None, uri=None):
+def _spec(instrument, begin=None, end=None, uri=None, calculate_from=None):
     return SimpleNamespace(
         instrument=instrument,
         instrument_uri=uri,
         begin=begin,
         end=end,
         canonical_name="Var",
+        calculate_from=calculate_from,
     )
 
 

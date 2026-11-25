@@ -109,6 +109,8 @@ def build_file_groups(runtime_cfg: SiteRuntimeConfig) -> dict[str, FileGroup]:
 
     for var_def in runtime_cfg.variables.values():
         for raw_var in var_def.raw_inputs:
+            if raw_var.calculate_from is not None:
+                continue  # a calculated input reads no file
             group_name = raw_var.file
             group = groups.get(group_name)
             if group is None:

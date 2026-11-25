@@ -26,8 +26,8 @@ from fluxcore.services.metadata.runtime_config_builder import SiteRuntimeConfig
 class VariableSpec:
     """Flat specification for a single raw-to-canonical variable mapping."""
 
-    # Identity
-    raw_name: str
+    # Identity (raw_name is None for a calculated input)
+    raw_name: str | None
     canonical_name: str
     quantity: str
 
@@ -50,9 +50,9 @@ class VariableSpec:
     long_name: str
     standard_name: str | None
 
-    # Grouping / aliasing
+    # Grouping / aliasing (file_group is None for a calculated input)
     alias: str
-    file_group: str
+    file_group: str | None
 
     # Temporal validity (instrument changeover merge)
     begin: datetime | str | None
@@ -65,6 +65,11 @@ class VariableSpec:
     # standard-deviation input on a variance variable, or the reverse).
     # None means the same as statistic_type; see raw_statistic_type.
     input_statistic_type: StatisticType | None = None
+
+    # A calculated input: the canonical variables its period is calculated
+    # from (dataframe_builder calculates it after the measured inputs are
+    # assembled). None for an input read from a raw column.
+    calculate_from: tuple[str, ...] | None = None
 
     @property
     def raw_statistic_type(self) -> StatisticType | None:
@@ -83,13 +88,16 @@ def build_variable_registry(
     time order. The alias names the input's column in the wide frame
     dataframe_builder assembles before stitching inputs into their variable,
     so one raw column can feed several inputs (eras of one column whose
-    units or instrument changed, or two variables).
+    units or instrument changed, or two variables). A calculated input has
+    no file group and no raw column, but is still registered: it carries
+    its period's instrument, and marks it calculated in instrument history.
     """
     registry = {}
 
     for canonical_name, var_cfg in runtime_cfg.variables.items():
         for position, raw_input in enumerate(var_cfg.raw_inputs):
-            if raw_input.file not in file_groups:
+            calculated = raw_input.calculate_from is not None
+            if not calculated and raw_input.file not in file_groups:
                 continue
             group_name = raw_input.file
 
@@ -106,6 +114,9 @@ def build_variable_registry(
                 VariableType.COUNTER,
             ):
                 site_units = "dimensionless"
+            elif calculated:
+                # Calculated in canonical units from canonical variables.
+                site_units = var_cfg.canonical.standard_units
             else:
                 site_units = raw_input.raw_units or var_cfg.canonical.standard_units
 
@@ -130,9 +141,11 @@ def build_variable_registry(
                 diag_type=raw_input.diag_type,
                 input_statistic_type=(
                     raw_input.statistic_type
-                    if raw_input.statistic_type != var_cfg.statistic_type
+                    if not calculated
+                    and raw_input.statistic_type != var_cfg.statistic_type
                     else None
                 ),
+                calculate_from=raw_input.calculate_from,
             )
 
     return registry

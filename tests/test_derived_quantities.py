@@ -78,8 +78,19 @@ class DeriveMissingHumidityTestCase(unittest.TestCase):
         # Calculated, but it still comes from the HMP's Ta and RH.
         self.assertEqual(attrs["instrument"], "Vaisala HMP155")
         self.assertEqual(attrs["instrument_uri"], "http://example.org/hmp155")
+        # Same instruments and dates as its source, each period marked calculated.
+        [source_role] = result.var_attrs["RH_2m"]["instrument_history"]
         self.assertEqual(
-            attrs["instrument_history"], result.var_attrs["RH_2m"]["instrument_history"]
+            attrs["instrument_history"],
+            [
+                {
+                    "role": source_role["role"],
+                    "periods": [
+                        {**p, "calculated_from": ["RH_2m", "Ta_2m"]}
+                        for p in source_role["periods"]
+                    ],
+                }
+            ],
         )
 
     def test_missing_pressure_does_not_blank_the_derived_ah(self):

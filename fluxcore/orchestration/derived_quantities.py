@@ -41,6 +41,7 @@ from fluxcore.services.data.calculations import get_calculation
 from fluxcore.services.metadata.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
+from fluxcore.services.metadata.instrument_history import InstrumentHistory
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +83,17 @@ def derive_missing_humidity(
             new_col = _derived_name(rh_col, "RH", "AH")
             df[new_col] = get_calculation("AH")(Ta=df[ta_col], RH=df[rh_col])
             var_attrs[new_col] = _build_attrs(
-                source_attrs=var_attrs[rh_col], quantity="AH"
+                source_attrs=var_attrs[rh_col],
+                quantity="AH",
+                calculated_from=[rh_col, ta_col],
             )
         else:
             new_col = _derived_name(ah_col, "AH", "RH")
             df[new_col] = get_calculation("RH")(AH=df[ah_col], Ta=df[ta_col])
             var_attrs[new_col] = _build_attrs(
-                source_attrs=var_attrs[ah_col], quantity="RH"
+                source_attrs=var_attrs[ah_col],
+                quantity="RH",
+                calculated_from=[ah_col, ta_col],
             )
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
@@ -125,7 +130,9 @@ def derive_co2_mole_fraction(
         if ta_col is None:
             continue
         df[new_col] = get_calculation("CO2")(CO2c=df[col], Ta=df[ta_col], ps=df[ps_col])
-        var_attrs[new_col] = _build_attrs(source_attrs=attrs, quantity="CO2")
+        var_attrs[new_col] = _build_attrs(
+            source_attrs=attrs, quantity="CO2", calculated_from=[col, ta_col, ps_col]
+        )
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
@@ -158,7 +165,11 @@ def add_net_radiation(result: DatasetBuildIntermediate) -> DatasetBuildIntermedi
         Fld=df[cols["Fld"]],
         Flu=df[cols["Flu"]],
     )
-    var_attrs["Fn"] = _build_attrs(source_attrs=var_attrs[cols["Fsd"]], quantity="Fn")
+    var_attrs["Fn"] = _build_attrs(
+        source_attrs=var_attrs[cols["Fsd"]],
+        quantity="Fn",
+        calculated_from=list(cols.values()),
+    )
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
@@ -275,12 +286,13 @@ def _derived_name(source_name: str, source_qty: str, new_qty: str) -> str:
     return f"{new_qty}{suffix}"
 
 
-def _build_attrs(source_attrs: dict, quantity: str) -> dict:
+def _build_attrs(source_attrs: dict, quantity: str, calculated_from: list[str]) -> dict:
     """Build attrs for a derived variable, inheriting spatial/instrument context.
 
     A derived quantity is calculated, not measured, but it still originates
     from its source variable's instrument (e.g. an HMP's Ta and RH give AH),
-    so it carries that instrument, its URI and its history.
+    so it carries that instrument, its URI and its history, with every
+    period of the history marked calculated from `calculated_from`.
     """
     canonical = build_canonical_quantity_registry().get_base_metadata(quantity)
     return {
@@ -288,8 +300,11 @@ def _build_attrs(source_attrs: dict, quantity: str) -> dict:
         "height_range": source_attrs["height_range"],
         "instrument": source_attrs["instrument"],
         "instrument_uri": copy.deepcopy(source_attrs.get("instrument_uri")),
-        # Copied, so the derived variable's history isn't the same list object.
-        "instrument_history": copy.deepcopy(source_attrs["instrument_history"]),
+        "instrument_history": InstrumentHistory.from_attr(
+            source_attrs["instrument_history"]
+        )
+        .calculated(calculated_from)
+        .to_attr(),
         "long_name": canonical.long_name,
         "quantity": quantity,
         "standard_name": canonical.standard_name,

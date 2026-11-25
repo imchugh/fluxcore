@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """A variable's instrument history: which instrument measured it, and when.
 
+It is also the record of which periods were calculated rather than measured
+(`calculated_from`, see below), so it says where every value came from.
+
 Every variable built from raw inputs carries one, even when its instrument
 never changed (a single period), so its `instrument` attr is always derived
 from it rather than kept in step separately.
@@ -23,6 +26,24 @@ Attr form, roles in config order, periods in time order:
 `role` is null for a single-instrument variable, or the compound key
 (`sonic_anemometer`, `irga`) for a flux variable; null dates are open-ended.
 
+A period whose values were calculated rather than measured also has
+`calculated_from`: the canonical variables they were calculated from. Either
+a site config's calculated input (`calculate_from:`, e.g. an old logger that
+output only the AH it calculated from its HMP's RH, so RH's old era is
+calculated from AH and Ta), or fluxcore's own whole-record derivations
+(derived_quantities: CO2 mole fraction, the missing one of AH/RH, Fn), which
+mark every period of the history they copy from their source:
+
+        {"instrument": "Vaisala HMP45C", "start": null,
+         "end": "2025-09-08T17:30:00",
+         "calculated_from": ["AH_23m", "Ta_23m"]}
+
+The key is absent from a measured period. A change between measured and
+calculated starts a new period even on the same instrument. In NetCDF a
+calculated period reads '(Vaisala HMP45C calculated from AH_23m Ta_23m,
+start,end)', and a year with any calculated period always gets an
+`instrument_history` attr, even with one instrument.
+
 Instrument URIs live beside the history, in the variable's `instrument_uri`
 attr: one `{instrument name: uri | null}` map over every instrument in the
 history (`instrument_uri_map()`). A URI is resolved from the instrument
@@ -34,6 +55,7 @@ Public API
 ----------
 InstrumentPeriod, RoleHistory, InstrumentHistory
 InstrumentHistory.from_specs(var_specs) / .from_attr(attr) / .to_attr()
+InstrumentHistory.calculated(calculated_from) -> InstrumentHistory
 InstrumentHistory.current() -> str
 InstrumentHistory.netcdf_attrs(window_start, window_end) -> (str, str | None)
 InstrumentHistory.netcdf_uri(uris, window_start, window_end) -> str | None
@@ -53,6 +75,14 @@ class InstrumentPeriod:
     instrument: str
     start: datetime | None
     end: datetime | None
+    calculated_from: tuple[str, ...] | None = None
+
+    @property
+    def label(self) -> str:
+        """The period's NetCDF label: the instrument, plus any calculation."""
+        if self.calculated_from is None:
+            return self.instrument
+        return f"{self.instrument} calculated from {' '.join(self.calculated_from)}"
 
     def clip(
         self, window_start: datetime, window_end: datetime
@@ -97,8 +127,10 @@ class InstrumentHistory:
 
         Consecutive inputs from one instrument (e.g. a units change on the
         same sensor) are one period, from the first's begin to the last's
-        end. An instrument can't return after a changeover (rejected by
-        runtime_config_builder), so each role's instruments are distinct.
+        end, unless one is measured and the other calculated (a spec's
+        calculate_from). An instrument can't return after a changeover
+        (rejected by runtime_config_builder), so each role's instruments are
+        distinct.
         """
         first = var_specs[0].instrument
         roles = list(first) if isinstance(first, dict) else [None]
@@ -113,7 +145,12 @@ class InstrumentHistory:
                     role=role,
                     periods=_merge_consecutive(
                         [
-                            (_role_instrument(spec, role), spec.begin, spec.end)
+                            (
+                                _role_instrument(spec, role),
+                                spec.begin,
+                                spec.end,
+                                spec.calculate_from,
+                            )
                             for spec in var_specs
                         ]
                     ),
@@ -139,6 +176,7 @@ class InstrumentHistory:
                             instrument=p["instrument"],
                             start=_parse(p["start"]),
                             end=_parse(p["end"]),
+                            calculated_from=_sources(p.get("calculated_from")),
                         )
                         for p in r["periods"]
                     ),
@@ -154,17 +192,35 @@ class InstrumentHistory:
         return [
             {
                 "role": r.role,
-                "periods": [
-                    {
-                        "instrument": p.instrument,
-                        "start": _isoformat(p.start),
-                        "end": _isoformat(p.end),
-                    }
-                    for p in r.periods
-                ],
+                "periods": [_period_attr(p) for p in r.periods],
             }
             for r in self.roles
         ]
+
+    def calculated(self, calculated_from: Sequence[str]) -> "InstrumentHistory":
+        """This history with every period calculated from `calculated_from`.
+
+        For a variable derived over its whole record (derived_quantities):
+        it keeps its source's instruments and dates, all calculated.
+        """
+        sources = tuple(calculated_from)
+        return InstrumentHistory(
+            roles=tuple(
+                RoleHistory(
+                    role=r.role,
+                    periods=tuple(
+                        InstrumentPeriod(
+                            instrument=p.instrument,
+                            start=p.start,
+                            end=p.end,
+                            calculated_from=sources,
+                        )
+                        for p in r.periods
+                    ),
+                )
+                for r in self.roles
+            )
+        )
 
     def current(self) -> str:
         """Latest instrument per role, comma-joined in role order."""
@@ -181,22 +237,25 @@ class InstrumentHistory:
 
         instrument_history (None means omit the attr):
           - single instrument: '(inst,start,end)|(inst,start,end)', only
-            when two or more periods fall in the window;
+            when two or more periods fall in the window, or any of them is
+            calculated;
           - compound: 'role>(inst,start,end)|...;role>...', one segment per
-            role whose instrument ever changed and has a period in the
-            window.
+            role whose instrument ever changed, or with a calculated period
+            in the window, that has a period in the window.
+        A calculated period's inst reads 'inst calculated from A B'.
         """
         segments = []
         for r in self.roles:
             clipped = _clipped(r, window_start, window_end)
             formatted = "|".join(
-                f"({inst},{start.isoformat()},{end.isoformat()})"
-                for inst, (start, end) in clipped
+                f"({p.label},{start.isoformat()},{end.isoformat()})"
+                for p, (start, end) in clipped
             )
+            calculated = any(p.calculated_from for p, _ in clipped)
             if r.role is None:
-                if len(clipped) > 1:
+                if len(clipped) > 1 or calculated:
                     segments.append(formatted)
-            elif r.changed and clipped:
+            elif (r.changed or calculated) and clipped:
                 segments.append(f"{r.role}>{formatted}")
 
         instrument = ",".join(self._window_instruments(window_start, window_end))
@@ -231,7 +290,9 @@ class InstrumentHistory:
         instruments = []
         for r in self.roles:
             clipped = _clipped(r, window_start, window_end)
-            instruments.append(clipped[-1][0] if clipped else r.periods[-1].instrument)
+            instruments.append(
+                clipped[-1][0].instrument if clipped else r.periods[-1].instrument
+            )
         return instruments
 
 
@@ -259,29 +320,62 @@ def instrument_uri_map(var_specs: Sequence) -> dict[str, str | None]:
 
 def _clipped(
     role: RoleHistory, window_start: datetime, window_end: datetime
-) -> list[tuple[str, tuple[datetime, datetime]]]:
-    """A role's (instrument, clipped dates) for its periods inside the window."""
+) -> list[tuple[InstrumentPeriod, tuple[datetime, datetime]]]:
+    """A role's (period, clipped dates) for its periods inside the window."""
     return [
-        (p.instrument, dates)
+        (p, dates)
         for p in role.periods
         if (dates := p.clip(window_start, window_end)) is not None
     ]
 
 
-def _merge_consecutive(
-    periods: list[tuple[str, datetime | str | None, datetime | str | None]],
-) -> tuple[InstrumentPeriod, ...]:
-    """Collapse runs of one instrument into one period each."""
+def _merge_consecutive(periods: list[tuple]) -> tuple[InstrumentPeriod, ...]:
+    """Collapse runs of one instrument (and one derivation) into one period each.
+
+    `periods` is (instrument, begin, end, calculate_from) per input, in
+    time order.
+    """
     merged: list[InstrumentPeriod] = []
-    for instrument, begin, end in periods:
+    for instrument, begin, end, calculated_from in periods:
         begin, end = _parse(begin), _parse(end)
-        if merged and merged[-1].instrument == instrument:
+        sources = _sources(calculated_from)
+        if (
+            merged
+            and merged[-1].instrument == instrument
+            and merged[-1].calculated_from == sources
+        ):
             merged[-1] = InstrumentPeriod(
-                instrument=instrument, start=merged[-1].start, end=end
+                instrument=instrument,
+                start=merged[-1].start,
+                end=end,
+                calculated_from=sources,
             )
         else:
-            merged.append(InstrumentPeriod(instrument=instrument, start=begin, end=end))
+            merged.append(
+                InstrumentPeriod(
+                    instrument=instrument,
+                    start=begin,
+                    end=end,
+                    calculated_from=sources,
+                )
+            )
     return tuple(merged)
+
+
+def _period_attr(p: InstrumentPeriod) -> dict:
+    """One period's attr record; calculated_from only on a calculated period."""
+    record = {
+        "instrument": p.instrument,
+        "start": _isoformat(p.start),
+        "end": _isoformat(p.end),
+    }
+    if p.calculated_from is not None:
+        record["calculated_from"] = list(p.calculated_from)
+    return record
+
+
+def _sources(value) -> tuple[str, ...] | None:
+    return None if value is None else tuple(value)
 
 
 def _role_instrument(spec, role: str | None) -> str:
