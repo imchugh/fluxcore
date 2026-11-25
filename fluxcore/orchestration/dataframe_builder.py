@@ -112,7 +112,9 @@ def build_dataframe(
     Step 4 — rename aliased columns to canonical output names, then fill
               each calculated input's period (calculate_from) from its
               source variables.
-    Step 5 — truncate to the flux record's temporal extent, so that
+    Step 5 — truncate to the flux record's temporal extent (on the regular
+              time grid, so a span with no record in any file group is
+              missing-value rows, not a jump in the time axis), so that
               ancillary data predating the flux system does not produce empty
               output years. The flux record is ``flux_file`` (the current
               flux file) plus every earlier file stitched into the same
@@ -209,6 +211,16 @@ def build_dataframe(
             start = min(index.min() for index in extent_indexes)
             end = max(index.max() for index in extent_indexes)
             df = df.loc[start:end]
+            # Each file group is already on the regular grid, but a span
+            # where no group has a record (e.g. between a logger changeover's
+            # last old and first new record) would otherwise be a jump in the
+            # time axis rather than missing-value rows.
+            if time_step is not None:
+                df = df.reindex(
+                    pd.date_range(
+                        start, end, freq=f"{time_step}min", name=df.index.name
+                    )
+                )
     elif flux_file in file_groups:
         if flux_index is None:
             return empty

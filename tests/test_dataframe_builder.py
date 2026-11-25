@@ -189,6 +189,23 @@ class FluxExtentTruncationTestCase(unittest.TestCase):
         self.assertEqual(out.index.min(), pd.Timestamp("2026-01-01 00:00"))
         self.assertEqual(out.index.max(), pd.Timestamp("2026-01-03 01:30"))
 
+    def test_full_build_fills_a_changeover_gap_on_the_time_grid(self):
+        """No file group has records between the old era's last record and
+        the new era's first: the gap is missing-value rows, not a jump."""
+        out = self._build(
+            {
+                "old_flux": _frame("2026-01-01 00:00", 4, Fc_old=1.0),
+                "flux": _frame("2026-01-03 00:00", 4, Fc=1.0),
+            },
+            specs_by_alias=self.CHANGEOVER_SPECS,
+        )
+        steps = out.index.to_series().diff().dropna()
+        self.assertTrue((steps == pd.Timedelta("30min")).all())
+        self.assertEqual(len(out), 2 * 48 + 4)
+        self.assertTrue(
+            out.loc["2026-01-01 02:00":"2026-01-02 23:30"].isna().all().all()
+        )
+
     def test_ancillary_predating_both_flux_eras_is_still_trimmed(self):
         out = self._build(
             {
