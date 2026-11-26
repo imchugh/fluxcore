@@ -12,9 +12,7 @@ from fluxcore.orchestration import dataframe_builder
 
 def _registry(*raw_names, group="g"):
     return {
-        f"{raw}_gp0": SimpleNamespace(
-            raw_name=raw, alias=f"{raw}_gp0", file_group=group
-        )
+        f"{raw}#0": SimpleNamespace(raw_name=raw, alias=f"{raw}#0", file_group=group)
         for raw in raw_names
     }
 
@@ -62,9 +60,9 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
             frames, ["Ta", "Tpanel"], start_date=pd.Timestamp("2026-10-14 10:00")
         )
 
-        self.assertEqual(sorted(out.columns), ["Ta_gp0", "Tpanel_gp0"])
+        self.assertEqual(sorted(out.columns), ["Ta#0", "Tpanel#0"])
         self.assertEqual(len(out), 3)
-        self.assertTrue(out["Tpanel_gp0"].isna().all())
+        self.assertTrue(out["Tpanel#0"].isna().all())
 
     def test_full_read_keeps_historical_values(self):
         frames = {
@@ -73,20 +71,57 @@ class BuildFileGroupDataframeTestCase(unittest.TestCase):
         }
         out = self._build(frames, ["Ta", "Tpanel"])
 
-        self.assertEqual(out["Tpanel_gp0"].notna().sum(), 2)
+        self.assertEqual(out["Tpanel#0"].notna().sum(), 2)
+
+    def test_overlaps_cascade_in_file_order(self):
+        # Files arrive in FileGroup.all_files order (master, newest backup,
+        # older backup, patch). Each takes only the timestamps no earlier
+        # file has, regardless of how the timestamps interleave.
+        frames = {
+            "master.dat": _frame("2026-01-01 02:00", 2, Ta=1.0),
+            "f.dat.1.backup": _frame("2026-01-01 01:00", 3, Ta=2.0),
+            "f.dat.backup": _frame("2026-01-01 00:00", 4, Ta=3.0),
+            "f.dat.patch": _frame("2026-01-01 00:00", 6, Ta=4.0),
+        }
+        out = self._build(frames, ["Ta"])
+
+        self.assertEqual(out["Ta#0"].tolist(), [3.0, 3.0, 2.0, 2.0, 1.0, 1.0])
+
+    def test_full_overlap_keeps_master_throughout(self):
+        # Large enough that an unstable sort would scramble which file's
+        # duplicate comes first (small arrays happen to sort stably).
+        frames = {
+            "master.dat": _frame("2026-01-01", 500, Ta=1.0),
+            "f.dat.backup": _frame("2026-01-01", 500, Ta=2.0),
+        }
+        out = self._build(frames, ["Ta"])
+
+        self.assertTrue((out["Ta#0"] == 1.0).all())
+
+    def test_patch_fills_only_gaps(self):
+        master = _frame("2026-01-01", 6, Ta=1.0).drop(
+            pd.to_datetime(["2026-01-01 01:00", "2026-01-01 01:30"])
+        )
+        frames = {
+            "master.dat": master,
+            "f.dat.patch": _frame("2026-01-01", 6, Ta=9.0),
+        }
+        out = self._build(frames, ["Ta"])
+
+        self.assertEqual(out["Ta#0"].tolist(), [1.0, 1.0, 9.0, 9.0, 1.0, 1.0])
 
     def test_group_with_no_rows_since_start_keeps_columns(self):
         frames = {"master.dat": _frame("2026-01-01", 2, Ta=1.0)}
         out = self._build(frames, ["Ta"], start_date=pd.Timestamp("2026-10-14"))
 
-        self.assertEqual(list(out.columns), ["Ta_gp0"])
+        self.assertEqual(list(out.columns), ["Ta#0"])
         self.assertEqual(len(out), 0)
 
 
 class FluxExtentTruncationTestCase(unittest.TestCase):
-    """Step 5: output is truncated to the flux file group's extent."""
+    """Step 5: output is truncated to the flux record's extent."""
 
-    def _build(self, frames_by_group, start_date=None):
+    def _build(self, frames_by_group, start_date=None, specs_by_alias=None):
         groups = {name: SimpleNamespace(file_format="TOA5") for name in frames_by_group}
         patches = [
             mock.patch.object(dataframe_builder.raw_data_loader, "get_data_loader"),
@@ -113,7 +148,7 @@ class FluxExtentTruncationTestCase(unittest.TestCase):
             self.addCleanup(patcher.stop)
         return dataframe_builder.build_dataframe(
             file_groups=groups,
-            specs_by_alias={},
+            specs_by_alias=specs_by_alias or {},
             start_date=start_date,
             flux_file="flux",
             time_step=30,
@@ -128,6 +163,70 @@ class FluxExtentTruncationTestCase(unittest.TestCase):
         )
         self.assertEqual(out.index.min(), pd.Timestamp("2026-01-02 00:00"))
         self.assertEqual(out.index.max(), pd.Timestamp("2026-01-02 01:30"))
+
+    # A logger changeover: Fc's old era is in "old_flux", its new era in
+    # "flux" (the current flux file); "soil" feeds only its own variable.
+    CHANGEOVER_SPECS = {
+        "Fc#0": SimpleNamespace(
+            canonical_name="Fc", file_group="old_flux", calculate_from=None
+        ),
+        "Fc#1": SimpleNamespace(
+            canonical_name="Fc", file_group="flux", calculate_from=None
+        ),
+        "Ts#0": SimpleNamespace(
+            canonical_name="Ts", file_group="soil", calculate_from=None
+        ),
+    }
+
+    def test_full_build_spans_a_stitched_earlier_flux_file(self):
+        out = self._build(
+            {
+                "old_flux": _frame("2026-01-01 00:00", 4, Fc_old=1.0),
+                "flux": _frame("2026-01-03 00:00", 4, Fc=1.0),
+            },
+            specs_by_alias=self.CHANGEOVER_SPECS,
+        )
+        self.assertEqual(out.index.min(), pd.Timestamp("2026-01-01 00:00"))
+        self.assertEqual(out.index.max(), pd.Timestamp("2026-01-03 01:30"))
+
+    def test_full_build_fills_a_changeover_gap_on_the_time_grid(self):
+        """No file group has records between the old era's last record and
+        the new era's first: the gap is missing-value rows, not a jump."""
+        out = self._build(
+            {
+                "old_flux": _frame("2026-01-01 00:00", 4, Fc_old=1.0),
+                "flux": _frame("2026-01-03 00:00", 4, Fc=1.0),
+            },
+            specs_by_alias=self.CHANGEOVER_SPECS,
+        )
+        steps = out.index.to_series().diff().dropna()
+        self.assertTrue((steps == pd.Timedelta("30min")).all())
+        self.assertEqual(len(out), 2 * 48 + 4)
+        self.assertTrue(
+            out.loc["2026-01-01 02:00":"2026-01-02 23:30"].isna().all().all()
+        )
+
+    def test_ancillary_predating_both_flux_eras_is_still_trimmed(self):
+        out = self._build(
+            {
+                "soil": _frame("2025-12-30 00:00", 4, Ts=3.0),
+                "old_flux": _frame("2026-01-01 00:00", 4, Fc_old=1.0),
+                "flux": _frame("2026-01-03 00:00", 4, Fc=1.0),
+            },
+            specs_by_alias=self.CHANGEOVER_SPECS,
+        )
+        self.assertEqual(out.index.min(), pd.Timestamp("2026-01-01 00:00"))
+
+    def test_tail_ends_at_the_current_flux_file_not_an_earlier_era(self):
+        out = self._build(
+            {
+                "old_flux": _frame("2026-01-02 00:00", 6, Fc_old=1.0),
+                "flux": _frame("2026-01-02 00:00", 2, Fc=1.0),
+            },
+            start_date=pd.Timestamp("2026-01-02 00:00"),
+            specs_by_alias=self.CHANGEOVER_SPECS,
+        )
+        self.assertEqual(out.index.max(), pd.Timestamp("2026-01-02 00:30"))
 
     def test_tail_keeps_rows_before_the_first_new_flux_record(self):
         # A flux gap right after the checkpoint: the tail must still start

@@ -18,6 +18,7 @@ import pandas as pd
 from fluxcore.domain.enums import DiagnosticType, StatisticType, VariableType
 from fluxcore.infrastructure.data_conditioning import condition_dataframe
 from fluxcore.services.data import raw_data_loader, unit_conversions
+from fluxcore.services.data.calculations import get_calculation
 from fluxcore.services.metadata.canonical_quantity_registry import (
     resolve_variance_units,
 )
@@ -108,22 +109,49 @@ def build_dataframe(
               condition, and concatenate vertically.
     Step 2 — concatenate all file groups horizontally.
     Step 3 — merge overlapping instrument periods into single columns.
-    Step 4 — rename aliased columns to canonical output names.
-    Step 5 — truncate to the flux file group's temporal extent, so that
+    Step 4 — rename aliased columns to canonical output names, then fill
+              each calculated input's period (calculate_from) from its
+              source variables.
+    Step 5 — truncate to the flux record's temporal extent (on the regular
+              time grid, so a span with no record in any file group is
+              missing-value rows, not a jump in the time axis), so that
               ancillary data predating the flux system does not produce empty
-              output years. With ``start_date`` (an incremental tail), the
-              tail instead spans start_date to the last new flux record on the
-              regular time grid, and is empty if there is no new flux record:
-              exactly the rows a full build would add after start_date, so
-              appending it can't run the store ahead of the flux data or leave
-              holes in its time axis.
+              output years. The flux record is ``flux_file`` (the current
+              flux file) plus every earlier file stitched into the same
+              variables (see _flux_extent_groups), so a logger changeover
+              doesn't cut off the older era. With ``start_date`` (an
+              incremental tail), the tail instead spans start_date to the last
+              new record in ``flux_file`` itself on the regular time grid, and
+              is empty if there is no new flux record: exactly the rows a full
+              build would add after start_date, so appending it can't run the
+              store ahead of the flux data or leave holes in its time axis.
     """
+    extent_groups = _flux_extent_groups(specs_by_alias, flux_file)
+
+    helper_columns: set[str] = set()
     if quantities is not None:
-        specs_by_alias = {
+        kept = {
             alias: spec
             for alias, spec in specs_by_alias.items()
             if spec.quantity in quantities
         }
+        # A kept variable's calculated period needs its source variables
+        # too; they're built for the calculation and dropped afterwards.
+        sources = {
+            source
+            for spec in kept.values()
+            if spec.calculate_from
+            for source in spec.calculate_from
+        }
+        extra = {
+            alias: spec
+            for alias, spec in specs_by_alias.items()
+            if spec.canonical_name in sources and alias not in kept
+        }
+        helper_columns = {canonical_output_name(s) for s in extra.values()} - {
+            canonical_output_name(s) for s in kept.values()
+        }
+        specs_by_alias = {**kept, **extra}
         active_groups = {spec.file_group for spec in specs_by_alias.values()}
         file_groups = {
             name: fg for name, fg in file_groups.items() if name in active_groups
@@ -133,6 +161,7 @@ def build_dataframe(
     empty = pd.DataFrame(index=pd.DatetimeIndex([], name="time"))
     dfs = []
     flux_index = None
+    extent_indexes = []
     for group_name, file_group in file_groups.items():
         loader = raw_data_loader.get_data_loader(
             file_group.file_format, start_date=start_date
@@ -151,6 +180,8 @@ def build_dataframe(
             # set it to an empty index, which would break Step 5 below.
             if group_name == flux_file and not group_df.empty:
                 flux_index = group_df.index
+            if group_name in extent_groups and not group_df.empty:
+                extent_indexes.append(group_df.index)
             dfs.append(group_df)
 
     # Step 2
@@ -168,11 +199,28 @@ def build_dataframe(
 
     # Step 4
     df = _rename_to_canonical(df=df, specs_by_alias=specs_by_alias)
+    df = _apply_calculated_inputs(df=df, specs_by_alias=specs_by_alias)
+    df = df.drop(columns=list(helper_columns), errors="ignore")
 
     # Step 5
     if start_date is None:
+        # Only when the current flux file contributed rows: a quantities
+        # filter that leaves out the flux file (or an empty one) skips the
+        # trim, as before, rather than trimming to an older era alone.
         if flux_index is not None:
-            df = df.loc[flux_index.min() : flux_index.max()]
+            start = min(index.min() for index in extent_indexes)
+            end = max(index.max() for index in extent_indexes)
+            df = df.loc[start:end]
+            # Each file group is already on the regular grid, but a span
+            # where no group has a record (e.g. between a logger changeover's
+            # last old and first new record) would otherwise be a jump in the
+            # time axis rather than missing-value rows.
+            if time_step is not None:
+                df = df.reindex(
+                    pd.date_range(
+                        start, end, freq=f"{time_step}min", name=df.index.name
+                    )
+                )
     elif flux_file in file_groups:
         if flux_index is None:
             return empty
@@ -190,6 +238,32 @@ def build_dataframe(
     return df
 
 
+def _flux_extent_groups(
+    specs_by_alias: dict[str, VariableSpec], flux_file: str | None
+) -> set[str]:
+    """File groups whose records make up the flux record.
+
+    ``flux_file`` itself, plus every group that supplies an earlier (or
+    later) era of a variable ``flux_file`` supplies — i.e. the old logger's
+    files after a changeover, stitched in through the variables' raw inputs.
+    A site that has never changed logger gets just ``{flux_file}``.
+    Ancillary groups (soil, profile) that feed only their own variables are
+    not included, so they are still trimmed to the flux record.
+    """
+    if flux_file is None:
+        return set()
+    flux_variables = {
+        spec.canonical_name
+        for spec in specs_by_alias.values()
+        if spec.file_group == flux_file
+    }
+    return {flux_file} | {
+        spec.file_group
+        for spec in specs_by_alias.values()
+        if spec.canonical_name in flux_variables and spec.file_group is not None
+    }
+
+
 def _build_file_group_dataframe(
     file_group: FileGroup,
     loader: Callable,
@@ -200,16 +274,25 @@ def _build_file_group_dataframe(
 ) -> pd.DataFrame:
     """Load and process all files in a file group.
 
-    For each file: load, filter to expected variables, apply aliasing,
-    apply statistical transforms and unit conversions.  Then concatenate
-    vertically across master + backup files and condition the time index.
+    For each file: load, filter to expected variables, copy each raw column
+    to its inputs' aliases, apply statistical transforms and unit
+    conversions.  Then concatenate
+    vertically across the group's files and condition the time index.
     Files whose latest record predates start_date are skipped entirely.
+
+    Overlapping timestamps cascade in `FileGroup.all_files` order: master,
+    then backups newest to oldest, then patches. Each file only contributes
+    the timestamps no higher-precedence file has; the whole record is taken
+    from the winning file (records are not merged column by column).
     """
-    rename_map = {
-        entry.raw_name: entry.alias
-        for entry in specs_by_alias.values()
-        if entry.file_group == file_group.group
-    }
+    # Each input gets its own copy of its raw column: one column can feed
+    # several inputs (eras of a column whose units or instrument changed,
+    # or two variables), so columns are copied per alias, not renamed.
+    aliases_by_raw_name: dict[str, list[str]] = {}
+    for entry in specs_by_alias.values():
+        if entry.file_group == file_group.group:
+            aliases_by_raw_name.setdefault(entry.raw_name, []).append(entry.alias)
+    group_aliases = [a for aliases in aliases_by_raw_name.values() for a in aliases]
 
     dfs = []
     for file in file_group.variables_by_file:
@@ -222,8 +305,13 @@ def _build_file_group_dataframe(
 
         df = _filter_variables(df=df, variables=file_group.expected_variables)
 
-        df = df.rename(
-            columns={col: rename_map[col] for col in df.columns if col in rename_map}
+        df = pd.DataFrame(
+            {
+                alias: df[col]
+                for col in df.columns
+                for alias in aliases_by_raw_name.get(col, [])
+            },
+            index=df.index,
         )
 
         df = _apply_conversions(
@@ -245,12 +333,15 @@ def _build_file_group_dataframe(
         # tail cycle never gets its store array appended to at all, and
         # falls permanently behind the variables that did have new rows.
         return pd.DataFrame(
-            columns=list(rename_map.values()),
+            columns=group_aliases,
             index=pd.DatetimeIndex([], name="time"),
             dtype="float64",
         )
 
-    df = pd.concat(dfs).sort_index()
+    # dfs is in precedence order, so keep="first" keeps the winning file's
+    # record; dedupe before sorting because sort_index isn't stable.
+    df = pd.concat(dfs)
+    df = df[~df.index.duplicated(keep="first")].sort_index()
 
     # Same rule as the no-files branch above, for a configured variable whose
     # column is absent from every file read this time (e.g. a sensor dropped
@@ -259,7 +350,7 @@ def _build_file_group_dataframe(
     # set, independent of which files a given read happened to touch;
     # otherwise an incremental tail's variable set differs from the store's
     # (built from all files) and the append is refused.
-    missing = [alias for alias in rename_map.values() if alias not in df.columns]
+    missing = [alias for alias in group_aliases if alias not in df.columns]
     if missing:
         df = df.reindex(columns=[*df.columns, *missing])
 
@@ -414,3 +505,50 @@ def _rename_to_canonical(
     }
 
     return df.rename(columns=rename_map)
+
+
+def _apply_calculated_inputs(
+    df: pd.DataFrame,
+    specs_by_alias: dict[str, VariableSpec],
+) -> pd.DataFrame:
+    """Fill each calculated input's period from its source variables.
+
+    Runs on the assembled canonical frame, so the sources are already
+    stitched and in canonical units, which is what the registered
+    calculation for the variable's quantity takes. The period is the
+    input's begin/end (inclusive, open-ended when None); the variable's
+    other inputs never overlap it (site_config_schema rejects that). A
+    variable with no measured input in this read gets its column here.
+    """
+    calculated = [s for s in specs_by_alias.values() if s.calculate_from]
+    if not calculated or df.empty:
+        return df
+
+    output_names = {
+        spec.canonical_name: canonical_output_name(spec)
+        for spec in specs_by_alias.values()
+    }
+    quantities = {
+        spec.canonical_name: spec.quantity for spec in specs_by_alias.values()
+    }
+
+    for spec in calculated:
+        target = output_names[spec.canonical_name]
+        if target not in df.columns:
+            df[target] = float("nan")
+        window = df.loc[spec.begin : spec.end]
+        if window.empty:
+            continue
+        source_columns = [output_names.get(source) for source in spec.calculate_from]
+        if any(col is None or col not in df.columns for col in source_columns):
+            continue  # a source absent from this read: the period stays empty
+        calculation = get_calculation(spec.quantity)
+        values = calculation(
+            **{
+                quantities[source]: window[col]
+                for source, col in zip(spec.calculate_from, source_columns, strict=True)
+            }
+        )
+        df.loc[window.index, target] = values
+
+    return df

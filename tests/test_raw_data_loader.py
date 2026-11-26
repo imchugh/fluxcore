@@ -97,6 +97,49 @@ def _corrupt_lines(
     path.write_text("".join(lines))
 
 
+class TestTOA5MissingValueStrings(unittest.TestCase):
+    """Campbell's NAN and INF/-INF strings read as NaN, never as values."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.path = Path(cls._tmp.name) / "flux.dat"
+        # As the logger writes them: quoted headers, timestamps and strings.
+        rows = [
+            '"2024-01-01 00:30:00",0,1.5,"INF"',
+            '"2024-01-01 01:00:00",1,"-INF",2.5',
+            '"2024-01-01 01:30:00",2,"NAN",3.5',
+            '"2024-01-01 02:00:00",3,4.5,5.5',
+        ]
+        with open(cls.path, "w", newline="\n") as f:
+            csv.writer(f, quoting=csv.QUOTE_ALL).writerows(TOA5_HEADERS)
+            f.write("\n".join(rows) + "\n")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def _assert_missing(self, df):
+        self.assertEqual(df["Val1"].dtype.kind, "f")
+        self.assertEqual(df["Val2"].dtype.kind, "f")
+        self.assertEqual(df["Val1"].isna().tolist(), [False, True, True, False])
+        self.assertEqual(df["Val2"].isna().tolist(), [True, False, False, False])
+        self.assertEqual(df["Val1"].dropna().tolist(), [1.5, 4.5])
+
+    def test_full_read(self):
+        self._assert_missing(rdl.load_raw_data(file_path=self.path, file_format="TOA5"))
+
+    def test_tail_read(self):
+        # The fast path itself, so a silent fallback to the full read can't
+        # make this pass.
+        df = rdl._load_raw_data_since_fast(
+            file_path=self.path,
+            file_format=rdl.FileFormat.TOA5,
+            start_date=pd.Timestamp("2024-01-01 00:30"),
+        )
+        self._assert_missing(df)
+
+
 class TestLoadRawDataSinceTOA5(unittest.TestCase):
     """Golden-equivalence matrix: load_raw_data_since vs. full read + trim."""
 

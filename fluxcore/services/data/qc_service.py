@@ -36,6 +36,21 @@ def in_window(index: pd.DatetimeIndex, start, end) -> np.ndarray:
     return inside
 
 
+def absolute_correction(series: pd.Series, windows) -> tuple[pd.Series, pd.Series]:
+    """Replace values by their absolute value within each window.
+
+    For a quantity reported signed where the network reports its magnitude.
+    `windows` have start/end attributes.
+    """
+    series = series.copy()
+    changed = np.zeros(len(series), dtype=bool)
+    for w in windows:
+        inside = in_window(series.index, w.start, w.end)
+        series[inside] = series[inside].abs()
+        changed |= inside
+    return series, pd.Series(changed, index=series.index)
+
+
 def linear_correction(series: pd.Series, windows) -> tuple[pd.Series, pd.Series]:
     """Apply slope * value + offset within each window, in order.
 
@@ -75,11 +90,14 @@ def range_check(series: pd.Series, lower: float, upper: float) -> pd.Series:
     return (series < lower) | (series > upper)
 
 
-def exclude_dates_check(index: pd.DatetimeIndex, ranges: list[tuple]) -> pd.Series:
-    """Boolean mask, True where index falls within any [start, end] range."""
+def exclude_dates_check(index: pd.DatetimeIndex, windows) -> pd.Series:
+    """Boolean mask, True where index falls within any window.
+
+    `windows` have start/end attributes (inclusive; None is open-ended).
+    """
     bad = np.zeros(len(index), dtype=bool)
-    for start, end in ranges:
-        bad |= in_window(index, start, end)
+    for w in windows:
+        bad |= in_window(index, w.start, w.end)
     return pd.Series(bad, index=index)
 
 

@@ -16,6 +16,10 @@ from fluxcore.domain.enums import StatisticType
 from fluxcore.orchestration import derived_quantities
 from fluxcore.orchestration.dataframe_builder import build_dataframe_and_specs
 from fluxcore.orchestration.derived_quantities import DatasetBuildIntermediate
+from fluxcore.services.metadata.instrument_history import (
+    InstrumentHistory,
+    instrument_uri_map,
+)
 from fluxcore.services.metadata.site_metadata_builder import SiteContext
 from fluxcore.services.metadata.variable_registry import (
     VariableSpec,
@@ -141,13 +145,14 @@ def _build_var_attrs(specs_by_alias: dict[str, VariableSpec]) -> dict[str, dict]
 
     for _, var_specs in canonical_groups.items():
         main_spec = var_specs[-1]
+        history = InstrumentHistory.from_specs(var_specs)
 
         attrs = {
             "height": main_spec.height,
             "height_range": main_spec.height_range,
-            "instrument": main_spec.instrument,
-            "instrument_uri": main_spec.instrument_uri,
-            "instrument_history": _history_from_instruments(var_specs),
+            "instrument": history.current(),
+            "instrument_uri": instrument_uri_map(var_specs),
+            "instrument_history": history.to_attr(),
             "long_name": main_spec.long_name,
             "quantity": main_spec.quantity,
             "standard_name": main_spec.standard_name,
@@ -158,53 +163,6 @@ def _build_var_attrs(specs_by_alias: dict[str, VariableSpec]) -> dict[str, dict]
         rslt[canonical_output_name(main_spec)] = attrs
 
     return rslt
-
-
-def _history_from_instruments(
-    var_specs: list[VariableSpec],
-) -> dict[str, dict] | None:
-    """Return instrument changeover history, or None if no instrument changed.
-
-    For simple (string) instruments: keyed by instrument name.
-    For compound (dict) instruments: keyed by alias, containing per-instrument
-    histories only for aliases where the instrument actually changed. Aliases
-    that were constant across all periods are omitted.
-
-    Dates are always explicit for multi-period variables (required for the
-    merge step), so no defaults are needed.
-    """
-    if isinstance(var_specs[0].instrument, dict):
-        return _history_from_compound_instruments(var_specs)
-
-    instruments = {spec.instrument for spec in var_specs}
-    if len(instruments) == 1:
-        return None
-    return {
-        spec.instrument: {"start_date": spec.begin, "end_date": spec.end}
-        for spec in var_specs
-    }
-
-
-def _history_from_compound_instruments(
-    var_specs: list[VariableSpec],
-) -> dict[str, dict] | None:
-    """Per-alias history for compound quantities.
-
-    Only aliases where the instrument changed across periods are included.
-    """
-    aliases = list(var_specs[0].instrument.keys())
-    result = {}
-    for alias in aliases:
-        alias_instruments = {spec.instrument[alias] for spec in var_specs}
-        if len(alias_instruments) > 1:
-            result[alias] = {
-                spec.instrument[alias]: {
-                    "start_date": spec.begin,
-                    "end_date": spec.end,
-                }
-                for spec in var_specs
-            }
-    return result if result else None
 
 
 def _output_statistic(var_spec: VariableSpec) -> StatisticType | None:

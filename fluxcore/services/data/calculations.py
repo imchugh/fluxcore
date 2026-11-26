@@ -50,21 +50,21 @@ def get_calculation(quantity):
 
 
 @register_calculation("AH")
-def calculate_AH_from_RH(Ta: ArrayLike, RH: ArrayLike, ps: ArrayLike) -> ArrayLike:
-    """Derive absolute humidity (g/m³) from air temperature, RH, and pressure."""
-    es = calculate_es(Ta)
-    e = es * RH / 100
-    molar_density = calculate_molar_density(ps=ps, Ta=Ta)
-    return e / ps * molar_density * H2O_MOL_MASS
+def calculate_AH_from_RH(Ta: ArrayLike, RH: ArrayLike) -> ArrayLike:
+    """Absolute humidity (g/m³) from air temperature (degC) and RH (percent).
+
+    The vapour's own ideal-gas density at its partial pressure; the inverse
+    of calculate_VP_from_AH. Air pressure plays no part, so a missing
+    pressure doesn't cost a derived AH.
+    """
+    e = calculate_e(Ta=Ta, RH=RH)
+    return e * 1000 / (R * (Ta + ZERO_C_IN_K)) * H2O_MOL_MASS
 
 
 @register_calculation("RH")
-def calculate_RH_from_AH(AH: ArrayLike, Ta: ArrayLike, ps: ArrayLike) -> ArrayLike:
-    """Derive relative humidity (%) from AH, air temperature, and pressure."""
-    molar_density = calculate_molar_density(ps=ps, Ta=Ta)
-    e = (AH / H2O_MOL_MASS) / molar_density * ps
-    es = calculate_es(Ta)
-    return e / es * 100
+def calculate_RH_from_AH(AH: ArrayLike, Ta: ArrayLike) -> ArrayLike:
+    """Relative humidity (%) from AH (g/m³) and air temperature (degC)."""
+    return calculate_VP_from_AH(AH=AH, Ta=Ta) / calculate_es(Ta) * 100
 
 
 @register_calculation("es", "SVP")

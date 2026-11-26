@@ -2,7 +2,8 @@
 """Derive quantities that aren't directly measured.
 
 derive_missing_humidity: for each (instrument, height) group with Ta and
-exactly one of {RH, AH}, derives the missing variable from the other plus Ta and ps.
+exactly one of {RH, AH}, derives the missing variable from the other plus Ta
+(no pressure needed: it cancels out of the conversion).
 
 derive_co2_mole_fraction: for each CO2c column (Av and Sd only), derives the
 corresponding CO2 dry mole fraction if not already present. Ta_Av and ps_Av are used as
@@ -27,6 +28,7 @@ add_net_radiation(result)        -> DatasetBuildIntermediate
 add_day_night_indicator(ds)      -> xr.Dataset
 """
 
+import copy
 import logging
 from dataclasses import dataclass
 
@@ -39,6 +41,7 @@ from fluxcore.services.data.calculations import get_calculation
 from fluxcore.services.metadata.canonical_quantity_registry import (
     build_canonical_quantity_registry,
 )
+from fluxcore.services.metadata.instrument_history import InstrumentHistory
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +62,10 @@ def derive_missing_humidity(
     """Derive and add the missing humidity variable (RH or AH) for each group.
 
     A group is an instrument+height combination that has Ta and exactly one
-    of {RH, AH}. Returns the result unchanged if no pressure variable is
-    found or there is nothing to derive.
+    of {RH, AH}. Returns the result unchanged if there is nothing to derive.
     """
     df = result.df.copy()
     var_attrs = dict(result.var_attrs)
-
-    ps_col = _find_quantity_av(df, var_attrs, "ps")
-    if ps_col is None:
-        return result
 
     groups = _group_by_instrument_height(var_attrs)
 
@@ -83,19 +81,19 @@ def derive_missing_humidity(
 
         if rh_col is not None:
             new_col = _derived_name(rh_col, "RH", "AH")
-            df[new_col] = get_calculation("AH")(
-                Ta=df[ta_col], RH=df[rh_col], ps=df[ps_col]
-            )
+            df[new_col] = get_calculation("AH")(Ta=df[ta_col], RH=df[rh_col])
             var_attrs[new_col] = _build_attrs(
-                source_attrs=var_attrs[rh_col], quantity="AH"
+                source_attrs=var_attrs[rh_col],
+                quantity="AH",
+                calculated_from=[rh_col, ta_col],
             )
         else:
             new_col = _derived_name(ah_col, "AH", "RH")
-            df[new_col] = get_calculation("RH")(
-                AH=df[ah_col], Ta=df[ta_col], ps=df[ps_col]
-            )
+            df[new_col] = get_calculation("RH")(AH=df[ah_col], Ta=df[ta_col])
             var_attrs[new_col] = _build_attrs(
-                source_attrs=var_attrs[ah_col], quantity="RH"
+                source_attrs=var_attrs[ah_col],
+                quantity="RH",
+                calculated_from=[ah_col, ta_col],
             )
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
@@ -132,7 +130,9 @@ def derive_co2_mole_fraction(
         if ta_col is None:
             continue
         df[new_col] = get_calculation("CO2")(CO2c=df[col], Ta=df[ta_col], ps=df[ps_col])
-        var_attrs[new_col] = _build_attrs(source_attrs=attrs, quantity="CO2")
+        var_attrs[new_col] = _build_attrs(
+            source_attrs=attrs, quantity="CO2", calculated_from=[col, ta_col, ps_col]
+        )
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
@@ -145,7 +145,9 @@ def add_net_radiation(result: DatasetBuildIntermediate) -> DatasetBuildIntermedi
     calculate_net_radiation for why), and the unconditional write is
     deliberate — this function is the sole source of Fn, not a gap-filler.
 
-    Returns result unchanged if any of the four components is absent, as a
+    The components are the variables named exactly Fsd, Fsu, Fld and Flu (a
+    site's main radiometer), never a second sensor of the same quantity such
+    as Fsd_2. Returns result unchanged if any of the four is absent, as a
     safety net rather than raising.
     """
     df = result.df.copy()
@@ -153,10 +155,9 @@ def add_net_radiation(result: DatasetBuildIntermediate) -> DatasetBuildIntermedi
 
     cols = {}
     for quantity in ("Fsd", "Fsu", "Fld", "Flu"):
-        col = _find_quantity_av(df, var_attrs, quantity)
-        if col is None:
+        if quantity not in df.columns or quantity not in var_attrs:
             return result
-        cols[quantity] = col
+        cols[quantity] = quantity
 
     df["Fn"] = get_calculation("Fn")(
         Fsd=df[cols["Fsd"]],
@@ -164,7 +165,11 @@ def add_net_radiation(result: DatasetBuildIntermediate) -> DatasetBuildIntermedi
         Fld=df[cols["Fld"]],
         Flu=df[cols["Flu"]],
     )
-    var_attrs["Fn"] = _build_attrs(source_attrs=var_attrs[cols["Fsd"]], quantity="Fn")
+    var_attrs["Fn"] = _build_attrs(
+        source_attrs=var_attrs[cols["Fsd"]],
+        quantity="Fn",
+        calculated_from=list(cols.values()),
+    )
 
     return DatasetBuildIntermediate(df=df, var_attrs=var_attrs)
 
@@ -270,10 +275,7 @@ def _group_by_instrument_height(
         qty = attrs.get("quantity")
         if qty not in _HUMIDITY_QUANTITIES:
             continue
-        instrument = attrs["instrument"]
-        if isinstance(instrument, dict):
-            instrument = frozenset(instrument.items())
-        key = (instrument, attrs["height"])
+        key = (attrs["instrument"], attrs["height"])
         groups.setdefault(key, {})[qty] = var_name
     return groups
 
@@ -284,14 +286,25 @@ def _derived_name(source_name: str, source_qty: str, new_qty: str) -> str:
     return f"{new_qty}{suffix}"
 
 
-def _build_attrs(source_attrs: dict, quantity: str) -> dict:
-    """Build attrs for a derived variable, inheriting spatial/instrument context."""
+def _build_attrs(source_attrs: dict, quantity: str, calculated_from: list[str]) -> dict:
+    """Build attrs for a derived variable, inheriting spatial/instrument context.
+
+    A derived quantity is calculated, not measured, but it still originates
+    from its source variable's instrument (e.g. an HMP's Ta and RH give AH),
+    so it carries that instrument, its URI and its history, with every
+    period of the history marked calculated from `calculated_from`.
+    """
     canonical = build_canonical_quantity_registry().get_base_metadata(quantity)
     return {
         "height": source_attrs["height"],
         "height_range": source_attrs["height_range"],
         "instrument": source_attrs["instrument"],
-        "instrument_history": source_attrs["instrument_history"],
+        "instrument_uri": copy.deepcopy(source_attrs.get("instrument_uri")),
+        "instrument_history": InstrumentHistory.from_attr(
+            source_attrs["instrument_history"]
+        )
+        .calculated(calculated_from)
+        .to_attr(),
         "long_name": canonical.long_name,
         "quantity": quantity,
         "standard_name": canonical.standard_name,

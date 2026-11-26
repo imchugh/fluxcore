@@ -39,14 +39,30 @@ class CalculationsTestCase(unittest.TestCase):
         np.testing.assert_allclose(calculations.calculate_vpd(ta, rh), es * 0.4)
 
     def test_absolute_and_relative_humidity_round_trip(self):
-        ta, rh, ps = (
-            np.array([5.0, 20.0, 35.0]),
-            np.array([30.0, 60.0, 90.0]),
-            np.full(3, 100.0),
-        )
-        ah = calculations.calculate_AH_from_RH(Ta=ta, RH=rh, ps=ps)
-        np.testing.assert_allclose(
-            calculations.calculate_RH_from_AH(AH=ah, Ta=ta, ps=ps), rh
+        ta, rh = np.array([5.0, 20.0, 35.0]), np.array([30.0, 60.0, 90.0])
+        ah = calculations.calculate_AH_from_RH(Ta=ta, RH=rh)
+        np.testing.assert_allclose(calculations.calculate_RH_from_AH(AH=ah, Ta=ta), rh)
+
+    def test_absolute_humidity_matches_the_pressure_form(self):
+        # The old form, e/ps * molar_density(ps) * M_w: pressure cancels.
+        ta, rh = np.array([5.0, 20.0, 35.0]), np.array([30.0, 60.0, 90.0])
+        for ps in (np.full(3, 85.0), np.full(3, 101.325)):
+            old = (
+                calculations.calculate_e(ta, rh)
+                / ps
+                * calculations.calculate_molar_density(ps=ps, Ta=ta)
+                * 18.02
+            )
+            np.testing.assert_allclose(
+                calculations.calculate_AH_from_RH(Ta=ta, RH=rh), old, rtol=1e-12
+            )
+        # 20 degC, 60 %: about 10.4 g/m^3
+        self.assertAlmostEqual(
+            float(
+                calculations.calculate_AH_from_RH(Ta=np.array(20.0), RH=np.array(60.0))
+            ),
+            10.4,
+            places=1,
         )
 
     def test_molar_density_of_air_at_standard_conditions(self):
@@ -87,7 +103,7 @@ class CalculationsTestCase(unittest.TestCase):
 
     def _air(self):
         ta, ps = np.array([5.0, 20.0, 35.0]), np.full(3, 100.0)
-        ah = calculations.calculate_AH_from_RH(Ta=ta, RH=np.full(3, 60.0), ps=ps)
+        ah = calculations.calculate_AH_from_RH(Ta=ta, RH=np.full(3, 60.0))
         return ta, ps, ah
 
     def test_humidity_quantities_are_consistent(self):
@@ -103,7 +119,7 @@ class CalculationsTestCase(unittest.TestCase):
             vp / ps * 1000,
         )
         # saturated air has no specific humidity deficit
-        ah_sat = calculations.calculate_AH_from_RH(Ta=ta, RH=np.full(3, 100.0), ps=ps)
+        ah_sat = calculations.calculate_AH_from_RH(Ta=ta, RH=np.full(3, 100.0))
         sh_sat = calculations.calculate_SH_from_AH(AH=ah_sat, Ta=ta, ps=ps)
         np.testing.assert_allclose(
             calculations.calculate_SHD(SH=sh_sat, Ta=ta, ps=ps), 0.0, atol=1e-12

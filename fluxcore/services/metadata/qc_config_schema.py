@@ -101,12 +101,18 @@ class MADFilterSpec(BaseModel):
 
 
 class _DateWindow(BaseModel):
-    """A date range, inclusive; a missing start or end is open-ended."""
+    """A date range, inclusive; a missing start or end is open-ended.
+
+    `comment` is the reason for the entry (the evidence for a correction or
+    exclusion): standalone metadata for people and the UI, never used in
+    processing or written to the output, and left out of the config hash.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     start: datetime | None = None
     end: datetime | None = None
+    comment: str | None = None
 
     @model_validator(mode="after")
     def check_order(self):
@@ -128,6 +134,20 @@ class LinearCorrectionSpec(_DateWindow):
     offset: float = 0.0
 
 
+class AbsoluteCorrectionSpec(_DateWindow):
+    """Replace values by their absolute value within a date range.
+
+    For a quantity the network reports as a magnitude that a logger or
+    processing package started reporting signed (e.g. EddyPro's Tau, which
+    became signed at CumberlandPlain in 2023 while |Tau| = rho * u*^2
+    throughout). Applied before linear and wd_offset, and before the checks.
+    """
+
+
+class ExcludeDatesSpec(_DateWindow):
+    """A date range whose records are flagged bad (exclude_dates)."""
+
+
 class WdOffsetSpec(_DateWindow):
     """Add an offset to wind direction within a date range, modulo 360.
 
@@ -146,29 +166,19 @@ class VariableQCSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    comment: str | None = None  # see _DateWindow.comment
+    absolute: list[AbsoluteCorrectionSpec] | None = None
     linear: list[LinearCorrectionSpec] | None = None
     wd_offset: list[WdOffsetSpec] | None = None
     range_check: RangeCheckSpec | None = None
-    exclude_dates: list[tuple[datetime, datetime]] | None = None
+    exclude_dates: list[ExcludeDatesSpec] | None = None
     dependency_check: list[str] | None = None
     flag_check: FlagCheckSpec | None = None
     mad_filter: MADFilterSpec | None = None
 
-    @field_validator("exclude_dates")
-    @classmethod
-    def check_exclude_dates_order(cls, v):
-        """Enforce start < end for every exclude_dates range."""
-        if v is None:
-            return v
-        for start, end in v:
-            if start > end:
-                raise ValueError(
-                    f"exclude_dates range start ({start}) must not be after end "
-                    f"({end}); use start == end for a single-record exclusion"
-                )
-        return v
-
-    @field_validator("dependency_check", "linear", "wd_offset")
+    @field_validator(
+        "dependency_check", "absolute", "linear", "wd_offset", "exclude_dates"
+    )
     @classmethod
     def check_nonempty(cls, v, info):
         """Reject an explicitly-empty list."""
@@ -177,14 +187,48 @@ class VariableQCSpec(BaseModel):
         return v
 
 
-class QCConfigSchema(RootModel[dict[str, VariableQCSpec]]):
-    """Flat per-site QC config: {variable_name: VariableQCSpec}."""
+class QCVariablesSchema(RootModel[dict[str, VariableQCSpec]]):
+    """Flat {variable_name: VariableQCSpec} mapping (_dependency_defaults.yml)."""
+
+
+class L2PathsConfig(BaseModel):
+    """Directories for a standalone L2 run (see run_L2).
+
+    Keys match run_L2's arguments, and an argument wins over its key.
+    Relative paths resolve against the control file's own directory.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    l1_dir: str | None = None
+    output_dir: str | None = None
+
+
+class QCConfigSchema(BaseModel):
+    """A site's L2 QC config file: site name, its variables' overrides, paths.
+
+    The same shape as the L1 site config (`site` + `variables`). The file is
+    also the L2 control file for a standalone run (run_L2), which may add the
+    optional `paths` section; a network adapter never sets it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    site: str
+    variables: dict[str, VariableQCSpec] = {}
+    paths: L2PathsConfig | None = None
+
+    @field_validator("variables", mode="before")
+    @classmethod
+    def empty_variables(cls, v):
+        """Read a bare `variables:` (no overrides) as an empty mapping."""
+        return {} if v is None else v
 
 
 def validate_qc_config_structure(file: Path | str) -> QCConfigSchema:
-    """Validate YAML structure and return the schema object."""
+    """Validate a site QC config file's YAML structure and return the schema."""
     data = read_yml(file_path=file, enforce_unique_keys=True) or {}
-    return QCConfigSchema(data)
+    return QCConfigSchema(**data)
 
 
 @dataclass(frozen=True)
@@ -254,7 +298,12 @@ def load_qc_config(site_name: str, config_dir: Path | str) -> SiteQCConfig:
         return SiteQCConfig(site_name=site_name, variables={})
 
     schema = validate_qc_config_structure(file_path)
-    return SiteQCConfig(site_name=site_name, variables=dict(schema.root))
+    if schema.site != site_name:
+        raise ValueError(
+            f"QC config {file_path} declares site '{schema.site}', "
+            f"expected '{site_name}'"
+        )
+    return SiteQCConfig(site_name=site_name, variables=dict(schema.variables))
 
 
 def load_range_defaults(config_dir: Path | None = None) -> dict:
@@ -332,8 +381,8 @@ def load_dependency_defaults(
     Network-wide default dependency_check (and, where needed, range_check)
     patterns keyed by exact L1 output variable name.
 
-    Same shape and validation as a site's own QC config
-    (validate_qc_config_structure) -- unlike _range_defaults.yml's looser
+    Same validation as a site's own QC config's `variables` section
+    (QCVariablesSchema) -- unlike _range_defaults.yml's looser
     plain-YAML load, a typo here is caught by Pydantic like a bad site file
     would be. Only some sites actually have the variables these patterns
     target (e.g. raw-covariance/Diag_SONIC/Diag_IRGA sites vs EddyPro-only
@@ -346,7 +395,8 @@ def load_dependency_defaults(
     if not file_path.exists():
         return {}
 
-    return dict(validate_qc_config_structure(file_path).root)
+    data = read_yml(file_path=file_path, enforce_unique_keys=True) or {}
+    return dict(QCVariablesSchema(data).root)
 
 
 def resolve_default_range(
@@ -433,6 +483,30 @@ def lookup_default_range(
     )
 
 
+def _humidity_dependency(var_name: str, available: Iterable[str]) -> list[str] | None:
+    """Default dependency of an average AH on its own Ta and RH.
+
+    Profile/EC-height humidity sensors measure Ta and RH; AH is calculated
+    from them (on the logger, or by derive_missing_humidity), so a bad Ta or
+    RH makes the AH bad even when the AH stays inside its own range (e.g. a
+    sensor dropout dragging the half-hour Ta to -28 degC gives an AH of
+    ~0.3 g/m^3). Companions share the AH's name after the quantity
+    (AH_2m -> Ta_2m, RH_2m), the same pairing derive_missing_humidity's
+    derived names follow. Name-based rather than a _dependency_defaults.yml
+    entry because the names are per-site; existence-gated like those
+    entries, so AH_IRGA (no Ta_IRGA/RH_IRGA) gets nothing.
+    """
+    try:
+        parsed = parse_variable_name(var_name)
+    except VariableNameParseError:
+        return None
+    if parsed.quantity != "AH" or parsed.statistic_id not in (None, "Av"):
+        return None
+    suffix = var_name[len("AH") :]
+    deps = [f"{qty}{suffix}" for qty in ("Ta", "RH") if f"{qty}{suffix}" in available]
+    return deps or None
+
+
 def resolve_qc_config(
     qc_config: SiteQCConfig,
     dependency_defaults: dict[str, VariableQCSpec],
@@ -451,7 +525,8 @@ def resolve_qc_config(
         exact variable name, existence-gated against ds: an individual
         source name not present in ds is dropped from the list rather than
         dropping the whole entry; the whole entry is dropped only if every
-        source turns out unavailable.
+        source turns out unavailable. With no such entry, an average AH
+        depends on its own Ta and RH (_humidity_dependency).
 
     This is deliberately more tolerant than validate_qc_config_variables
     (strict, applied only to qc_config's own raw entries before this merge
@@ -497,11 +572,15 @@ def resolve_qc_config(
             gated = [dep for dep in default_spec.dependency_check if dep in available]
             if gated:
                 dependency_check = gated
+        if dependency_check is None:
+            dependency_check = _humidity_dependency(var_name, available)
 
         fields = {
             # Corrections and the remaining checks have no defaults.
             field: getattr(site_spec, field) if site_spec else None
             for field in (
+                "comment",
+                "absolute",
                 "linear",
                 "wd_offset",
                 "exclude_dates",
@@ -510,7 +589,8 @@ def resolve_qc_config(
             )
         }
         fields.update(range_check=range_check, dependency_check=dependency_check)
-        if all(value is None for value in fields.values()):
+        # A comment alone configures nothing.
+        if all(value is None for key, value in fields.items() if key != "comment"):
             continue
 
         merged[var_name] = VariableQCSpec(**fields)

@@ -31,14 +31,24 @@ def _build_l2_dataset(n=48 * 2, time_step=30, start="2020-01-01"):
                     "long_name": "Air temperature",
                     "units": "degC",
                     "statistic_type": "average",
-                    # A real L2 store inherits this already-Zarr-safe shape
-                    # from L1's own build (dataset_finishing.encode_instrument_history
-                    # converts a compound instrument dict to an ordered list
-                    # of pairs before writing, since Zarr's attrs writer
-                    # alphabetizes dict keys but preserves list order).
-                    "instrument": [
-                        ["sonic_anemometer", "CSAT3B"],
-                        ["irga", "LI-7500RS"],
+                    # A real L2 store inherits these from L1's build: the
+                    # history in its attr form (roles as an ordered list,
+                    # since Zarr's attrs writer alphabetizes dict keys) and
+                    # `instrument` derived from it.
+                    "instrument": "CSAT3B,LI-7500RS",
+                    "instrument_history": [
+                        {
+                            "role": "sonic_anemometer",
+                            "periods": [
+                                {"instrument": "CSAT3B", "start": None, "end": None}
+                            ],
+                        },
+                        {
+                            "role": "irga",
+                            "periods": [
+                                {"instrument": "LI-7500RS", "start": None, "end": None}
+                            ],
+                        },
                     ],
                 },
             ),
@@ -143,15 +153,11 @@ class BuildL2NcTestCase(unittest.TestCase):
         self.assertEqual(list(out["Ta_Av_QCFlag"].attrs["flag_values"]), [0, 2])
         self.assertEqual(out["Ta_Av_QCFlag"].attrs["flag_meanings"], "good range_check")
 
-    def test_compound_instrument_key_order_restored(self):
-        # serialize_inst_history joins a compound `instrument` dict's values
-        # into a single comma-separated string in dict key order. Zarr's
-        # attrs round-trip alphabetizes dict keys (irga before
-        # sonic_anemometer), so `instrument` is written as an ordered list
-        # of [key, value] pairs (which Zarr's JSON writer does preserve) and
-        # reconstructed into a dict in that exact order by
-        # decode_instrument_history -- without that, the joined string
-        # would come out as "LI-7500RS,CSAT3B" instead.
+    def test_compound_instrument_role_order_survives_zarr(self):
+        # The NetCDF `instrument` joins each role's instrument in role order.
+        # Zarr's attrs round-trip alphabetizes dict keys (irga before
+        # sonic_anemometer), so the history keeps roles in a list; were it a
+        # dict, the joined string would come out as "LI-7500RS,CSAT3B".
         ds = _build_l2_dataset()
         self._write_l2(ds)
 

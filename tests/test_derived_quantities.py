@@ -11,7 +11,9 @@ from fluxcore.orchestration.derived_quantities import (
     DatasetBuildIntermediate,
     add_day_night_indicator,
     add_net_radiation,
+    derive_missing_humidity,
 )
+from fluxcore.services.data.calculations import calculate_AH_from_RH
 
 LAT, LON, ELEV = -34.0027, 140.5877, 60
 
@@ -23,8 +25,91 @@ def _radiation_attrs(quantity):
         "height": 30.0,
         "height_range": None,
         "instrument": "Kipp&Zonen CNR4",
-        "instrument_history": [],
+        "instrument_history": [
+            {
+                "role": None,
+                "periods": [
+                    {"instrument": "Kipp&Zonen CNR4", "start": None, "end": None}
+                ],
+            }
+        ],
     }
+
+
+def _hmp_attrs(quantity, statistic_type="average"):
+    return {
+        **_radiation_attrs(quantity),
+        "statistic_type": statistic_type,
+        "height": 2.0,
+        "instrument": "Vaisala HMP155",
+        "instrument_uri": "http://example.org/hmp155",
+        "instrument_history": [
+            {
+                "role": None,
+                "periods": [
+                    {"instrument": "Vaisala HMP155", "start": None, "end": None}
+                ],
+            }
+        ],
+    }
+
+
+class DeriveMissingHumidityTestCase(unittest.TestCase):
+    def _result(self, columns, quantities):
+        idx = pd.date_range("2025-01-01", periods=2, freq="30min")
+        return DatasetBuildIntermediate(
+            df=pd.DataFrame(columns, index=idx),
+            var_attrs={name: _hmp_attrs(q) for name, q in quantities.items()},
+        )
+
+    def test_ah_is_derived_without_any_pressure_variable(self):
+        result = derive_missing_humidity(
+            self._result(
+                {"Ta_2m": [20.0, 10.0], "RH_2m": [60.0, 80.0]},
+                {"Ta_2m": "Ta", "RH_2m": "RH"},
+            )
+        )
+        np.testing.assert_allclose(
+            result.df["AH_2m"],
+            calculate_AH_from_RH(Ta=np.array([20.0, 10.0]), RH=np.array([60.0, 80.0])),
+        )
+        attrs = result.var_attrs["AH_2m"]
+        self.assertEqual(attrs["quantity"], "AH")
+        # Calculated, but it still comes from the HMP's Ta and RH.
+        self.assertEqual(attrs["instrument"], "Vaisala HMP155")
+        self.assertEqual(attrs["instrument_uri"], "http://example.org/hmp155")
+        # Same instruments and dates as its source, each period marked calculated.
+        [source_role] = result.var_attrs["RH_2m"]["instrument_history"]
+        self.assertEqual(
+            attrs["instrument_history"],
+            [
+                {
+                    "role": source_role["role"],
+                    "periods": [
+                        {**p, "calculated_from": ["RH_2m", "Ta_2m"]}
+                        for p in source_role["periods"]
+                    ],
+                }
+            ],
+        )
+
+    def test_missing_pressure_does_not_blank_the_derived_ah(self):
+        result = derive_missing_humidity(
+            self._result(
+                {"Ta_2m": [20.0, 10.0], "RH_2m": [60.0, 80.0], "ps": [np.nan, 100.0]},
+                {"Ta_2m": "Ta", "RH_2m": "RH", "ps": "ps"},
+            )
+        )
+        self.assertFalse(result.df["AH_2m"].isna().any())
+
+    def test_rh_is_derived_from_ah(self):
+        ah = calculate_AH_from_RH(Ta=np.array([20.0, 10.0]), RH=np.array([60.0, 80.0]))
+        result = derive_missing_humidity(
+            self._result(
+                {"Ta_2m": [20.0, 10.0], "AH_2m": ah}, {"Ta_2m": "Ta", "AH_2m": "AH"}
+            )
+        )
+        np.testing.assert_allclose(result.df["RH_2m"], [60.0, 80.0])
 
 
 class AddNetRadiationTestCase(unittest.TestCase):
@@ -41,6 +126,24 @@ class AddNetRadiationTestCase(unittest.TestCase):
         self.assertEqual(out.var_attrs["Fn"]["quantity"], "Fn")
         self.assertEqual(out.var_attrs["Fn"]["instrument"], "Kipp&Zonen CNR4")
         self.assertEqual(out.var_attrs["Fn"]["long_name"], "Net radiation")
+
+    def test_uses_the_exactly_named_components_not_a_second_sensor(self):
+        # A second shortwave sensor listed first must not become Fn's Fsd.
+        df = pd.DataFrame(
+            {
+                "Fsd_2": [900.0],
+                "Fsd": [500.0],
+                "Fsu": [80.0],
+                "Fld": [350.0],
+                "Flu": [420.0],
+            }
+        )
+        var_attrs = {
+            q: _radiation_attrs(q.split("_")[0])
+            for q in ("Fsd_2", "Fsd", "Fsu", "Fld", "Flu")
+        }
+        out = add_net_radiation(DatasetBuildIntermediate(df=df, var_attrs=var_attrs))
+        self.assertAlmostEqual(out.df["Fn"].iloc[0], 350.0)
 
     def test_missing_component_returns_result_unchanged(self):
         df = pd.DataFrame({"Fsd": [500.0], "Fsu": [80.0], "Fld": [350.0]})

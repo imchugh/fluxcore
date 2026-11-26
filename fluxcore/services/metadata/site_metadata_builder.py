@@ -17,10 +17,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from pydantic import BaseModel, field_validator
-
 from fluxcore.infrastructure.file_io import read_yml
 from fluxcore.services.metadata.runtime_config_builder import SiteRuntimeConfig
+from fluxcore.services.metadata.site_config_schema import SiteMetadataSchema
 
 logger = logging.getLogger(__name__)
 
@@ -149,46 +148,18 @@ class SiteContext:
     metadata: SiteMetadata
 
 
-class SiteMetadataSchema(BaseModel):
-    """Schema for one site's standalone metadata YAML file.
-
-    Required fields are the minimum a site needs to actually be processed:
-    location (for CRS/NetCDF export) and time_step/freq_hz (for n_samples,
-    dataframe assembly). Everything else is descriptive and commonly sparse
-    in real records (e.g. a real site's record may have no
-    date_decommissioned/time_zone/UTC_offset).
-    """
-
-    site_name: str
-    latitude: float
-    longitude: float
-    time_step: int
-    freq_hz: int
-
-    id: str | None = None
-    fluxnet_id: str | None = None
-    date_commissioned: datetime | None = None
-    date_decommissioned: datetime | None = None
-    elevation: float | None = None
-    soil: str | None = None
-    tower_height: float | None = None
-    vegetation: str | None = None
-    canopy_height: float | None = None
-    time_zone: str | None = None
-    UTC_offset: float | None = None
-
-    @field_validator("time_step", "freq_hz", mode="before")
-    @classmethod
-    def coerce_float_string(cls, v):
-        """Accept float-string values ('30.0') as real-world records do."""
-        if isinstance(v, str):
-            return int(float(v))
-        return v
-
-
 def validate_site_metadata_structure(file: Path) -> SiteMetadataSchema:
     """Validate YAML structure and return a SiteMetadataSchema object."""
     return SiteMetadataSchema(**read_yml(file_path=file))
+
+
+def build_site_metadata(validated: SiteMetadataSchema) -> SiteMetadata:
+    """Build a SiteMetadata from an already-validated SiteMetadataSchema."""
+    # mode="json": datetime -> ISO string, the string-typed shape
+    # SiteMetadata.__init__ expects. A native datetime would trip its
+    # datetime.fromisoformat(value) coercion (str-only) into a needless
+    # warning-and-keep-raw fallback.
+    return SiteMetadata(data=validated.model_dump(mode="json"))
 
 
 def build_site_metadata_from_file(file_path: Path) -> SiteMetadata:
@@ -204,9 +175,4 @@ def build_site_metadata_from_file(file_path: Path) -> SiteMetadata:
     Returns:
         SiteMetadata.
     """
-    validated = validate_site_metadata_structure(file=file_path)
-    # mode="json": datetime -> ISO string, the string-typed shape
-    # SiteMetadata.__init__ expects. A native datetime would trip its
-    # datetime.fromisoformat(value) coercion (str-only) into a needless
-    # warning-and-keep-raw fallback.
-    return SiteMetadata(data=validated.model_dump(mode="json"))
+    return build_site_metadata(validate_site_metadata_structure(file=file_path))

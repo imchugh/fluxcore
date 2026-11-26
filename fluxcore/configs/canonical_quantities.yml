@@ -131,15 +131,15 @@ Fn:
   standard_units: W/m^2
   valid_input_units:
   - W/m^2
-Fpard:
-  long_name: Downwelling photosynthetically active radiation
+Fqd:
+  long_name: Downwelling photosynthetic photon flux density
   standard_name: null
   standard_units: umol/m^2/s
   valid_input_units:
   - umol/m^2/s
   - W/m^2
-Fparu:
-  long_name: Upwelling photosynthetically active radiation
+Fqu:
+  long_name: Upwelling photosynthetic photon flux density
   standard_name: null
   standard_units: umol/m^2/s
   valid_input_units:
@@ -494,6 +494,12 @@ W:
   standard_units: m/s
   valid_input_units:
   - m/s
+WTD:
+  long_name: Water table depth (positive below the surface)
+  standard_name: water_table_depth
+  standard_units: m
+  valid_input_units:
+  - m
 Wd:
   long_name: Wind direction
   standard_name: wind_from_direction

@@ -65,8 +65,8 @@ class UnitConversionsTestCase(unittest.TestCase):
             # W/m^2 -> umol/m^2/s needs a chosen photon-energy factor
             ("APAR", "W/m^2"),
             ("PAR", "W/m^2"),
-            ("Fpard", "W/m^2"),
-            ("Fparu", "W/m^2"),
+            ("Fqd", "W/m^2"),
+            ("Fqu", "W/m^2"),
             # a rate -> per-interval depth needs the averaging interval
             ("ET", "mmol/m^2/s"),
             # a scaling temperature is a difference: K -> degC is not an offset

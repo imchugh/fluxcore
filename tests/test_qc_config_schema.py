@@ -12,15 +12,23 @@ from pydantic import ValidationError
 from fluxcore.services.metadata import qc_config_schema
 
 VALID_YAML = """\
-Ta_Av:
-  range_check: {lower: -10, upper: 50}
-Fco2:
-  range_check: {lower: -50, upper: 50}
-  dependency_check: [Ux, Uy, Uz]
-  mad_filter:
-    reference_var: Fsd_Av
-    window_days: 13
+site: TestSite
+variables:
+  Ta_Av:
+    range_check: {lower: -10, upper: 50}
+  Fco2:
+    range_check: {lower: -50, upper: 50}
+    dependency_check: [Ux, Uy, Uz]
+    mad_filter:
+      reference_var: Fsd_Av
+      window_days: 13
 """
+
+
+def _site_yaml(variables_yaml, site="TestSite"):
+    """A site QC file: `site` + the given (flat) variables block, nested."""
+    nested = "".join(f"  {line}\n" for line in variables_yaml.splitlines())
+    return f"site: {site}\nvariables:\n{nested}"
 
 
 class QCConfigStructureTestCase(unittest.TestCase):
@@ -42,20 +50,48 @@ class QCConfigStructureTestCase(unittest.TestCase):
         self.assertEqual(cfg.variables["Ta_Av"].range_check.lower, -10)
         self.assertEqual(cfg.variables["Fco2"].mad_filter.reference_var, "Fsd_Av")
 
+    def test_site_mismatch_raises(self):
+        self._write("TestSite.yml", VALID_YAML.replace("site: TestSite", "site: Other"))
+        with self.assertRaises(ValueError):
+            qc_config_schema.load_qc_config("TestSite", config_dir=self.config_dir)
+
+    def test_bare_variables_is_empty_config(self):
+        self._write("TestSite.yml", "site: TestSite\nvariables:\n")
+        cfg = qc_config_schema.load_qc_config("TestSite", config_dir=self.config_dir)
+        self.assertEqual(cfg.variables, {})
+
+    def test_flat_variables_rejected(self):
+        # The pre-2026-11 shape: variables at the top level, no site key.
+        path = self._write(
+            "Flat.yml", "Ta_Av:\n  range_check: {lower: -10, upper: 50}\n"
+        )
+        with self.assertRaises(ValidationError):
+            qc_config_schema.validate_qc_config_structure(path)
+
+    def test_paths_section_accepted_and_strict(self):
+        path = self._write(
+            "P.yml", "site: TestSite\npaths: {l1_dir: out, output_dir: out}\n"
+        )
+        schema = qc_config_schema.validate_qc_config_structure(path)
+        self.assertEqual(schema.paths.l1_dir, "out")
+        path = self._write("P2.yml", "site: TestSite\npaths: {l1: out}\n")
+        with self.assertRaises(ValidationError):
+            qc_config_schema.validate_qc_config_structure(path)
+
     def test_missing_file_returns_empty_config(self):
         cfg = qc_config_schema.load_qc_config("NoSuchSite", config_dir=self.config_dir)
         self.assertEqual(cfg.variables, {})
 
     def test_bad_range_order_raises(self):
         path = self._write(
-            "Bad.yml", "Ta_Av:\n  range_check: {lower: 50, upper: -10}\n"
+            "Bad.yml", _site_yaml("Ta_Av:\n  range_check: {lower: 50, upper: -10}")
         )
         with self.assertRaises(ValidationError):
             qc_config_schema.validate_qc_config_structure(path)
 
     def test_unknown_key_rejected(self):
         path = self._write(
-            "Bad2.yml", "Ta_Av:\n  rangecheck: {lower: -10, upper: 50}\n"
+            "Bad2.yml", _site_yaml("Ta_Av:\n  rangecheck: {lower: -10, upper: 50}")
         )
         with self.assertRaises(ValidationError):
             qc_config_schema.validate_qc_config_structure(path)
@@ -206,16 +242,16 @@ class FlagCheckSchemaTestCase(unittest.TestCase):
 
     def test_loads(self):
         self.path.write_text(
-            "Fco2:\n  flag_check: {source: [Fco2_QC], reject: [8, 9]}\n"
+            _site_yaml("Fco2:\n  flag_check: {source: [Fco2_QC], reject: [8, 9]}")
         )
         cfg = qc_config_schema.validate_qc_config_structure(self.path)
-        spec = cfg.root["Fco2"].flag_check
+        spec = cfg.variables["Fco2"].flag_check
         self.assertEqual(spec.source, ["Fco2_QC"])
         self.assertEqual(spec.reject, [8.0, 9.0])
 
     def test_empty_lists_rejected(self):
         for body in ("source: [], reject: [9]", "source: [Fco2_QC], reject: []"):
-            self.path.write_text(f"Fco2:\n  flag_check: {{{body}}}\n")
+            self.path.write_text(_site_yaml(f"Fco2:\n  flag_check: {{{body}}}"))
             with self.assertRaises(ValidationError):
                 qc_config_schema.validate_qc_config_structure(self.path)
 
@@ -349,6 +385,33 @@ class ResolveQCConfigTestCase(unittest.TestCase):
         self.assertEqual(merged.variables["Fco2"].dependency_check, ["Something"])
         self.assertEqual(merged.variables["Fco2"].range_check.lower, -50)
         self.assertEqual(merged.variables["Fco2"].range_check.upper, 30)
+
+    def test_average_ah_depends_on_its_own_ta_and_rh(self):
+        ds = _resolve_ds(["AH_2m", "Ta_2m", "RH_2m", "Ta_4m", "AH_IRGA_Av"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables["AH_2m"].dependency_check, ["Ta_2m", "RH_2m"])
+        # No Ta_IRGA/RH_IRGA companions: nothing attaches.
+        self.assertNotIn("AH_IRGA_Av", merged.variables)
+
+    def test_ah_humidity_dependency_is_existence_gated(self):
+        ds = _resolve_ds(["AH_36m", "Ta_36m"])
+        site_config = qc_config_schema.SiteQCConfig(site_name="Test", variables={})
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables["AH_36m"].dependency_check, ["Ta_36m"])
+
+    def test_site_and_default_dependency_override_the_humidity_rule(self):
+        ds = _resolve_ds(["AH_2m", "Ta_2m", "RH_2m", "Diag_SONIC"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test",
+            variables={
+                "AH_2m": qc_config_schema.VariableQCSpec(
+                    dependency_check=["Diag_SONIC"]
+                )
+            },
+        )
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables["AH_2m"].dependency_check, ["Diag_SONIC"])
 
     def test_default_entry_dropped_when_own_variable_absent(self):
         ds = _resolve_ds(["Ta_Av"])
@@ -498,6 +561,49 @@ class CorrectionSchemaTestCase(unittest.TestCase):
         self.assertIsNone(spec.linear[0].start)
         self.assertEqual(spec.linear[0].offset, 0.0)
         self.assertIsNone(spec.wd_offset[0].end)
+
+    def test_comments_on_entries_and_variable(self):
+        spec = self._spec(
+            comment="EddyPro Tau",
+            absolute=[{"start": "2023-04-12 16:30", "comment": "signed from here"}],
+            exclude_dates=[
+                {"start": "2023-01-05", "end": "2023-01-07", "comment": "storm"}
+            ],
+        )
+        self.assertEqual(spec.comment, "EddyPro Tau")
+        self.assertEqual(spec.absolute[0].comment, "signed from here")
+        self.assertIsNone(spec.absolute[0].end)
+        self.assertEqual(spec.exclude_dates[0].comment, "storm")
+
+    def test_exclude_dates_pairs_no_longer_accepted(self):
+        with self.assertRaises(ValidationError):
+            self._spec(exclude_dates=[["2023-01-05", "2023-01-07"]])
+
+    def test_exclude_dates_start_after_end_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._spec(exclude_dates=[{"start": "2023-01-07", "end": "2023-01-05"}])
+
+    def test_comment_alone_configures_nothing(self):
+        ds = _resolve_ds(["SomeRandomVar"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test", variables={"SomeRandomVar": self._spec(comment="note")}
+        )
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables, {})
+
+    def test_resolve_keeps_comments(self):
+        ds = _resolve_ds(["Fco2"])
+        site_config = qc_config_schema.SiteQCConfig(
+            site_name="Test",
+            variables={
+                "Fco2": self._spec(
+                    comment="why", absolute=[{"start": "2023-01-01", "comment": "x"}]
+                )
+            },
+        )
+        merged = qc_config_schema.resolve_qc_config(site_config, {}, {}, ds)
+        self.assertEqual(merged.variables["Fco2"].comment, "why")
+        self.assertEqual(merged.variables["Fco2"].absolute[0].comment, "x")
 
     def test_start_after_end_rejected(self):
         with self.assertRaises(ValidationError):
