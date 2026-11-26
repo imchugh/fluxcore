@@ -1,0 +1,8 @@
+#!/bin/sh
+
+if ! command -v ruff >/dev/null 2>&1; then
+    echo "Ruff is not on PATH; install it with: python -m pip install ruff==0.17.5" >&2
+    exit 1
+fi
+
+exec ruff check .

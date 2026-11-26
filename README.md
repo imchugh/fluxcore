@@ -96,3 +96,21 @@ build_L2_zarr.build(
 ```bash
 python -m unittest discover -s tests
 ```
+
+## Linting
+
+Ruff checks run in CI and can also run before each commit. Install the same
+Ruff version as CI and enable the repository's Git hooks:
+
+```bash
+python -m pip install ruff==0.17.5
+git config --local core.hooksPath .githooks
+```
+
+Make sure Ruff is on your `PATH` when committing. The hook checks the whole
+working tree, including unstaged changes, without modifying files. CI also
+checks the whole repository.
+
+Setting `core.hooksPath` replaces the configured hooks directory for this
+repository. If you already use hooks, migrate them to `.githooks` before
+enabling it. Git hooks are optional and can be bypassed; CI still runs Ruff.
